@@ -1,0 +1,11 @@
+{
+  // The tests run under Vitest on Node and read the migrations and the seed CSV
+  // off disk, so they need Node's types. Kept out of the main tsconfig so that
+  // Node globals can never leak into the Worker source, which has no Node.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "types": ["@cloudflare/workers-types", "node"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}
