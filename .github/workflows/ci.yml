@@ -38,9 +38,12 @@ jobs:
     name: Typecheck, test, migrate, build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      # `node-version` is the Node the project runs on, and is unrelated to the
+      # Node the action itself runs on — v7 of both actions is what runs on
+      # node24, which is what the runner now wants.
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
