@@ -41,6 +41,16 @@ migrations_dir = "migrations"
 [[r2_buckets]]
 binding = "SCANS"
 bucket_name = "bmmusic-scans"
+# The scans bucket lives in the EU jurisdiction, which guarantees the objects
+# are stored and processed inside the EU rather than merely hinting at it.
+#
+# This line is not optional. A jurisdiction is a separate namespace: without it
+# the binding resolves "bmmusic-scans" in the *default* jurisdiction, does not
+# find the EU bucket, and provisioning helpfully creates a second, empty bucket
+# of the same name in the default region — which is exactly what happened once
+# already. Every `wrangler r2 ...` command against this bucket needs `-J eu` for
+# the same reason.
+jurisdiction = "eu"
 
 [vars]
 # Admin gating (src/auth.ts):
