@@ -69,6 +69,21 @@ ADMIN_MODE="local"
 `ADMIN_MODE="local"` opens `/admin` without Cloudflare Access. **It must never
 be set in production** — the deployed `wrangler.toml` sets `"access"`.
 
+## CI
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
+typecheck (Worker and tests separately), the Vitest suite, `migrations/` applied
+to a local D1, and `wrangler deploy --dry-run` to prove the Worker still bundles
+and `wrangler.toml` still parses.
+
+The last two are there because the first two cannot see them: the migration
+tests read the SQL as text, so only applying it proves SQLite accepts it, and
+nothing else would catch the draft index failing to bundle as a text module.
+
+It needs no secrets and no Cloudflare credentials — every step runs locally to
+the runner, and a dry run deploys nothing. `npm run typecheck && npm test` is
+the same thing you run before pushing.
+
 ---
 
 # Deploying — a runbook
@@ -84,15 +99,37 @@ npx wrangler whoami          # check it is the right account
 
 ## 2. Create the R2 bucket
 
-The bucket does not exist yet. Create it in the same region as the rest of the
-estate:
+The bucket is created in the **EU jurisdiction**:
 
 ```sh
-npx wrangler r2 bucket create bmmusic-scans --location weur
+npx wrangler r2 bucket create bmmusic-scans --jurisdiction eu
 ```
 
-`weur` is Western Europe — the scans are read in Beverley, and keeping them in
-the EU keeps the whole thing simple.
+A jurisdiction *guarantees* the objects are stored and processed inside the EU.
+That is a stronger thing than a location hint (`--location weur`), which is only
+a best-effort placement for performance and carries no residency promise — so
+pass `--jurisdiction eu` and not the hint.
+
+**A jurisdiction is a separate namespace, and this catches people out.** The
+binding in `wrangler.toml` carries `jurisdiction = "eu"`, and it has to: without
+it the binding looks for `bmmusic-scans` in the *default* jurisdiction, does not
+find the EU bucket, and provisioning quietly creates a second empty bucket of
+the same name in the default region. If that has already happened you will have
+two buckets called `bmmusic-scans`. List them separately to tell them apart:
+
+```sh
+npx wrangler r2 bucket list                  # the default jurisdiction
+npx wrangler r2 bucket list --jurisdiction eu
+```
+
+Delete the stray default-jurisdiction one once you have checked it is empty —
+`npx wrangler r2 bucket delete bmmusic-scans` with **no** `-J` flag targets the
+default one. Every other `wrangler r2 ...` command against the real bucket needs
+`-J eu`.
+
+A bucket's jurisdiction cannot be changed after it is created, so if the EU
+bucket does not exist yet, create it now with the command above rather than
+trying to move an existing one.
 
 The D1 database `minster-data` already exists and is currently empty. Nothing to
 create.
