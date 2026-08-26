@@ -1,0 +1,57 @@
+name = "bmmusic"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+
+# Never expose the *.workers.dev subdomain. The only entry point is the custom
+# domain below: the choir side behind the shared-password gate, /admin behind
+# Cloudflare Access. There are no public URLs anywhere in this app.
+workers_dev = false
+
+routes = [
+  { pattern = "bmmusic.james-palmer.com", custom_domain = true }
+]
+
+# Pages are served by the Worker (Hono), NOT as static assets: a static-assets
+# binding is served *ahead* of the Worker by default, which would bypass the
+# auth middleware. Everything goes through the Worker so the gate covers all routes.
+
+# The committed draft index is bundled with the Worker as text, so the admin
+# import action reads it straight from the deployment rather than needing an
+# upload. See src/seed.ts and data/seed/README.md.
+[[rules]]
+type = "Text"
+globs = ["**/*.csv"]
+fallthrough = true
+
+# --- Bindings ---
+# Estate rule (docs/ESTATE.md): bindings are configured in the Cloudflare
+# dashboard, never committed. The entries below carry names only — no database
+# id, no account id, no secrets. `wrangler d1 migrations apply` needs the
+# database name to resolve locally; the deployed Worker takes its binding from
+# the dashboard.
+#
+# Data boundary: these bindings are Minster-side only. Nothing belonging to
+# fobm-vestry / the Friends of Beverley Minster is bound or read here, ever.
+
+[[d1_databases]]
+binding = "DB"
+database_name = "minster-data"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "SCANS"
+bucket_name = "bmmusic-scans"
+
+[vars]
+# Admin gating (src/auth.ts):
+#   "access" → production. /admin requires a Cloudflare Access assertion.
+#   "local"  → `wrangler dev` only. /admin is open. NEVER set this in production.
+ADMIN_MODE = "access"
+
+# Secrets, set in the Cloudflare dashboard (never via `wrangler secret put` from
+# a checkout, never logged):
+#   CHOIR_PASSWORD    — the shared choir password, rotated each term (see README).
+#   SESSION_SECRET    — HMAC key for the session cookie. Rotating it signs
+#                       everyone out, which is the point at the end of a term.
+#   ANTHROPIC_API_KEY — optional. Photo intake reads labels with it; with the key
+#                       unset the intake screen degrades to manual entry.

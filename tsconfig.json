@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["@cloudflare/workers-types"],
+    "lib": ["ES2022"]
+  },
+  // Worker source only. The Worker does not run on Node and must not typecheck
+  // as though it did — no `process`, no `node:fs`. The tests do read the
+  // repository from disk, so they are checked separately by tsconfig.test.json.
+  "include": ["src/**/*.ts"]
+}

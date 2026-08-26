@@ -1,0 +1,25 @@
+{
+  "name": "bmmusic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Beverley Minster music library — catalogue of the physical music library (Cloudflare Worker)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "migrate:local": "wrangler d1 migrations apply minster-data --local",
+    "migrate:remote": "wrangler d1 migrations apply minster-data --remote"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260825.1",
+    "@types/node": "^26.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0",
+    "wrangler": "^4.20.0"
+  }
+}
