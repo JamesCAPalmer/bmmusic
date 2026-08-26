@@ -1,0 +1,63 @@
+name: CI
+
+# Runs the checks a contributor runs locally, on every push and pull request.
+#
+# Four steps, in increasing order of what they prove:
+#
+#   1. typecheck  — the Worker and the tests, separately, so Node globals
+#                   cannot leak into Worker source that has no Node.
+#   2. test       — the Vitest suite (schema shape, CSV import and its
+#                   idempotency over the real committed seed, auth).
+#   3. migrations — applies migrations/ to a local D1. The migration tests read
+#                   the SQL as text; this is the step that proves SQLite will
+#                   actually accept it.
+#   4. build      — `wrangler deploy --dry-run`. Proves the Worker bundles,
+#                   including the draft index bundled as a text module, and
+#                   that wrangler.toml still parses. A dry run deploys nothing.
+#
+# No secrets and no Cloudflare credentials: every step runs locally to the
+# runner. Nothing here can reach minster-data or the scans bucket.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: CI reads the code and reports a status. It writes nothing.
+permissions:
+  contents: read
+
+# A new push supersedes the run in flight for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck, test, migrate, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` rather than `npm install`: the lockfile is the contract, and a
+      # dependency drifting under CI is exactly what this is meant to catch.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Apply migrations to a local D1
+        run: npm run migrate:local
+
+      - name: Build the Worker
+        run: npx wrangler deploy --dry-run

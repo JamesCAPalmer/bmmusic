@@ -10,8 +10,11 @@
     "types": ["@cloudflare/workers-types"],
     "lib": ["ES2022"]
   },
-  // Worker source only. The Worker does not run on Node and must not typecheck
-  // as though it did — no `process`, no `node:fs`. The tests do read the
-  // repository from disk, so they are checked separately by tsconfig.test.json.
+  // Worker source only, so Node's library types are not in scope here: an
+  // accidental `node:fs`, `node:path`, `__dirname` or `Buffer` in Worker source
+  // fails the typecheck rather than the deploy. (`process` is the exception —
+  // @cloudflare/workers-types declares it, because Workers genuinely provides
+  // `process.env`.) The tests do read the repository from disk, so they are
+  // checked separately by tsconfig.test.json.
   "include": ["src/**/*.ts"]
 }

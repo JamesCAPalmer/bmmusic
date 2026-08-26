@@ -69,6 +69,21 @@ ADMIN_MODE="local"
 `ADMIN_MODE="local"` opens `/admin` without Cloudflare Access. **It must never
 be set in production** — the deployed `wrangler.toml` sets `"access"`.
 
+## CI
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
+typecheck (Worker and tests separately), the Vitest suite, `migrations/` applied
+to a local D1, and `wrangler deploy --dry-run` to prove the Worker still bundles
+and `wrangler.toml` still parses.
+
+The last two are there because the first two cannot see them: the migration
+tests read the SQL as text, so only applying it proves SQLite accepts it, and
+nothing else would catch the draft index failing to bundle as a text module.
+
+It needs no secrets and no Cloudflare credentials — every step runs locally to
+the runner, and a dry run deploys nothing. `npm run typecheck && npm test` is
+the same thing you run before pushing.
+
 ---
 
 # Deploying — a runbook
