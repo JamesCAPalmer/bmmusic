@@ -9,49 +9,43 @@ diff.
 
 ## Session 2 — Build 2
 
-### Milestone 1 — schema migration 2
+### Choir sizes — the RAG stops being grey
 
-`migrations/0002_build2.sql`, additive only. Nothing dropped, nothing
-rewritten: 0001 has already run against `minster-data`, and what is in it
-is the product of somebody's afternoons in a cold song school.
+Real numbers arrived: the children's from Rachel Dent (12 consort, 19
+girls, 10 boys), the adults counted off the September 2026 Minster Choir
+teams list (Team A 16, Team B 17 — 33 adults, 5/12/7/9 by voice part).
 
-**New columns on `piece`.** `composer_full` and `surname` come from
-index v2; `location_door` (A–H), `location_shelf` and `spine_state`
-('ok' / 'none' / 'combined') are what the volunteer sheets will collect.
-Door and shelf are two columns rather than one string because "what is
-on door C?" is a question the sheet run answers by sorting, and the free
-text `location` column from 0001 cannot be sorted usefully.
+**The Junior Choir is deliberately not counted.** Rachel's note settles
+it: they do not sing from copies, so they can never make a parcel short.
 
-**Eleven new tables.** `service` and `service_music` take the
-bmserviceapp feed; `match_alias` is the matcher's memory. `app_setting`
-holds the hashed choir password and small knobs; `audit_log` takes a row
-for every admin mutation. `person` and `attendance` are the register;
-`feedback` the widget's store; `scan_submission` the crowd-scan approval
-queue; `label_print` and `booklet` the paper trail for printed labels and
-produced PDFs; `loan` the out/back register (H5).
+`src/choirsize.ts` reads a designation into a number of singers, so
+"Boys and SATB" is 43 without anybody typing anything. Twelve of the
+seventeen designations the live feed publishes now resolve; the other
+five are visiting choirs and stay grey, which is correct.
 
-**`piece.season` becomes a controlled vocabulary** — 19 tags in church-year
-order, in `src/church.config.ts`. Deliberately *not* a database CHECK: the
-column holds a semicolon-joined list, so a constraint could only match the
-whole string, and a rejected write tells nobody anything. `readSeasons()`
-in `src/normalise.ts` folds case, spacing, commas and the synonyms the
-choir actually uses ("Whitsun" → `pentecost`), and hands back anything it
-does not recognise **verbatim** rather than dropping it. The importer turns
-that into a review flag naming the word somebody actually wrote. Every one
-of the 19 tags in the committed index falls inside the vocabulary, and a
-test asserts it stays that way.
+Two decisions, both about which way to be wrong:
 
-**The importer reads the v2 columns.** `composer_full`, `surname` and
-`season` now land on the piece, and the planner compares them — without
-that they would import once and then never update, because a row with a
-corrected season would be called "unchanged". A v1 cut with none of these
-columns still imports, storing NULL rather than empty string.
+- **Overestimating is safer.** Too many singers means the RAG cries
+  "not enough copies" and somebody checks. Too few means it says
+  "enough" and a chorister arrives to no copy. So a bare "SATB" reads as
+  all 33 adults rather than one team, and "upper voices" includes the
+  adult sopranos and altos.
+- **An unknown group makes the whole answer unknown.** "Consort, Girls
+  and SATB with Young Voices (St Nicholas, Hornsea)" recognises 64 of
+  our own singers — but Young Voices are coming too and nobody here
+  knows how many. Returning 64 would be a confident green against a
+  number that is certainly too low, so it returns nothing and shows
+  grey.
 
-Tests: 108, up from 66. New coverage on the season vocabulary, the v2
-columns, and every constraint in 0002 that carries a decision — including
-that SQLite would accept each `ALTER TABLE ADD COLUMN` (no UNIQUE, no
-PRIMARY KEY, a default behind any NOT NULL), which otherwise fails at
-migrate time against the live database rather than in CI.
+`typicalSingersFor` now prefers a number recorded against the exact
+designation and falls back to the calculation, so an admin can override
+any term that turns out differently, and a combination nobody has seen
+before still gets a number. The settings screen shows the workings
+beside each row.
+
+Verified end to end: "Boys and SATB" with 45 usable copies renders
+green, with 36 renders amber and "7 short, so some will share", and a
+Liturgy Singers service stays grey.
 
 ### Milestone 3b — labels, QR, people and the picker
 
@@ -254,6 +248,50 @@ outright, so the rate climbs by itself.
 
 `src/audit.ts` arrives here rather than in milestone 3, because the feed
 routes are the first admin mutations that need it.
+
+### Milestone 1 — schema migration 2
+
+`migrations/0002_build2.sql`, additive only. Nothing dropped, nothing
+rewritten: 0001 has already run against `minster-data`, and what is in it
+is the product of somebody's afternoons in a cold song school.
+
+**New columns on `piece`.** `composer_full` and `surname` come from
+index v2; `location_door` (A–H), `location_shelf` and `spine_state`
+('ok' / 'none' / 'combined') are what the volunteer sheets will collect.
+Door and shelf are two columns rather than one string because "what is
+on door C?" is a question the sheet run answers by sorting, and the free
+text `location` column from 0001 cannot be sorted usefully.
+
+**Eleven new tables.** `service` and `service_music` take the
+bmserviceapp feed; `match_alias` is the matcher's memory. `app_setting`
+holds the hashed choir password and small knobs; `audit_log` takes a row
+for every admin mutation. `person` and `attendance` are the register;
+`feedback` the widget's store; `scan_submission` the crowd-scan approval
+queue; `label_print` and `booklet` the paper trail for printed labels and
+produced PDFs; `loan` the out/back register (H5).
+
+**`piece.season` becomes a controlled vocabulary** — 19 tags in church-year
+order, in `src/church.config.ts`. Deliberately *not* a database CHECK: the
+column holds a semicolon-joined list, so a constraint could only match the
+whole string, and a rejected write tells nobody anything. `readSeasons()`
+in `src/normalise.ts` folds case, spacing, commas and the synonyms the
+choir actually uses ("Whitsun" → `pentecost`), and hands back anything it
+does not recognise **verbatim** rather than dropping it. The importer turns
+that into a review flag naming the word somebody actually wrote. Every one
+of the 19 tags in the committed index falls inside the vocabulary, and a
+test asserts it stays that way.
+
+**The importer reads the v2 columns.** `composer_full`, `surname` and
+`season` now land on the piece, and the planner compares them — without
+that they would import once and then never update, because a row with a
+corrected season would be called "unchanged". A v1 cut with none of these
+columns still imports, storing NULL rather than empty string.
+
+Tests: 108, up from 66. New coverage on the season vocabulary, the v2
+columns, and every constraint in 0002 that carries a decision — including
+that SQLite would accept each `ALTER TABLE ADD COLUMN` (no UNIQUE, no
+PRIMARY KEY, a default behind any NOT NULL), which otherwise fails at
+migrate time against the live database rather than in CI.
 
 ### Milestone 0 — CI green against index v2
 

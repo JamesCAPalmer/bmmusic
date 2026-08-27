@@ -72,6 +72,31 @@ export interface VoicePart {
   label: string;
 }
 
+/** One adult team, by voice part. The teams alternate through the term. */
+export interface AdultTeam {
+  soprano: number;
+  alto: number;
+  tenor: number;
+  bass: number;
+}
+
+/**
+ * The size of every part of the choir.
+ *
+ * Children first, then the two adult teams. "SATB" on a music list means the
+ * adults as a body (both teams); "Team A" or "Team B" names one of them.
+ */
+export interface ChoirSections {
+  /** Boys' choir. */
+  boys: number;
+  /** Girls' choir — the younger girls. */
+  girls: number;
+  /** Consort — the older girls. */
+  consort: number;
+  teamA: AdultTeam;
+  teamB: AdultTeam;
+}
+
 /** A sheet of labels, measured in millimetres from the top-left of the page. */
 export interface LabelGrid {
   /** What is printed on the box, for the admin screen to name it. */
@@ -150,6 +175,23 @@ export interface ChurchConfig {
   };
   /** Choir designations that appear on the music list. */
   choirs: ChoirProfile[];
+  /**
+   * How many people are actually in each part of the choir.
+   *
+   * The music list publishes designations as prose — "Boys and SATB",
+   * "Consort, Girls and SATB", "ATB" — and the copies RAG needs a number of
+   * singers behind each. `src/choirsize.ts` does that arithmetic; these are its
+   * inputs, and the only place the numbers live.
+   *
+   * They date from September 2026: the children's numbers from Rachel Dent
+   * (Director of Junior Choir), the adults counted off the Minster Choir teams
+   * list for the same month. They will drift, and updating them here is the
+   * whole maintenance job — nothing else needs to change.
+   *
+   * The Junior Choir (ages 5–8) is deliberately absent: they do not sing from
+   * copies, so they never affect whether there are enough.
+   */
+  choirSections: ChoirSections;
   /** Regular choral service patterns. */
   servicePatterns: ServicePattern[];
   /** The catalogue's categories, in the order they are offered. */
@@ -260,14 +302,51 @@ export const CHURCH: ChurchConfig = {
     publisher: "Kevin Mayhew",
     year: 1996,
   },
-  // Typical singer counts to be filled in by the maintainer as they are
-  // confirmed — omit rather than guess. These seed the choir_profile table.
+  // The designations the music list actually publishes, taken from four months
+  // of the live feed. These seed `choir_profile`; the numbers beside them are
+  // worked out from `choirSections` below by `src/choirsize.ts`, so they are
+  // not repeated here — a row with no number falls back to that calculation,
+  // and an admin can still override any one of them by hand on the settings
+  // screen when a term turns out differently.
+  //
+  // Visiting choirs are listed without numbers on purpose. Nobody here knows
+  // how many singers the Liturgy Singers are bringing, and the RAG showing grey
+  // is the honest answer.
   choirs: [
-    { designation: "Boys and SATB" },
-    { designation: "Girls" },
+    { designation: "Full Choir" },
+    { designation: "SATB" },
     { designation: "ATB" },
+    { designation: "Boys" },
+    { designation: "Girls" },
     { designation: "Consort" },
+    { designation: "Boys and SATB" },
+    { designation: "Girls and SATB" },
+    { designation: "Consort and SATB" },
+    { designation: "Consort, Girls and SATB" },
+    { designation: "Boys, Consort and Girls" },
+    { designation: "Consort and Girls" },
+    { designation: "Consort and Sopranos" },
+    { designation: "Boys and Team A" },
+    { designation: "Boys and Team B" },
+    { designation: "Girls and Team A" },
+    { designation: "Girls and Team B" },
+    { designation: "Consort and Team A" },
+    { designation: "Consort and Team B" },
   ],
+  // September 2026. Children's numbers from Rachel Dent; adults counted off the
+  // Minster Choir teams list for the same month.
+  //
+  // The Junior Choir (ages 5–8) is deliberately not here: they do not sing from
+  // copies, so they can never make a parcel short.
+  choirSections: {
+    boys: 10,
+    girls: 19,
+    consort: 12,
+    // Team A — 16 adults.
+    teamA: { soprano: 2, alto: 5, tenor: 3, bass: 6 },
+    // Team B — 17 adults.
+    teamB: { soprano: 3, alto: 7, tenor: 4, bass: 3 },
+  },
   servicePatterns: [
     { name: "Choral Eucharist", rite: "CW Order One", usualTime: "11:00" },
     { name: "Choral Evensong", rite: "BCP 1662", usualTime: "17:30" },
