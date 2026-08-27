@@ -21,6 +21,7 @@
 
 import type { Context, MiddlewareHandler } from "hono";
 import type { Env } from "./env";
+import { checkChoirPassword, readPasswordState } from "./password";
 
 const COOKIE_NAME = "bmmusic_session";
 /**
@@ -73,30 +74,65 @@ async function constantTimeSecretEqual(a: string, b: string, key: string): Promi
 
 // --- session cookie ---
 
-/** Build a signed session cookie value: `expiry.HMAC-SHA256(expiry, SESSION_SECRET)`. */
-export async function createSessionValue(env: Env, now = Date.now()): Promise<string> {
-  const secret = env.SESSION_SECRET ?? "";
-  const expiry = String(now + SESSION_TTL_MS);
-  const sig = toHex(await hmacSha256(secret, expiry));
-  return `${expiry}.${sig}`;
+/**
+ * The key a session cookie is signed with.
+ *
+ * `SESSION_SECRET`, plus the password generation. Rotating the secret in the
+ * dashboard still signs everybody out — but so does changing the choir password
+ * from the admin screen, because a different generation derives a different key
+ * and every cookie already issued stops verifying. That is what makes the
+ * termly rotation actually rotate: the chorister who left at Christmas has a
+ * cookie good for ninety days, and it must stop working the moment the password
+ * does.
+ */
+function signingKey(secret: string, generation: number): string {
+  return `${secret}:g${generation}`;
 }
 
-/** Verify a session cookie value: signature valid AND not expired. */
+/**
+ * Build a signed session cookie: `expiry.generation.HMAC-SHA256(expiry.generation, key)`.
+ *
+ * The generation travels in the cookie as well as in the key so that an old
+ * cookie fails on a signature check rather than by accident. Verification does
+ * not trust it — the current generation is read from the database — but having
+ * it there means a mismatched cookie is recognisably stale rather than merely
+ * malformed.
+ */
+export async function createSessionValue(env: Env, generation = 0, now = Date.now()): Promise<string> {
+  const secret = env.SESSION_SECRET ?? "";
+  const expiry = String(now + SESSION_TTL_MS);
+  const payload = `${expiry}.${generation}`;
+  const sig = toHex(await hmacSha256(signingKey(secret, generation), payload));
+  return `${payload}.${sig}`;
+}
+
+/**
+ * Verify a session cookie: signature valid, not expired, and minted under the
+ * current password generation.
+ */
 export async function verifySessionValue(
   env: Env,
   value: string | undefined,
+  generation = 0,
   now = Date.now()
 ): Promise<boolean> {
   // With no secret configured nothing can be verified, so nothing is let in.
   if (!env.SESSION_SECRET) return false;
   if (!value) return false;
-  const dot = value.indexOf(".");
-  if (dot <= 0) return false;
-  const expiryStr = value.slice(0, dot);
-  const sig = value.slice(dot + 1);
+
+  const parts = value.split(".");
+  if (parts.length !== 3) return false;
+  const [expiryStr, generationStr, sig] = parts as [string, string, string];
+
   const expiry = Number(expiryStr);
   if (!Number.isFinite(expiry) || expiry < now) return false;
-  const expected = toHex(await hmacSha256(env.SESSION_SECRET, expiryStr));
+
+  // A cookie from an earlier generation is stale by definition: the password
+  // has been changed since it was issued.
+  if (Number(generationStr) !== generation) return false;
+
+  const payload = `${expiryStr}.${generationStr}`;
+  const expected = toHex(await hmacSha256(signingKey(env.SESSION_SECRET, generation), payload));
   if (sig.length !== expected.length) return false;
   return timingSafeEqual(enc.encode(sig), enc.encode(expected));
 }
@@ -170,7 +206,10 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
 
   if (PUBLIC_PATHS.has(path)) return next();
 
-  if (await verifySessionValue(c.env, readCookie(c, COOKIE_NAME))) return next();
+  // The current generation comes from the database, cached per isolate for a
+  // minute (see src/password.ts) so this is not a D1 round trip per page load.
+  const { generation } = await readPasswordState(c.env.DB);
+  if (await verifySessionValue(c.env, readCookie(c, COOKIE_NAME), generation)) return next();
 
   // Not signed in: APIs get JSON 401, pages go to the password screen.
   if (path.startsWith("/api/")) {
@@ -179,10 +218,15 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
   return c.redirect("/login", 302);
 };
 
-/** Validate a submitted password against CHOIR_PASSWORD in constant time. */
+/**
+ * Validate a submitted password.
+ *
+ * Kept as a thin wrapper over `src/password.ts` so the routes have one thing to
+ * call. The stored hash wins; the `CHOIR_PASSWORD` secret is only consulted
+ * before James has ever set a password from the admin screen.
+ */
 export async function checkPassword(env: Env, submitted: string): Promise<boolean> {
-  if (!env.CHOIR_PASSWORD || !env.SESSION_SECRET) return false;
-  return constantTimeSecretEqual(submitted, env.CHOIR_PASSWORD, env.SESSION_SECRET);
+  return checkChoirPassword(env, env.DB, submitted);
 }
 
 export { FAILED_LOGIN_DELAY_MS, COOKIE_NAME, ACCESS_ASSERTION_HEADER };

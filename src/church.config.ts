@@ -160,6 +160,11 @@ export interface ChurchConfig {
     /** Binders with a name rather than a range on the spine. */
     namedBinders: string[];
   };
+  /** When a parcel is due a recount (H6). Whichever comes first. */
+  stocktake: {
+    yearsBetweenCounts: number;
+    performancesBetweenCounts: number;
+  };
   /** Prefix and width of an accession number: "BM-" + 4 digits → "BM-0001". */
   accession: {
     prefix: string;
@@ -274,6 +279,10 @@ export const CHURCH: ChurchConfig = {
     rangeSize: 10,
     highestNumbered: 150,
     namedBinders: ["St Patrick's Breastplate", "Hymn Descants"],
+  },
+  stocktake: {
+    yearsBetweenCounts: 5,
+    performancesBetweenCounts: 10,
   },
   accession: {
     prefix: "BM-",

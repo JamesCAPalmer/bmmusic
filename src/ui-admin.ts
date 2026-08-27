@@ -1,0 +1,742 @@
+/**
+ * The librarian's screens, Build 2.
+ *
+ * Split out of `src/ui.ts` because the admin side has grown past the point
+ * where one file is navigable. The shell (`page`, `esc`, the stylesheet) still
+ * lives there and is imported here, so both sides render identically and there
+ * is exactly one place a layout rule can be changed.
+ *
+ * Same rules as the choir side: everything interpolated goes through `esc`,
+ * server-rendered, no framework, plain British English.
+ */
+
+import { CHURCH } from "./church.config";
+import { betaChip, categoryLabel, esc, flagPills, page, prettyDate } from "./ui";
+import type { CatalogueStats, ChoirProfileRow, PieceWithHolding, SearchQuery, SearchResult } from "./catalogue";
+import type { AuditRow } from "./audit";
+import type {
+  ConditionCount,
+  Coverage,
+  LoanRow,
+  PriorityPiece,
+  RecountRow,
+  SeasonReadiness,
+  SungCount,
+} from "./reports";
+
+// ---------------------------------------------------------------------------
+// Admin home — six tiles and the queues (5A)
+// ---------------------------------------------------------------------------
+
+export interface AdminQueueCounts {
+  toReview: number;
+  musicLines: number;
+  pendingScans: number;
+  openFeedback: number;
+  openRepairs: number;
+  dueRecount: number;
+}
+
+/**
+ * The librarian's front page.
+ *
+ * Six tiles for the things James goes looking for, and above them the queues —
+ * the things waiting on him. Queues first because a number waiting is more
+ * urgent than a door to walk through, and a tile with nothing behind it should
+ * not look the same as one with forty items in it.
+ */
+export function adminHomePage(
+  stats: CatalogueStats,
+  queues: AdminQueueCounts,
+  extractionReady: boolean
+): string {
+  const unreviewed = stats.pieces - stats.reviewed;
+
+  const stat = (n: number | string, label: string) =>
+    `<div class="stat"><span class="n">${esc(n)}</span><span class="l">${esc(label)}</span></div>`;
+
+  const queue = (href: string, n: number, label: string, blurb: string) =>
+    `<a class="tile${n ? " has-work" : ""}" href="${href}">
+       <span class="n">${n}</span>
+       <span class="t">${esc(label)}</span>
+       <span class="b">${esc(blurb)}</span>
+     </a>`;
+
+  const tile = (href: string, label: string, blurb: string, chip = "") =>
+    `<a class="tile" href="${href}">
+       <span class="t">${esc(label)}${chip}</span>
+       <span class="b">${esc(blurb)}</span>
+     </a>`;
+
+  return page(
+    `Librarian — ${CHURCH.appName}`,
+    `<h1>Librarian<span class="sub">${esc(CHURCH.name)} music library</span></h1>
+
+     <h2>Waiting for you</h2>
+     <div class="tiles">
+       ${queue("/admin/review", queues.toReview, "Draft entries", "read off label photographs, unchecked")}
+       ${queue("/admin/services", queues.musicLines, "Music list lines", "matched or waiting to be matched")}
+       ${queue("/admin/scans", queues.pendingScans, "Scans sent in", "photographed by choristers")}
+       ${queue("/admin/feedback", queues.openFeedback, "Feedback", "sent from the widget")}
+       ${queue("/admin/queues", queues.openRepairs, "Repairs", "poor, urgent, or no usable spine")}
+       ${queue("/admin/stocktake", queues.dueRecount, "Due a recount", "five years old, or sung a lot since")}
+     </div>
+
+     <h2>The library</h2>
+     <div class="tiles">
+       ${tile("/admin/new", "New catalogue item", "parse a scan, or enter it by hand")}
+       ${tile("/admin/search", "Search and bulk edit", "filter, select, change many at once")}
+       ${tile("/admin/reports", "Reports", "what gets sung, condition, coverage")}
+       ${tile("/admin/queues", "What to do next", "scanning and repair, in priority order")}
+       ${tile("/admin/loans", "Out on loan", "who has what, and since when")}
+       ${tile("/admin/settings", "Settings", "choir password, choir sizes, activity")}
+     </div>
+
+     <div class="card">
+       <h2>Where things stand</h2>
+       <div class="stat-grid">
+         ${stat(stats.pieces, "pieces catalogued")}
+         ${stat(unreviewed, "still to review")}
+         ${stat(stats.withAccession, "with an accession number")}
+         ${stat(stats.counted, "parcels counted")}
+         ${stat(stats.copiesUsable, "usable copies counted")}
+         ${stat(stats.openRepairs, "repairs outstanding")}
+       </div>
+     </div>
+
+     <div class="card">
+       <h2>Accession numbers</h2>
+       <p>Assign ${esc(CHURCH.accession.prefix)} numbers to every reviewed piece that has none, in catalogue
+          order (composer, then title). Numbering continues from the highest already assigned and never
+          renumbers an existing one.</p>
+       <form method="POST" action="/admin/accessions">
+         <button type="submit" ${stats.reviewed === stats.withAccession ? "disabled" : ""}>
+           Assign the next numbers
+         </button>
+       </form>
+     </div>
+
+     ${
+       extractionReady
+         ? ""
+         : `<div class="notice">
+              <p><strong>Reading labels automatically is switched off.</strong> No
+                 <code>ANTHROPIC_API_KEY</code> is set, so "New catalogue item" takes details by hand.
+                 Everything else works exactly as it does with the key set.</p>
+            </div>`
+     }
+
+     <style>
+       .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.7rem;
+                margin: 0.6rem 0 1.4rem; }
+       .tile { display: block; padding: 0.85rem 1rem; border: 1px solid var(--colour-border);
+               border-radius: var(--radius-xl); background: var(--colour-surface); text-decoration: none;
+               color: var(--colour-ink); }
+       .tile:hover { background: var(--colour-accent-tint); border-color: var(--colour-accent); }
+       .tile .n { display: block; font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums;
+                  line-height: 1.1; color: var(--colour-subtle); }
+       .tile.has-work .n { color: var(--colour-accent); }
+       .tile .t { display: block; font-weight: 700; font-family: var(--type-family-display); }
+       .tile .b { display: block; font-size: 0.85rem; color: var(--colour-muted); }
+     </style>`,
+    { admin: true, nav: "admin", path: "/admin" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// New catalogue item (5A as amended) — two modes, side by side
+// ---------------------------------------------------------------------------
+
+/**
+ * One way in to adding a piece, offering both ways of doing it.
+ *
+ * James's amendment: rather than "photo intake" and "add by hand" being two
+ * places to remember, this is one page with both modes visible. Somebody who
+ * starts by uploading a scan and finds the reading poor just carries on typing
+ * into the same form, which is what actually happens in practice.
+ */
+export function adminNewItemPage(extractionReady: boolean, formHtml: string): string {
+  return page(
+    `New catalogue item — ${CHURCH.appName}`,
+    `<h1>New catalogue item<span class="sub">Parse a scan, or type it in</span></h1>
+
+     <div class="modes">
+       <div class="card">
+         <h2>Parse a scan</h2>
+         ${
+           extractionReady
+             ? `<p class="muted">Photograph the label or upload a scan. What it reads goes into the form
+                  below for you to check — nothing is saved until you press the button.</p>
+                <form id="upload-form">
+                  <div class="field">
+                    <label for="photo">Photo or PDF</label>
+                    <input type="file" id="photo" name="photo" accept="image/*,.pdf" capture="environment" required>
+                    <span class="hint">A straight-on photo in good light reads best. One label at a time.</span>
+                  </div>
+                  <button type="submit" id="go">Read it</button>
+                </form>
+                <p id="status" class="muted hidden"></p>`
+             : `<div class="notice">
+                  <p style="margin:0"><strong>Switched off.</strong> No <code>ANTHROPIC_API_KEY</code> is set
+                     for this Worker, so there is nothing to read the scan with. Use the other side.</p>
+                </div>`
+         }
+       </div>
+
+       <div class="card">
+         <h2>Enter manually</h2>
+         <p class="muted">Everything the parcel label says. This is the same form the scan fills in, so
+            you can start on either side and finish on this one.</p>
+         <div id="concerns"></div>
+         ${formHtml}
+       </div>
+     </div>
+
+     <style>
+       .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
+       @media (max-width: 52rem) { .modes { grid-template-columns: 1fr; } }
+       .modes .card { margin: 0; }
+     </style>`,
+    { admin: true, path: "/admin/new" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Search and bulk edit
+// ---------------------------------------------------------------------------
+
+export interface AdminSearchFilters extends SearchQuery {
+  season?: string;
+  locationDoor?: string;
+  scanned?: string;
+  flagged?: string;
+}
+
+/**
+ * The filterable table, with a bulk-edit bar under it.
+ *
+ * The bar only sets fields somebody has filled in — a blank box means "leave
+ * this alone", not "clear it". Getting that backwards would let one careless
+ * bulk edit wipe the season tags off two hundred rows, which is the sort of
+ * mistake that costs an afternoon and is not obviously recoverable.
+ */
+export function adminSearchPage(
+  filters: AdminSearchFilters,
+  result: SearchResult,
+  message?: string
+): string {
+  const categoryOptions = CHURCH.categories
+    .map((c) => `<option value="${esc(c.code)}"${filters.category === c.code ? " selected" : ""}>${esc(c.label)}</option>`)
+    .join("");
+  const seasonOptions = CHURCH.seasons
+    .map((s) => `<option value="${esc(s.value)}"${filters.season === s.value ? " selected" : ""}>${esc(s.label)}</option>`)
+    .join("");
+  const doorOptions = CHURCH.storage.doors
+    .map((d) => `<option value="${esc(d)}"${filters.locationDoor === d ? " selected" : ""}>Door ${esc(d)}</option>`)
+    .join("");
+
+  const rows = result.pieces
+    .map(
+      (p) => `<tr>
+        <td><input type="checkbox" name="id" value="${p.id}" form="bulk"></td>
+        <td><a href="/admin/piece/${p.id}">${esc(p.title)}</a>
+            ${p.review_flag ? `<br>${flagPills(p.review_flag)}` : ""}</td>
+        <td>${esc(p.composer)}</td>
+        <td>${esc(categoryLabel(p.category))}</td>
+        <td>${p.season ? esc(p.season.replace(/;/g, ", ")) : ""}</td>
+        <td>${p.location_door ? `${esc(p.location_door)}${p.location_shelf ? `/${p.location_shelf}` : ""}` : esc(p.location ?? "")}</td>
+        <td class="num">${p.copies_usable ?? ""}</td>
+      </tr>`
+    )
+    .join("");
+
+  return page(
+    `Search and bulk edit — ${CHURCH.appName}`,
+    `<h1>Search and bulk edit<span class="sub">${result.total} ${result.total === 1 ? "piece" : "pieces"} match</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     <div class="card">
+       <form method="GET" action="/admin/search">
+         <div class="row">
+           <div class="field">
+             <label for="q">Composer or title</label>
+             <input type="search" id="q" name="q" value="${esc(filters.q ?? "")}">
+           </div>
+           <div class="field">
+             <label for="category">Category</label>
+             <select id="category" name="category"><option value="">Any</option>${categoryOptions}</select>
+           </div>
+           <div class="field">
+             <label for="season">Season</label>
+             <select id="season" name="season"><option value="">Any</option>${seasonOptions}</select>
+           </div>
+         </div>
+         <div class="row">
+           <div class="field">
+             <label for="door">Where it lives</label>
+             <select id="door" name="door"><option value="">Anywhere</option>${doorOptions}</select>
+           </div>
+           <div class="field">
+             <label for="scanned">Scanned</label>
+             <select id="scanned" name="scanned">
+               <option value="">Either</option>
+               <option value="yes"${filters.scanned === "yes" ? " selected" : ""}>Scanned</option>
+               <option value="no"${filters.scanned === "no" ? " selected" : ""}>Not scanned</option>
+             </select>
+           </div>
+           <div class="field">
+             <label for="flagged">Flag state</label>
+             <select id="flagged" name="flagged">
+               <option value="">Any</option>
+               <option value="flagged"${filters.flagged === "flagged" ? " selected" : ""}>Flagged</option>
+               <option value="unreviewed"${filters.flagged === "unreviewed" ? " selected" : ""}>Not reviewed</option>
+               <option value="reviewed"${filters.flagged === "reviewed" ? " selected" : ""}>Reviewed</option>
+             </select>
+           </div>
+         </div>
+         <button type="submit">Filter</button>
+       </form>
+     </div>
+
+     ${
+       result.pieces.length
+         ? `<div class="scroll"><table>
+              <tr><th></th><th>Title</th><th>Composer</th><th>Category</th><th>Season</th><th>Where</th><th class="num">Usable</th></tr>
+              ${rows}
+            </table></div>
+
+            <div class="card">
+              <h2>Change the ticked ones</h2>
+              <p class="muted small">Anything you leave blank is left alone. Nothing here clears a field —
+                 to empty one, edit that piece on its own page.</p>
+              <form method="POST" action="/admin/search/bulk" id="bulk">
+                <div class="row">
+                  <div class="field">
+                    <label for="b-category">Category</label>
+                    <select id="b-category" name="category"><option value="">Leave alone</option>${
+                      CHURCH.categories.map((c) => `<option value="${esc(c.code)}">${esc(c.label)}</option>`).join("")
+                    }</select>
+                  </div>
+                  <div class="field">
+                    <label for="b-season">Season</label>
+                    <select id="b-season" name="season"><option value="">Leave alone</option>${
+                      CHURCH.seasons.map((s) => `<option value="${esc(s.value)}">${esc(s.label)}</option>`).join("")
+                    }</select>
+                  </div>
+                  <div class="field">
+                    <label for="b-door">Door</label>
+                    <select id="b-door" name="location_door"><option value="">Leave alone</option>${
+                      CHURCH.storage.doors.map((d) => `<option value="${esc(d)}">Door ${esc(d)}</option>`).join("")
+                    }</select>
+                  </div>
+                  <div class="field">
+                    <label for="b-shelf">Shelf</label>
+                    <input type="number" id="b-shelf" name="location_shelf" min="1" max="${CHURCH.storage.maxShelf}"
+                           placeholder="Leave alone">
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="b-spine">Spine label</label>
+                  <select id="b-spine" name="spine_state">
+                    <option value="">Leave alone</option>
+                    <option value="ok">Has a usable spine</option>
+                    <option value="none">No usable spine</option>
+                    <option value="combined">Shares a combined label</option>
+                  </select>
+                </div>
+                <button type="submit">Change the ticked ones</button>
+                <span class="muted small">Every bulk change is written to the activity log.</span>
+              </form>
+            </div>`
+         : `<p class="muted">Nothing matched those filters.</p>`
+     }`,
+    { admin: true, path: "/admin/search" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reports
+// ---------------------------------------------------------------------------
+
+export function adminReportsPage(
+  cover: Coverage,
+  most: SungCount[],
+  least: SungCount[],
+  conditions: ConditionCount[],
+  readiness: SeasonReadiness[],
+  since: string
+): string {
+  const bar = (n: number, total: number, label: string) => {
+    const pct = total ? Math.round((n / total) * 100) : 0;
+    return `<div class="cov">
+        <div class="cov-l"><span>${esc(label)}</span><span class="muted">${n} of ${total} · ${pct}%</span></div>
+        <div class="cov-t"><div class="cov-f" style="width:${pct}%"></div></div>
+      </div>`;
+  };
+
+  const conditionLabel = new Map(CHURCH.conditions.map((c) => [c.value, c.label]));
+
+  return page(
+    `Reports — ${CHURCH.appName}`,
+    `<h1>Reports</h1>
+
+     <div class="card">
+       <h2>How far through we are</h2>
+       ${bar(cover.reviewed, cover.pieces, "Checked by a human")}
+       ${bar(cover.counted, cover.pieces, "Counted")}
+       ${bar(cover.conditionAssessed, cover.pieces, "Condition recorded")}
+       ${bar(cover.scanned, cover.pieces, "Scanned")}
+       ${bar(cover.seasonTagged, cover.pieces, "Season tagged")}
+       ${bar(cover.located, cover.pieces, "Where it lives recorded")}
+       ${bar(cover.withAccession, cover.pieces, "Accession number assigned")}
+     </div>
+
+     <div class="card">
+       <h2>Condition</h2>
+       <div class="scroll"><table>
+         <tr><th>Grade</th><th class="num">Parcels</th></tr>
+         ${conditions
+           .map(
+             (c) => `<tr><td>${esc(conditionLabel.get(c.condition) ?? c.condition)}</td>
+               <td class="num">${c.n}</td></tr>`
+           )
+           .join("")}
+       </table></div>
+       <p class="muted small">Each parcel counted once, at its most recent count.</p>
+     </div>
+
+     <div class="card">
+       <h2>Sung most since ${esc(prettyDate(since))}</h2>
+       ${
+         most.length
+           ? `<div class="scroll"><table>
+                <tr><th>Piece</th><th>Composer</th><th class="num">Times</th><th>Last</th></tr>
+                ${most
+                  .map(
+                    (s) => `<tr><td><a href="/admin/piece/${s.piece_id}">${esc(s.title)}</a></td>
+                      <td>${esc(s.composer)}</td><td class="num">${s.times}</td>
+                      <td>${esc(prettyDate(s.last_sung))}</td></tr>`
+                  )
+                  .join("")}
+              </table></div>`
+           : `<p class="muted">Nothing yet. This fills in as music-list lines are confirmed —
+                only confirmed matches count, so the numbers are the choir's history rather than
+                the matcher's opinion.</p>`
+       }
+     </div>
+
+     <div class="card">
+       <h2>Not sung since ${esc(prettyDate(since))}</h2>
+       ${
+         least.length
+           ? `<div class="scroll"><table>
+                <tr><th>Piece</th><th>Composer</th><th>Last sung</th></tr>
+                ${least
+                  .map(
+                    (s) => `<tr><td><a href="/admin/piece/${s.piece_id}">${esc(s.title)}</a></td>
+                      <td>${esc(s.composer)}</td>
+                      <td>${s.last_sung ? esc(prettyDate(s.last_sung)) : '<span class="muted">never recorded</span>'}</td></tr>`
+                  )
+                  .join("")}
+              </table></div>`
+           : `<p class="muted">Nothing to show yet.</p>`
+       }
+     </div>
+
+     <div class="card">
+       <h2>The seasons ahead</h2>
+       ${
+         readiness.length
+           ? `<div class="scroll"><table>
+                <tr><th>Season</th><th class="num">Tagged</th><th class="num">Scanned</th><th class="num">Short of copies</th></tr>
+                ${readiness
+                  .map(
+                    (r) => `<tr><td><a href="/admin/search?season=${esc(r.season)}">${esc(r.label)}</a></td>
+                      <td class="num">${r.tagged}</td><td class="num">${r.scanned}</td>
+                      <td class="num">${r.thin ? `<span class="pill amber">${r.thin}</span>` : "0"}</td></tr>`
+                  )
+                  .join("")}
+              </table></div>
+              <p class="muted small">The seasons falling within the next six weeks. "Short of copies"
+                 compares the last count against the largest choir on record, so it reads zero until
+                 choir sizes are filled in.</p>`
+           : `<p class="muted">No seasons fall in the next few weeks.</p>`
+       }
+     </div>
+
+     <style>
+       .cov { margin: 0.55rem 0; }
+       .cov-l { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 0.2rem; }
+       .cov-t { background: var(--colour-surface-alt); border-radius: var(--radius-pill); height: 0.5rem; }
+       .cov-f { background: var(--colour-accent); border-radius: var(--radius-pill); height: 100%; }
+     </style>`,
+    { admin: true, path: "/admin/reports" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Priority queues
+// ---------------------------------------------------------------------------
+
+export function adminQueuesPage(scanning: PriorityPiece[], repairs: PriorityPiece[]): string {
+  const table = (rows: PriorityPiece[], empty: string) =>
+    rows.length
+      ? `<div class="scroll"><table>
+           <tr><th>Piece</th><th>Composer</th><th>Why</th><th>Last sung</th></tr>
+           ${rows
+             .map(
+               (p) => `<tr>
+                 <td>${p.accession ? `<span class="pill grey">${esc(p.accession)}</span> ` : ""}
+                     <a href="/admin/piece/${p.id}">${esc(p.title)}</a></td>
+                 <td>${esc(p.composer)}</td>
+                 <td>${esc(p.reason)}</td>
+                 <td>${p.last_sung ? esc(prettyDate(p.last_sung)) : ""}</td>
+               </tr>`
+             )
+             .join("")}
+         </table></div>`
+      : `<p class="muted">${esc(empty)}</p>`;
+
+  return page(
+    `What to do next — ${CHURCH.appName}`,
+    `<h1>What to do next</h1>
+
+     <div class="card">
+       <h2>Scan these first</h2>
+       <p class="muted small">Coming up at a service, then tagged for the season, then sung most recently.
+          Anything already scanned is off the list.</p>
+       ${table(scanning, "Nothing waiting — every reviewed piece has a scan.")}
+     </div>
+
+     <div class="card">
+       <h2>Repair these first</h2>
+       <p class="muted small">Urgent, then poor, then anything with no usable spine label — a parcel
+          nobody can read the spine of is lost on the shelf whatever state the paper is in.</p>
+       ${table(repairs, "Nothing in poor or urgent condition, and every parcel has a readable spine.")}
+     </div>`,
+    { admin: true, path: "/admin/queues" }
+  );
+}
+
+export function adminStocktakePage(due: RecountRow[]): string {
+  return page(
+    `Due a recount — ${CHURCH.appName}`,
+    `<h1>Due a recount<span class="sub">${due.length} ${due.length === 1 ? "parcel" : "parcels"}</span></h1>
+     <p class="muted">Not counted for ${CHURCH.stocktake.yearsBetweenCounts} years, or sung
+        ${CHURCH.stocktake.performancesBetweenCounts} times since the last count — whichever came first.
+        This is a list to look at, not a nag: it feeds the volunteer sheet run.</p>
+     ${
+       due.length
+         ? `<div class="scroll"><table>
+              <tr><th>Piece</th><th>Composer</th><th>Last counted</th><th class="num">Sung since</th><th>Why</th></tr>
+              ${due
+                .map(
+                  (r) => `<tr>
+                    <td>${r.accession ? `<span class="pill grey">${esc(r.accession)}</span> ` : ""}
+                        <a href="/admin/piece/${r.id}">${esc(r.title)}</a></td>
+                    <td>${esc(r.composer)}</td>
+                    <td>${r.last_counted ? esc(prettyDate(r.last_counted)) : '<span class="muted">never</span>'}</td>
+                    <td class="num">${r.performances_since}</td>
+                    <td>${esc(r.reason)}</td>
+                  </tr>`
+                )
+                .join("")}
+            </table></div>`
+         : `<div class="notice ok"><p>Nothing is due a recount.</p></div>`
+     }`,
+    { admin: true, path: "/admin/stocktake" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Loans (H5)
+// ---------------------------------------------------------------------------
+
+export function adminLoansPage(open: LoanRow[], message?: string): string {
+  return page(
+    `Out on loan — ${CHURCH.appName}`,
+    `<h1>Out on loan<span class="sub">${open.length} ${open.length === 1 ? "loan" : "loans"} outstanding</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     ${
+       open.length
+         ? `<div class="scroll"><table>
+              <tr><th>Piece</th><th>Who has it</th><th class="num">Copies</th><th>Out since</th><th>Due back</th><th></th></tr>
+              ${open
+                .map(
+                  (l) => `<tr>
+                    <td><a href="/admin/piece/${l.piece_id}">${esc(l.title)}</a>
+                        <div class="muted small">${esc(l.composer)}${l.reason ? ` · ${esc(l.reason)}` : ""}</div></td>
+                    <td>${esc(l.borrower)}</td>
+                    <td class="num">${l.copies}</td>
+                    <td>${esc(prettyDate(l.out_at))}</td>
+                    <td>${l.due_back ? esc(prettyDate(l.due_back)) : '<span class="muted">not said</span>'}</td>
+                    <td><form method="POST" action="/admin/loans/${l.id}/back">
+                          <button type="submit" class="secondary">Back</button>
+                        </form></td>
+                  </tr>`
+                )
+                .join("")}
+            </table></div>`
+         : `<div class="notice ok"><p>Nothing is out.</p></div>`
+     }
+
+     <div class="card">
+       <h2>Lend something out</h2>
+       <form method="POST" action="/admin/loans">
+         <div class="row">
+           <div class="field">
+             <label for="piece_id">Piece number</label>
+             <input type="number" id="piece_id" name="piece_id" min="1" required>
+             <span class="hint">From the piece's address — <a href="/admin/search">search for it</a>.</span>
+           </div>
+           <div class="field">
+             <label for="copies">How many copies</label>
+             <input type="number" id="copies" name="copies" min="1" max="999" value="1" required>
+           </div>
+           <div class="field">
+             <label for="due_back">Due back</label>
+             <input type="text" id="due_back" name="due_back" placeholder="YYYY-MM-DD">
+           </div>
+         </div>
+         <div class="row">
+           <div class="field">
+             <label for="borrower">Who is taking it</label>
+             <input type="text" id="borrower" name="borrower" required>
+           </div>
+           <div class="field">
+             <label for="reason">What for</label>
+             <input type="text" id="reason" name="reason" placeholder="e.g. the Wednesday rehearsal">
+           </div>
+         </div>
+         <button type="submit">Log it out</button>
+       </form>
+     </div>`,
+    { admin: true, path: "/admin/loans" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Settings — password, choir sizes, activity
+// ---------------------------------------------------------------------------
+
+export function adminSettingsPage(
+  profiles: ChoirProfileRow[],
+  usingStoredPassword: boolean,
+  generation: number,
+  message?: string,
+  error?: string
+): string {
+  return page(
+    `Settings — ${CHURCH.appName}`,
+    `<h1>Settings</h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+     ${error ? `<div class="notice error"><p style="margin:0">${esc(error)}</p></div>` : ""}
+
+     <div class="card">
+       <h2>The choir password</h2>
+       <p class="muted">Changing this <strong>signs everybody out</strong>, on every device, straight away.
+          That is the point of changing it at the start of term — somebody who has left stops getting in.
+          You will have to sign in again yourself on the choir side.</p>
+       ${
+         usingStoredPassword
+           ? `<p class="small muted">Changed ${generation} ${generation === 1 ? "time" : "times"} from this screen.</p>`
+           : `<div class="notice">
+                <p style="margin:0">The password is still the one set as a Cloudflare secret. Once you set one
+                   here, the secret stops being used at all.</p>
+              </div>`
+       }
+       <form method="POST" action="/admin/settings/password">
+         <div class="row">
+           <div class="field">
+             <label for="password">New password</label>
+             <input type="password" id="password" name="password" autocomplete="new-password" required>
+             <span class="hint">Three or four ordinary words are easier to tell a choir than a jumble of
+               symbols, and harder to guess.</span>
+           </div>
+           <div class="field">
+             <label for="confirm">Type it again</label>
+             <input type="password" id="confirm" name="confirm" autocomplete="new-password" required>
+           </div>
+         </div>
+         <button type="submit" class="confirm">Change the password and sign everybody out</button>
+       </form>
+     </div>
+
+     <div class="card">
+       <h2>How big each choir is</h2>
+       <p class="muted">The copies check on a service page divides these into the usable copy count.
+          Until a number is filled in, that check shows grey rather than guessing — which is why every
+          service reads grey today.</p>
+       <form method="POST" action="/admin/settings/choirs">
+         <div class="scroll"><table>
+           <tr><th>Designation</th><th class="num">Typical singers</th></tr>
+           ${profiles
+             .map(
+               (p) => `<tr>
+                 <td>${esc(p.designation)}</td>
+                 <td class="num"><input type="number" name="singers-${p.id}" min="0" max="200"
+                      value="${p.typical_singers ?? ""}" style="width:6rem" placeholder="not known"></td>
+               </tr>`
+             )
+             .join("")}
+         </table></div>
+         <div class="field" style="margin-top:0.8rem">
+           <label for="new_designation">Add a designation</label>
+           <input type="text" id="new_designation" name="new_designation"
+                  placeholder="As the music list writes it, e.g. Consort and Team A">
+           <span class="hint">The music list publishes designations we have not seen — matching is on the
+             whole name, so it has to be spelled the way the list spells it.</span>
+         </div>
+         <button type="submit">Save</button>
+       </form>
+     </div>
+
+     <div class="card">
+       <h2>Activity</h2>
+       <p><a class="btn secondary" href="/admin/activity">See who did what</a></p>
+     </div>`,
+    { admin: true, path: "/admin/settings" }
+  );
+}
+
+/**
+ * The activity log.
+ *
+ * Every admin mutation, newest first, naming the Cloudflare Access identity
+ * that made it. Six people hold the Librarian policy, and "who decided that?"
+ * only has an honest answer if it was written down at the time.
+ */
+export function adminActivityPage(rows: AuditRow[]): string {
+  return page(
+    `Activity — ${CHURCH.appName}`,
+    `<h1>Activity<span class="sub">The last ${rows.length} things done here</span></h1>
+     ${
+       rows.length
+         ? `<div class="scroll"><table>
+              <tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr>
+              ${rows
+                .map(
+                  (r) => `<tr>
+                    <td class="muted small">${esc(prettyDate(r.at))}</td>
+                    <td>${esc(r.user_email ?? "unknown")}</td>
+                    <td><code>${esc(r.action)}</code>${
+                      r.entity && r.entity_id
+                        ? ` <span class="muted small">${esc(r.entity)} ${r.entity_id}</span>`
+                        : ""
+                    }</td>
+                    <td class="small">${esc(r.detail ?? "")}</td>
+                  </tr>`
+                )
+                .join("")}
+            </table></div>`
+         : `<p class="muted">Nothing has been changed yet.</p>`
+     }
+     <p class="muted small">Attendance is deliberately not in here: a register is personal data about a
+        child, and it does not belong in a log admins read looking for a mistake. Each attendance row
+        records who marked it, on the register itself.</p>`,
+    { admin: true, path: "/admin/activity" }
+  );
+}
+
+export { betaChip };

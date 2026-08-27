@@ -91,7 +91,7 @@ function copiesLabel(piece: PieceWithHolding): string {
 }
 
 /** A date as "3 September 2026". Dates in the database are already ISO. */
-function prettyDate(iso: string | null): string {
+export function prettyDate(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -99,7 +99,7 @@ function prettyDate(iso: string | null): string {
 }
 
 /** Review flags are stored "; "-joined; show them as separate pills. */
-function flagPills(reviewFlag: string | null): string {
+export function flagPills(reviewFlag: string | null): string {
   if (!reviewFlag) return "";
   return reviewFlag
     .split(";")
@@ -263,7 +263,7 @@ const STYLES = `
   @media print { .fb-btn, .fb-panel { display: none !important; } }
 `;
 
-interface PageOptions {
+export interface PageOptions {
   /** Which nav item to highlight. */
   nav?: "browse" | "portal" | "admin" | "home";
   /** Admin pages get the admin nav instead of the choir one. */
@@ -279,7 +279,7 @@ export function betaChip(): string {
   return `<span class="beta" title="New — it may not be perfect yet">beta</span>`;
 }
 
-function page(title: string, bodyHtml: string, opts: PageOptions = {}): string {
+export function page(title: string, bodyHtml: string, opts: PageOptions = {}): string {
   const chrome = opts.chrome !== false;
   const navbar = chrome ? navFor(opts) : "";
   // The login page has no widget: somebody who cannot get in has nothing to
@@ -1197,69 +1197,6 @@ export function portalDonePage(piece: PieceWithHolding, outcome: CountOutcome): 
 // Admin
 // ---------------------------------------------------------------------------
 
-export function adminHomePage(stats: CatalogueStats, extractionReady: boolean): string {
-  const stat = (n: number | string, label: string) =>
-    `<div class="stat"><span class="n">${esc(n)}</span><span class="l">${esc(label)}</span></div>`;
-
-  const unreviewed = stats.pieces - stats.reviewed;
-
-  return page(
-    `Librarian — ${CHURCH.appName}`,
-    `<h1>Librarian<span class="sub">${esc(CHURCH.name)} music library</span></h1>
-
-     <div class="card">
-       <h2>Where things stand</h2>
-       <div class="stat-grid">
-         ${stat(stats.pieces, "pieces catalogued")}
-         ${stat(unreviewed, "still to review")}
-         ${stat(stats.withAccession, "with an accession number")}
-         ${stat(stats.counted, "parcels counted")}
-         ${stat(stats.copiesUsable, "usable copies counted")}
-         ${stat(stats.openRepairs, "repairs outstanding")}
-       </div>
-     </div>
-
-     <div class="card">
-       <h2>Review queue</h2>
-       <p>${
-         unreviewed
-           ? `${unreviewed} ${unreviewed === 1 ? "piece has" : "pieces have"} not been checked by a human yet${
-               stats.flagged ? `, and ${stats.flagged} of those carry a specific doubt` : ""
-             }.`
-           : "Everything has been reviewed."
-       }</p>
-       <p><a class="btn" href="/admin/review">Open the review queue</a></p>
-     </div>
-
-     <div class="card">
-       <h2>Accession numbers</h2>
-       <p>Assign ${esc(CHURCH.accession.prefix)} numbers to every reviewed piece that has none, in catalogue
-          order (composer, then title). Numbering continues from the highest already assigned and never
-          renumbers an existing one.</p>
-       <form method="POST" action="/admin/accessions">
-         <button type="submit" ${stats.reviewed === stats.withAccession ? "disabled" : ""}>
-           Assign the next numbers
-         </button>
-       </form>
-       <p class="muted small">Only reviewed pieces are numbered — a number gets written on a physical parcel,
-          so it should not go on a row whose composer might still be wrong.</p>
-     </div>
-
-     <div class="card">
-       <h2>Adding music</h2>
-       <p><a href="/admin/intake">Photo intake</a> — photograph a label and check what it reads.
-          ${
-            extractionReady
-              ? ""
-              : `<span class="pill amber">Reading a label is switched off</span> No <code>ANTHROPIC_API_KEY</code> is set,
-                 so the screen takes details by hand instead.`
-          }</p>
-       <p><a href="/admin/import">Import the draft index</a> — re-run the seed importer after replacing the CSV.</p>
-     </div>`,
-    { admin: true, nav: "admin" }
-  );
-}
-
 export function adminReviewPage(queue: SearchResult, offset: number): string {
   if (!queue.pieces.length) {
     return page(
@@ -1534,7 +1471,7 @@ export function adminIntakePage(extractionReady: boolean): string {
 }
 
 /** The form the extraction fills in, and the one a human uses when it cannot. */
-function manualForm(): string {
+export function manualForm(): string {
   const categoryOptions = CHURCH.categories
     .map((c) => `<option value="${esc(c.code)}">${esc(c.label)}</option>`)
     .join("");
@@ -1590,7 +1527,7 @@ function manualForm(): string {
  * Every value is written with `value =` or `textContent`, never innerHTML: the
  * text has been read off a photograph by a model and is not trusted markup.
  */
-const INTAKE_SCRIPT = String.raw`
+export const INTAKE_SCRIPT = String.raw`
 (function () {
   var form = document.getElementById('upload-form');
   if (!form) return;

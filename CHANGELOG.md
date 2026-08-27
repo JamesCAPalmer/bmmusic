@@ -53,6 +53,61 @@ that SQLite would accept each `ALTER TABLE ADD COLUMN` (no UNIQUE, no
 PRIMARY KEY, a default behind any NOT NULL), which otherwise fails at
 migrate time against the live database rather than in CI.
 
+### Milestone 3a — the admin refit
+
+**Admin home becomes tiles**, with the queues above the doors: six things
+waiting on James, then six places to go. A tile with forty items behind
+it should not look like one with nothing.
+
+**One "New catalogue item"** (James's amendment to 5A) with both modes
+side by side — parse a scan on the left, type it in on the right, the
+same form underneath. Somebody who starts with a scan and finds the
+reading poor just carries on typing, which is what actually happens.
+
+**Search and bulk edit.** Filter by composer, category, season, location,
+scanned and flag state; tick rows; change many at once. **A blank box
+means "leave alone", never "clear"** — the opposite would let one
+careless click wipe the season tags off two hundred rows with no undo.
+Every bulk change is written to the activity log.
+
+**The choir password, self-service (11A).** Stored as a salted PBKDF2
+hash in `app_setting`, never in the clear: `minster-data` is a shared
+database, and a password in it is a password anybody with database
+access can read. Changing it bumps a `password_generation` counter that
+is mixed into the session cookie's signing key, so every cookie already
+issued stops verifying — which is what makes the termly rotation
+actually rotate. The `CHOIR_PASSWORD` secret is consulted only until a
+password has been set here, then never again.
+
+Verified live rather than only in tests: signing in on the old password,
+changing it, then finding the old session dead, the old password
+refused, the new one working, and nothing but a `pbkdf2$…` string in the
+database.
+
+**Reports and coverage (H9)** — how far through we are as counts with
+their denominators, not bare percentages. Most and least sung over a
+year, from **confirmed** matches only; a year's statistics built on the
+matcher's proposals would look authoritative and be partly guesswork.
+
+**`src/churchyear.ts`** computes Easter properly (Meeus/Jones/Butcher)
+rather than approximating it, because everything from Ash Wednesday to
+Pentecost is counted from it and a week out would put the whole
+Passiontide shelf in the wrong month. Checked against published dates
+from 2024 to 2285. This drives the feast-ahead panel (H11) and the
+season half of the scanning queue.
+
+**Priority queues.** Scanning: coming up at a service, then tagged for
+the season, then sung most recently, with anything already scanned off
+the list. Repair: urgent, poor, then no usable spine — a parcel nobody
+can read the spine of is lost on the shelf whatever state the paper is
+in (13A).
+
+**Stocktake (H6)** and **loans (H5)**, and an **activity page** naming
+the Cloudflare Access identity behind every admin mutation. Attendance
+is deliberately kept out of the audit log: a register is personal data
+about a child and does not belong in a log admins read looking for a
+mistake.
+
 ### Milestone 2 — the choir side
 
 **Home (15A)** leads with the next service and its music list already
