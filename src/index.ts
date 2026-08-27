@@ -13,7 +13,9 @@
  */
 
 import { Hono } from "hono";
+import type { Context } from "hono";
 import type { Env } from "./env";
+import { audit } from "./audit";
 import { CHURCH } from "./church.config";
 import {
   adminIdentity,
@@ -44,12 +46,23 @@ import {
   type SearchQuery,
 } from "./catalogue";
 import { importSeed, seedChoirProfiles, type ImportSummary } from "./seed";
+import { fetchFeedMonth, monthsToFetch, readFeedMonth } from "./feed";
+import {
+  confirmMatch,
+  ingestMonth,
+  matchCandidates,
+  rejectMatch,
+  unmatchedLines,
+  type IngestSummary,
+} from "./services";
 import { extractionAvailable, extractLabel } from "./extract";
 import { NotConfiguredError, toContentBlock } from "./anthropic";
 import {
   adminAccessionPage,
   adminEditPage,
+  adminFeedResultPage,
   adminHomePage,
+  adminMatchQueuePage,
   adminImportPage,
   adminIntakeDonePage,
   adminIntakePage,
@@ -408,6 +421,22 @@ app.onError((err, c) => {
 
 type Body = Record<string, unknown>;
 
+/**
+ * Write one line to the audit log for the admin doing this.
+ *
+ * The identity comes from the Cloudflare Access header, which is only
+ * trustworthy on `/admin/*` — and every caller of this is on `/admin/*`.
+ */
+function logAdminAction(
+  c: Context<{ Bindings: Env }>,
+  action: string,
+  entity: string | null,
+  entityId: number | null,
+  detail: string | null
+): Promise<void> {
+  return audit(c.env.DB, { userEmail: adminIdentity(c), action, entity, entityId, detail });
+}
+
 function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
 }
@@ -444,6 +473,94 @@ function readPieceEdit(body: Body): PieceEdit | null {
   };
 }
 
+// ---------------------------------------------------------------------------
+// The service feed
+// ---------------------------------------------------------------------------
+
+/**
+ * Read the feed for this month and next, and fold it into the database.
+ *
+ * Shared by the hourly cron and the admin's "fetch now" button, so the button
+ * exercises exactly what the schedule does rather than a second code path that
+ * might drift from it.
+ *
+ * A month that fails is reported and the others carry on: a 502 on next month —
+ * which very often does not exist yet — must not stop this month updating.
+ */
+async function runFeedIngest(
+  env: Env,
+  options: { force?: boolean; now?: Date } = {}
+): Promise<{ results: IngestSummary[]; errors: { month: string; message: string }[] }> {
+  const results: IngestSummary[] = [];
+  const errors: { month: string; message: string }[] = [];
+
+  for (const month of monthsToFetch(options.now ?? new Date())) {
+    try {
+      const payload = await fetchFeedMonth(month);
+      const read = readFeedMonth(payload);
+      results.push(await ingestMonth(env.DB, read, { force: options.force }));
+    } catch (e) {
+      errors.push({ month, message: e instanceof Error ? e.message : "The feed could not be read." });
+    }
+  }
+
+  return { results, errors };
+}
+
+app.get("/admin/services", async (c) => {
+  const offset = Number(new URL(c.req.url).searchParams.get("offset") ?? "0");
+  const start = Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
+  const queue = await unmatchedLines(c.env.DB, 25, start);
+  return c.html(adminMatchQueuePage(queue.lines, queue.total, start));
+});
+
+app.post("/admin/services/fetch", async (c) => {
+  const body = await c.req.parseBody();
+  const outcome = await runFeedIngest(c.env, { force: str(body.force) === "1" });
+  await logAdminAction(
+    c,
+    "feed.fetch",
+    "service",
+    null,
+    outcome.results.map((r) => `${r.month}: ${r.unchanged ? "unchanged" : `${r.servicesWritten} services`}`).join("; ")
+  );
+  return c.html(adminFeedResultPage(outcome.results, outcome.errors));
+});
+
+/** Confirm, correct or reject one music-list line. */
+app.post("/admin/services/line/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const body = await c.req.parseBody();
+  const action = str(body.action);
+
+  if (action === "reject") {
+    await rejectMatch(c.env.DB, id);
+    await logAdminAction(c, "match.reject", "service_music", id, null);
+    return c.redirect("/admin/services", 302);
+  }
+
+  const pieceId = Number(str(body.piece_id));
+  if (!Number.isSafeInteger(pieceId) || pieceId <= 0) {
+    return c.html(errorPage("Choose a piece to match that line to, or say it is not in the library."), 400);
+  }
+
+  try {
+    await confirmMatch(c.env.DB, id, pieceId, adminIdentity(c));
+  } catch (e) {
+    return c.html(errorPage(e instanceof Error ? e.message : "That match could not be saved."), 400);
+  }
+  await logAdminAction(c, "match.confirm", "service_music", id, `matched to piece ${pieceId}`);
+  return c.redirect("/admin/services", 302);
+});
+
+/** Search the catalogue from the match queue, for correcting a line by hand. */
+app.get("/admin/api/match-candidates", async (c) => {
+  const q = new URL(c.req.url).searchParams.get("q") ?? "";
+  return c.json({ candidates: await matchCandidates(c.env.DB, q) });
+});
+
 /** Find a piece by accession number or draft ref, for the merge box. */
 async function findPieceByReference(
   db: D1Database,
@@ -456,4 +573,44 @@ async function findPieceByReference(
     .first<{ id: number }>();
 }
 
-export default app;
+/**
+ * The Worker.
+ *
+ * `fetch` is Hono. `scheduled` is the hourly feed read (see the `[triggers]`
+ * block in wrangler.toml), which is why this is an object rather than the Hono
+ * app exported directly — a bare app has no `scheduled` for the cron to call.
+ */
+export default {
+  fetch: app.fetch,
+
+  /**
+   * The hourly feed read.
+   *
+   * Never throws. A cron handler that throws is retried by the platform, and a
+   * feed that is down stays down for the length of an outage — retrying it
+   * every few minutes achieves nothing except noise in the logs. The next
+   * scheduled run is in an hour and will find the feed either back or still
+   * gone; either way one line in the log is the right amount of fuss.
+   */
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      (async () => {
+        try {
+          const outcome = await runFeedIngest(env);
+          for (const result of outcome.results) {
+            if (result.unchanged) continue;
+            console.log(
+              `feed ${result.month}: ${result.servicesWritten} services, ${result.linesWritten} lines, ` +
+                `${result.autoMatched} matched, ${result.unmatched} for review`
+            );
+          }
+          for (const error of outcome.errors) {
+            console.warn(`feed ${error.month}: ${error.message}`);
+          }
+        } catch (e) {
+          console.error("scheduled feed read failed", e);
+        }
+      })()
+    );
+  },
+} satisfies ExportedHandler<Env>;
