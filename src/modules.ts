@@ -125,8 +125,13 @@ export const MODULES: readonly ModuleInfo[] = [
  * every `/admin` path answers to.
  */
 const MODULE_PREFIXES: ReadonlyArray<readonly [string, ModuleKey]> = [
-  // People and everything about them. `/admin/people/register` first by length.
+  // People and everything about them. The register, the totals, the rates and
+  // the pay run are all the same switch: pay is arithmetic over the register,
+  // and a pay screen with the register off would have nothing to add up.
+  ["/admin/people/attendance", "attendance"],
   ["/admin/people/register", "attendance"],
+  ["/admin/people/rates", "attendance"],
+  ["/admin/people/pay", "attendance"],
   ["/admin/people/awards", "awards"],
   ["/admin/people/robes", "wardrobe"],
   ["/admin/people/jc", "jc"],
@@ -157,15 +162,27 @@ const MODULE_PREFIXES: ReadonlyArray<readonly [string, ModuleKey]> = [
 const SORTED_PREFIXES = [...MODULE_PREFIXES].sort((a, b) => b[0].length - a[0].length);
 
 /**
- * Which module owns this path, or null if none does.
+ * Does `path` sit under `prefix`?
  *
- * Matching is on a path *segment* boundary: `/admin/newsletter` must not be
- * caught by the `/admin/new` rule, or a future route would go dark for reasons
- * nobody could find.
+ * The boundary is a `/` or a `.`, and both matter.
+ *
+ * The `/` stops `/admin/newsletter` being caught by the `/admin/new` rule — a
+ * route going dark for a reason nobody could find is a bad afternoon.
+ *
+ * The `.` is the one that had teeth: `/admin/people/pay.csv` is the pay run as
+ * a spreadsheet, and without this it matches `/admin/people` rather than
+ * `/admin/people/pay`. The screen would be dark and the download of the same
+ * figures would not — the module switched off, and the file still coming out.
+ * Shared with `requiredRolesFor` in `src/roles.ts`, which had the same hole.
  */
+export function pathIsUnder(path: string, prefix: string): boolean {
+  return path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}.`);
+}
+
+/** Which module owns this path, or null if none does. */
 export function moduleForPath(path: string): ModuleKey | null {
   for (const [prefix, module] of SORTED_PREFIXES) {
-    if (path === prefix || path.startsWith(`${prefix}/`)) return module;
+    if (pathIsUnder(path, prefix)) return module;
   }
   return null;
 }

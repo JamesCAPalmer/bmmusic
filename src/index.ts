@@ -93,6 +93,23 @@ import { serveAsset } from "./assets";
 import { buildAverySheet, buildVolunteerSheets } from "./labelsheet";
 import { copiesRag, ragLabel, ragPill } from "./rag";
 import { childrenFor } from "./choirsize";
+import { toCsv } from "./csv";
+import {
+  addRate,
+  attendanceLines,
+  deleteRate,
+  isRateRole,
+  listRates,
+  parseQuarterRef,
+  payRun,
+  penceFrom,
+  possibleByPersonMonth,
+  pounds,
+  quarterOf,
+  recentQuarters,
+  totalsByPerson,
+  type Quarter,
+} from "./pay";
 import {
   addContact,
   addPerson,
@@ -168,8 +185,10 @@ import {
   adminLabelsPage,
   adminModulesPage,
   adminNoRolePage,
+  adminAttendancePage,
   adminDutyEventPage,
   adminDutyTodayPage,
+  adminPayPage,
   adminPeoplePage,
   adminPersonPage,
   adminSafeguardingPage,
@@ -1219,97 +1238,168 @@ function dateParam(raw: string): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
 }
 
-app.get("/admin/people/:id", async (c) => {
-  const id = numericParam(c.req.param("id"));
-  if (id === null) return c.html(notFoundPage(), 404);
+// ---------------------------------------------------------------------------
+// Attendance, rates and pay (Addendum A, A4)
+// ---------------------------------------------------------------------------
 
-  const person = await getPerson(c.env.DB, id);
-  if (!person) return c.html(notFoundPage(), 404);
+/** The quarter a request asks for, or the one we are in. */
+function quarterParam(url: string): Quarter {
+  const ref = new URL(url).searchParams.get("quarter");
+  return (ref && parseQuarterRef(ref)) || quarterOf(today());
+}
+
+app.get("/admin/people/attendance", async (c) => {
+  const quarter = quarterParam(c.req.url);
+  const [lines, possible, people] = await Promise.all([
+    attendanceLines(c.env.DB, quarter.from, quarter.to),
+    possibleByPersonMonth(c.env.DB, quarter.from, quarter.to),
+    // Leavers included: somebody who left in October still sang in September,
+    // and a quarter's totals that quietly drop them are wrong.
+    listPeople(c.env.DB, true),
+  ]);
+
+  const totals = totalsByPerson(lines, possible, people).filter((t) => t.present || t.possible);
+  const months = totals[0]?.months.map((m) => m.month) ?? [];
+
+  return c.html(adminAttendancePage(quarter, recentQuarters(today()), totals, months));
+});
+
+app.get("/admin/people/attendance.csv", async (c) => {
+  const quarter = quarterParam(c.req.url);
+  const [lines, possible, people] = await Promise.all([
+    attendanceLines(c.env.DB, quarter.from, quarter.to),
+    possibleByPersonMonth(c.env.DB, quarter.from, quarter.to),
+    listPeople(c.env.DB, true),
+  ]);
+
+  const totals = totalsByPerson(lines, possible, people).filter((t) => t.present || t.possible);
+  const months = totals[0]?.months.map((m) => m.month) ?? [];
+
+  // Names and counts. **No parent contact, no DBS date, no award date** — a
+  // person export is not a dump of the person table, and the one export that
+  // carries a telephone number is elsewhere and separately audited.
+  const csv = toCsv(
+    ["Name", "Choir", ...months.flatMap((m) => [`${m} present`, `${m} possible`]), "Present", "Possible", "%"],
+    totals.map((t) => [
+      t.display_name,
+      t.choir,
+      ...t.months.flatMap((m) => [m.present, m.possible]),
+      t.present,
+      t.possible,
+      t.percent ?? "",
+    ])
+  );
+
+  await logAdminAction(c, "export.attendance", "app_setting", null, `${quarter.ref}, ${totals.length} people`);
+  return csvResponse(csv, `attendance-${quarter.ref}.csv`);
+});
+
+app.get("/admin/people/pay", async (c) => {
+  const quarter = quarterParam(c.req.url);
+  const [lines, rates] = await Promise.all([
+    attendanceLines(c.env.DB, quarter.from, quarter.to),
+    listRates(c.env.DB),
+  ]);
 
   return c.html(
-    adminPersonPage(
-      person,
-      await contactCountFor(c.env.DB, id),
-      // Contacts are never rendered on a plain page load — only the POST that
-      // asks for them, and writes down that it did, ever returns any.
-      null,
-      permits(c.get("roles"), requiredRolesFor("/admin/people/contact")),
-      today(),
+    adminPayPage(
+      payRun(quarter, lines, rates),
+      recentQuarters(today()),
+      rates,
       new URL(c.req.url).searchParams.get("done") ?? undefined
     )
   );
 });
 
-app.post("/admin/people/:id", async (c) => {
-  const id = numericParam(c.req.param("id"));
-  if (id === null) return c.html(notFoundPage(), 404);
+/**
+ * The pay run as a file, with a fingerprint written down.
+ *
+ * The audit line carries a SHA-256 of the exact bytes sent. Somebody holding a
+ * printed pay run six months later can hash the file they still have and find
+ * the moment it was made and who made it — which is the only way a paper
+ * figure and a database figure can be reconciled after the fact.
+ */
+app.get("/admin/people/pay.csv", async (c) => {
+  const quarter = quarterParam(c.req.url);
+  const [lines, rates] = await Promise.all([
+    attendanceLines(c.env.DB, quarter.from, quarter.to),
+    listRates(c.env.DB),
+  ]);
 
-  const body = await c.req.parseBody();
-  const action = str(body.action);
+  const run = payRun(quarter, lines, rates);
+  const csv = toCsv(
+    ["Name", "Choir", "Services", "Weddings", "Not priced", "Due"],
+    [
+      ...run.lines.map((l) => [
+        l.display_name,
+        l.choir,
+        l.services,
+        l.weddings,
+        l.unrated || "",
+        pounds(l.pence),
+      ]),
+      ["Total", "", "", "", "", pounds(run.totalPence)],
+    ]
+  );
 
-  // Both destructive actions ask for a tick first, and neither happens without
-  // it. A mis-click on a child's record is not a recoverable mistake.
-  const confirmed = str(body.confirm) === "yes";
-
-  if (action === "delete") {
-    if (!confirmed) return c.redirect(`/admin/people/${id}`, 302);
-    await deletePerson(c.env.DB, id);
-    await logAdminAction(c, "person.delete", "person", id, "removed entirely, with their attendance");
-    return c.redirect(`/admin/people?done=${encodeURIComponent("Removed.")}`, 302);
-  }
-
-  if (action === "anonymise") {
-    if (!confirmed) return c.redirect(`/admin/people/${id}`, 302);
-    await anonymisePerson(c.env.DB, id);
-    await logAdminAction(c, "person.anonymise", "person", id, "name removed, attendance counts kept");
-    return c.redirect(
-      `/admin/people/${id}?done=${encodeURIComponent("The name has been taken off.")}`,
-      302
-    );
-  }
-
-  if (action === "left") {
-    const on = dateParam(str(body.left_on)) ?? today();
-    await markLeft(c.env.DB, id, on);
-    await logAdminAction(c, "person.leave", "person", id, `marked as having left on ${on}`);
-    return c.redirect(
-      `/admin/people/${id}?done=${encodeURIComponent("Marked as having left.")}`,
-      302
-    );
-  }
-
-  if (action === "returned") {
-    await markReturnedToChoir(c.env.DB, id);
-    await logAdminAction(c, "person.return", "person", id, "put back on the list");
-    return c.redirect(`/admin/people/${id}?done=${encodeURIComponent("Back on the list.")}`, 302);
-  }
-
-  const displayName = str(body.display_name);
-  if (!displayName) return c.html(errorPage("A name is needed."), 400);
-  const choir = str(body.choir);
-  if (!isChoir(choir)) return c.html(errorPage("Choose which choir they sing in."), 400);
-  const voicePart = str(body.voice_part);
-  const gender = str(body.gender);
-
-  await updatePerson(c.env.DB, id, {
-    displayName,
-    choir,
-    voicePart: voicePart && isVoicePart(voicePart) ? voicePart : null,
-    schoolYear: schoolYearParam(str(body.school_year)),
-    joinedOn: dateParam(str(body.joined_on)),
-    surpliceAwardedOn: dateParam(str(body.surplice_awarded_on)),
-    deansAwardOn: dateParam(str(body.deans_award_on)),
-    archbishopsAwardOn: dateParam(str(body.archbishops_award_on)),
-    goldAwardOn: dateParam(str(body.gold_award_on)),
-    dbsValidUntil: dateParam(str(body.dbs_valid_until)),
-    gender: gender === "m" || gender === "f" ? gender : null,
-  });
-
-  // The detail says what changed about whom by id, never by name, and never
-  // what the values were.
-  await logAdminAction(c, "person.edit", "person", id, "details changed");
-  return c.redirect(`/admin/people/${id}?done=${encodeURIComponent("Saved.")}`, 302);
+  const hash = await sha256Hex(csv);
+  await logAdminAction(
+    c,
+    "export.pay",
+    "app_setting",
+    null,
+    `${quarter.ref}, ${run.lines.length} people, ${pounds(run.totalPence)}, sha256 ${hash.slice(0, 16)}`
+  );
+  return csvResponse(csv, `pay-${quarter.ref}.csv`);
 });
+
+app.post("/admin/people/rates", async (c) => {
+  const body = await c.req.parseBody();
+
+  if (str(body.action) === "delete") {
+    const id = numericParam(str(body.id));
+    if (id === null) return c.html(notFoundPage(), 404);
+    await deleteRate(c.env.DB, id);
+    await logAdminAction(c, "rate.delete", "rate", id, "a rate was removed");
+    return c.redirect(`/admin/people/pay?done=${encodeURIComponent("Removed.")}`, 302);
+  }
+
+  const role = str(body.role);
+  if (!isRateRole(role)) return c.html(errorPage("That is not something we pay for."), 400);
+
+  const pence = penceFrom(str(body.amount));
+  if (pence === null) {
+    return c.html(errorPage("Write the amount in pounds, like 4.50."), 400);
+  }
+  const from = str(body.effective_from);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+    return c.html(errorPage("A rate needs a date it starts from."), 400);
+  }
+
+  await addRate(c.env.DB, { role, amountPence: pence, effectiveFrom: from, by: adminIdentity(c) });
+  // A rate is a fact about money and not about a person, so it is logged in
+  // full — this is exactly the line somebody will want six months later.
+  await logAdminAction(c, "rate.set", "rate", null, `${role} ${pounds(pence)} from ${from}`);
+  return c.redirect(`/admin/people/pay?done=${encodeURIComponent("Rate set.")}`, 302);
+});
+
+/** SHA-256 of some text, hex. Used to fingerprint an export in the audit log. */
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** A CSV as a download, never cached anywhere. */
+function csvResponse(csv: string, filename: string): Response {
+  return new Response(csv, {
+    headers: {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="${filename}"`,
+      "cache-control": "no-store",
+      "x-robots-tag": "noindex, nofollow",
+    },
+  });
+}
 
 // ---------------------------------------------------------------------------
 // The safeguarding rota (Addendum A, A5)
@@ -1536,6 +1626,107 @@ app.post("/admin/safeguarding/:id", async (c) => {
   await assignDuty(c.env.DB, id, personId, role, str(body.is_backup) === "1");
   await logAdminAction(c, "duty.assign", "service", id, `somebody put on ${role}`);
   return c.redirect(`/admin/safeguarding/${id}?done=${encodeURIComponent("Added.")}`, 302);
+});
+
+// ---------------------------------------------------------------------------
+// One person, by id
+//
+// **Registered after every literal `/admin/people/...` route on purpose.**
+// Hono matches in declaration order, so `/admin/people/:id` declared earlier
+// would swallow `/admin/people/pay` and answer 404 for it — which is exactly
+// what happened, and what `test/gate.test.ts` now refuses to let happen again.
+// ---------------------------------------------------------------------------
+
+app.get("/admin/people/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const person = await getPerson(c.env.DB, id);
+  if (!person) return c.html(notFoundPage(), 404);
+
+  return c.html(
+    adminPersonPage(
+      person,
+      await contactCountFor(c.env.DB, id),
+      // Contacts are never rendered on a plain page load — only the POST that
+      // asks for them, and writes down that it did, ever returns any.
+      null,
+      permits(c.get("roles"), requiredRolesFor("/admin/people/contact")),
+      today(),
+      new URL(c.req.url).searchParams.get("done") ?? undefined
+    )
+  );
+});
+
+app.post("/admin/people/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const body = await c.req.parseBody();
+  const action = str(body.action);
+
+  // Both destructive actions ask for a tick first, and neither happens without
+  // it. A mis-click on a child's record is not a recoverable mistake.
+  const confirmed = str(body.confirm) === "yes";
+
+  if (action === "delete") {
+    if (!confirmed) return c.redirect(`/admin/people/${id}`, 302);
+    await deletePerson(c.env.DB, id);
+    await logAdminAction(c, "person.delete", "person", id, "removed entirely, with their attendance");
+    return c.redirect(`/admin/people?done=${encodeURIComponent("Removed.")}`, 302);
+  }
+
+  if (action === "anonymise") {
+    if (!confirmed) return c.redirect(`/admin/people/${id}`, 302);
+    await anonymisePerson(c.env.DB, id);
+    await logAdminAction(c, "person.anonymise", "person", id, "name removed, attendance counts kept");
+    return c.redirect(
+      `/admin/people/${id}?done=${encodeURIComponent("The name has been taken off.")}`,
+      302
+    );
+  }
+
+  if (action === "left") {
+    const on = dateParam(str(body.left_on)) ?? today();
+    await markLeft(c.env.DB, id, on);
+    await logAdminAction(c, "person.leave", "person", id, `marked as having left on ${on}`);
+    return c.redirect(
+      `/admin/people/${id}?done=${encodeURIComponent("Marked as having left.")}`,
+      302
+    );
+  }
+
+  if (action === "returned") {
+    await markReturnedToChoir(c.env.DB, id);
+    await logAdminAction(c, "person.return", "person", id, "put back on the list");
+    return c.redirect(`/admin/people/${id}?done=${encodeURIComponent("Back on the list.")}`, 302);
+  }
+
+  const displayName = str(body.display_name);
+  if (!displayName) return c.html(errorPage("A name is needed."), 400);
+  const choir = str(body.choir);
+  if (!isChoir(choir)) return c.html(errorPage("Choose which choir they sing in."), 400);
+  const voicePart = str(body.voice_part);
+  const gender = str(body.gender);
+
+  await updatePerson(c.env.DB, id, {
+    displayName,
+    choir,
+    voicePart: voicePart && isVoicePart(voicePart) ? voicePart : null,
+    schoolYear: schoolYearParam(str(body.school_year)),
+    joinedOn: dateParam(str(body.joined_on)),
+    surpliceAwardedOn: dateParam(str(body.surplice_awarded_on)),
+    deansAwardOn: dateParam(str(body.deans_award_on)),
+    archbishopsAwardOn: dateParam(str(body.archbishops_award_on)),
+    goldAwardOn: dateParam(str(body.gold_award_on)),
+    dbsValidUntil: dateParam(str(body.dbs_valid_until)),
+    gender: gender === "m" || gender === "f" ? gender : null,
+  });
+
+  // The detail says what changed about whom by id, never by name, and never
+  // what the values were.
+  await logAdminAction(c, "person.edit", "person", id, "details changed");
+  return c.redirect(`/admin/people/${id}?done=${encodeURIComponent("Saved.")}`, 302);
 });
 
 /**

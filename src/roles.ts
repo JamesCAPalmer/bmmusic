@@ -27,6 +27,8 @@
  * rather than open, and the first person to hit it finds out immediately.
  */
 
+import { pathIsUnder } from "./modules";
+
 export const ROLES = ["librarian", "music_staff", "safeguarding"] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -114,7 +116,10 @@ const SORTED_ROLE_PREFIXES = [...ROLE_PREFIXES].sort((a, b) => b[0].length - a[0
 export function requiredRolesFor(path: string): readonly Role[] {
   if (path === "/admin" || path === "/admin/") return ROLES;
   for (const [prefix, roles] of SORTED_ROLE_PREFIXES) {
-    if (path === prefix || path.startsWith(`${prefix}/`)) return roles;
+    // Same boundary rule as the module table — see `pathIsUnder`. A `.csv`
+    // sibling of a screen must answer to the screen's role, not to whatever
+    // shorter prefix happens to catch it.
+    if (pathIsUnder(path, prefix)) return roles;
   }
   return STAFF;
 }

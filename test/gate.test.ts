@@ -34,14 +34,19 @@ import {
   type Role,
 } from "../src/roles";
 
+const INDEX_SOURCE = readFileSync(join(import.meta.dirname, "..", "src", "index.ts"), "utf8");
+
+/** Every admin route `src/index.ts` registers, in the order it registers them. */
+function declaredAdminRoutesInOrder(): Array<{ method: string; path: string }> {
+  return [...INDEX_SOURCE.matchAll(/app\.(get|post|put|delete)\(\s*"(\/admin[^"]*)"/g)].map((m) => ({
+    method: m[1]!,
+    path: m[2]!,
+  }));
+}
+
 /** Every admin path `src/index.ts` actually registers a handler for. */
 function declaredAdminRoutes(): string[] {
-  const source = readFileSync(join(import.meta.dirname, "..", "src", "index.ts"), "utf8");
-  const routes = new Set<string>();
-  for (const match of source.matchAll(/app\.(?:get|post|put|delete)\(\s*"(\/admin[^"]*)"/g)) {
-    routes.add(match[1]!);
-  }
-  return [...routes].sort();
+  return [...new Set(declaredAdminRoutesInOrder().map((r) => r.path))].sort();
 }
 
 /** `/admin/piece/:id` → `/admin/piece/1`: a path the gate would really see. */
@@ -112,6 +117,29 @@ describe("modules", () => {
     expect(moduleForPath("/admin/new/anything")).toBe("library");
     expect(moduleForPath("/admin/newsletter")).toBeNull();
     expect(moduleForPath("/admin/peoplemover")).toBeNull();
+  });
+
+  // The hole this rule closes: `/admin/people/pay.csv` is the pay run as a
+  // spreadsheet. Matching only on `/` boundaries put it under `/admin/people`
+  // rather than `/admin/people/pay` — the screen dark, and the download of the
+  // same figures still coming out.
+  it("keeps a download with the screen it belongs to, not the prefix above it", () => {
+    expect(moduleForPath("/admin/people/pay.csv")).toBe("attendance");
+    expect(moduleForPath("/admin/people/attendance.csv")).toBe("attendance");
+    expect(requiredRolesFor("/admin/people/pay.csv")).toEqual(requiredRolesFor("/admin/people/pay"));
+  });
+
+  // Every route the app declares must resolve the same way with a file
+  // extension on the end as without one, or the next export reopens the hole.
+  it("resolves every declared route the same with an extension as without", () => {
+    for (const route of declaredAdminRoutes()) {
+      // `/admin` itself is exempt: it is matched exactly, so `/admin.csv`
+      // falls through to music_staff. That is failing closed, which is right.
+      if (route === "/admin") continue;
+      const path = concrete(route).replace(/\.[a-z]+$/, "");
+      expect(moduleForPath(`${path}.csv`), `${route} as .csv`).toBe(moduleForPath(path));
+      expect(requiredRolesFor(`${path}.csv`), `${route} as .csv`).toEqual(requiredRolesFor(path));
+    }
   });
 
   it("leaves the front page and the app's own screens outside every module", () => {
@@ -241,6 +269,43 @@ describe("every admin route the app declares", () => {
 
   it("there are some, so this file is testing something", () => {
     expect(routes.length).toBeGreaterThan(20);
+  });
+
+  /**
+   * Hono matches in declaration order, so a `:param` route declared before a
+   * literal sibling swallows it. `/admin/people/:id` sat above
+   * `/admin/people/pay` and answered 404 for the pay screen — a whole feature
+   * unreachable, with nothing failing and nothing in a log to say why.
+   *
+   * The rule is mechanical, so the test can be: a literal route must never be
+   * declared after a parameterised route it would match.
+   */
+  it("declares no literal route beneath a parameter that would swallow it", () => {
+    const declared = declaredAdminRoutesInOrder();
+
+    for (let i = 0; i < declared.length; i++) {
+      const later = declared[i]!;
+      if (later.path.includes(":")) continue;
+      const literalParts = later.path.split("/");
+
+      for (let j = 0; j < i; j++) {
+        const earlier = declared[j]!;
+        if (earlier.method !== later.method || !earlier.path.includes(":")) continue;
+
+        const patternParts = earlier.path.split("/");
+        if (patternParts.length !== literalParts.length) continue;
+
+        const shadows = patternParts.every(
+          (part, k) => part.startsWith(":") || part === literalParts[k]
+        );
+        expect(
+          shadows,
+          `${earlier.method.toUpperCase()} ${earlier.path} is declared before ` +
+            `${later.method.toUpperCase()} ${later.path} and swallows it — move the parameterised ` +
+            `route below the literal one`
+        ).toBe(false);
+      }
+    }
   });
 
   // A2: a second and tighter Cloudflare Access application will be scoped to

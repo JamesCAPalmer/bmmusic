@@ -25,6 +25,14 @@ import {
 import { MODULES, moduleForPath, type ModuleState } from "./modules";
 import { DUTY_ROLES, EVENT_TYPES, type DutyCoverage, type DutyRow } from "./duty";
 import {
+  pounds,
+  RATE_ROLES,
+  type PayRun,
+  type PersonTotals,
+  type Quarter,
+  type RateRow,
+} from "./pay";
+import {
   permits,
   requiredRolesFor,
   ROLES,
@@ -148,6 +156,8 @@ export function adminHomePage(
 
      ${section("The choir", [
        tile("/admin/people", "The choir", "people and the register", betaChip()),
+       tile("/admin/people/attendance", "Attendance", "who sang, by month and quarter", betaChip()),
+       tile("/admin/people/pay", "Pay", "a quarter's figures, and the rates", betaChip()),
        tile("/admin/safeguarding", "Duty rota", "robing, general and dismissal", betaChip()),
      ])}
 
@@ -2056,5 +2066,235 @@ export function adminDutyTodayPage(
        button.big { font-size: 1.05rem; padding: 0.75rem 1.1rem; width: 100%; }
      </style>`,
     { admin: true, path: "/admin/safeguarding" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Attendance, rates and pay (Addendum A, A4)
+// ---------------------------------------------------------------------------
+
+/**
+ * The workbook's shape: per person, per month, and a percentage.
+ *
+ * "Possible" is how many events that person's choir was actually due at, so
+ * the boys are not marked down for missing an Evensong the girls sang. A
+ * percentage of null shows as a dash rather than 0%, because 0% reads as "never
+ * turned up" and the truth is "was never asked".
+ */
+export function adminAttendancePage(
+  quarter: Quarter,
+  quarters: Quarter[],
+  totals: PersonTotals[],
+  months: string[]
+): string {
+  const byChoir = new Map<string, PersonTotals[]>();
+  for (const t of totals) {
+    const list = byChoir.get(t.choir);
+    if (list) list.push(t);
+    else byChoir.set(t.choir, [t]);
+  }
+
+  const monthLabel = (month: string) =>
+    new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
+
+  return page(
+    `Attendance — ${CHURCH.appName}`,
+    `<h1>Attendance ${betaChip()}<span class="sub">${esc(quarter.label)}</span></h1>
+
+     <form method="GET" action="/admin/people/attendance" class="card">
+       <div class="field" style="max-width:16rem">
+         <label for="quarter">Quarter</label>
+         <select id="quarter" name="quarter" onchange="this.form.submit()">
+           ${quarters
+             .map(
+               (q) =>
+                 `<option value="${esc(q.ref)}"${q.ref === quarter.ref ? " selected" : ""}>${esc(q.label)}</option>`
+             )
+             .join("")}
+         </select>
+       </div>
+       <noscript><button type="submit">Show</button></noscript>
+     </form>
+
+     ${
+       totals.length
+         ? CHOIRS.filter((c) => byChoir.has(c.value))
+             .map(
+               (c) => `<div class="card">
+                 <h2>${esc(c.label)}</h2>
+                 <div class="scroll"><table>
+                   <tr>
+                     <th>Name</th>
+                     ${months.map((m) => `<th class="num">${esc(monthLabel(m))}</th>`).join("")}
+                     <th class="num">Quarter</th>
+                     <th class="num">%</th>
+                   </tr>
+                   ${byChoir
+                     .get(c.value)!
+                     .map(
+                       (t) => `<tr>
+                         <td><a href="/admin/people/${t.person_id}">${esc(t.display_name)}</a></td>
+                         ${t.months
+                           .map(
+                             (m) =>
+                               `<td class="num">${m.possible ? `${m.present}/${m.possible}` : '<span class="muted">—</span>'}</td>`
+                           )
+                           .join("")}
+                         <td class="num">${t.possible ? `${t.present}/${t.possible}` : '<span class="muted">—</span>'}</td>
+                         <td class="num">${
+                           t.percent === null ? '<span class="muted">—</span>' : `${t.percent}%`
+                         }</td>
+                       </tr>`
+                     )
+                     .join("")}
+                 </table></div>
+               </div>`
+             )
+             .join("")
+         : `<p class="muted">Nothing recorded in this quarter.</p>`
+     }
+
+     <p>
+       <a class="btn secondary" href="/admin/people/pay?quarter=${esc(quarter.ref)}">Work out the pay</a>
+       <a class="btn secondary" href="/admin/people/attendance.csv?quarter=${esc(quarter.ref)}">Export this</a>
+     </p>`,
+    { admin: true, path: "/admin/people" }
+  );
+}
+
+/**
+ * The pay run, on screen before it is a file.
+ *
+ * Shown first because a spreadsheet that appears in the downloads folder is a
+ * spreadsheet nobody checked. The per-person breakdown is here, the total is
+ * here, and anything that could not be priced is called out in red — a service
+ * sung before a rate was set has no rate, and treating that as nought would
+ * short-change somebody without anybody noticing.
+ */
+export function adminPayPage(
+  run: PayRun,
+  quarters: Quarter[],
+  rates: RateRow[],
+  message?: string
+): string {
+  const rateLine = (role: (typeof RATE_ROLES)[number]) => {
+    const current = rates.filter((r) => r.role === role.value);
+    return `<tr>
+      <td><strong>${esc(role.label)}</strong><div class="small muted">${esc(role.blurb)}</div></td>
+      <td>${
+        current.length
+          ? current
+              .map(
+                (r) =>
+                  `<div>${esc(pounds(r.amount_pence))} <span class="muted small">from ${esc(
+                    prettyDate(r.effective_from)
+                  )}</span>
+                   <form method="POST" action="/admin/people/rates" style="display:inline">
+                     <input type="hidden" name="action" value="delete">
+                     <input type="hidden" name="id" value="${r.id}">
+                     <button type="submit" class="secondary small-btn">Remove</button>
+                   </form></div>`
+              )
+              .join("")
+          : '<span class="muted">no rate set</span>'
+      }</td>
+    </tr>`;
+  };
+
+  return page(
+    `Pay — ${CHURCH.appName}`,
+    `<h1>Pay ${betaChip()}<span class="sub">${esc(run.quarter.label)}</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     <form method="GET" action="/admin/people/pay" class="card">
+       <div class="field" style="max-width:16rem">
+         <label for="quarter">Quarter</label>
+         <select id="quarter" name="quarter" onchange="this.form.submit()">
+           ${quarters
+             .map(
+               (q) =>
+                 `<option value="${esc(q.ref)}"${q.ref === run.quarter.ref ? " selected" : ""}>${esc(q.label)}</option>`
+             )
+             .join("")}
+         </select>
+       </div>
+       <noscript><button type="submit">Show</button></noscript>
+     </form>
+
+     ${
+       run.unrated
+         ? `<div class="notice error">
+              <p style="margin:0"><strong>${run.unrated} ${
+                run.unrated === 1 ? "attendance has" : "attendances have"
+              } no rate.</strong> They were sung on days no rate was in force, so they are counted below
+                 and priced at nothing. Set a rate with an earlier start date and this figure changes.</p>
+            </div>`
+         : ""
+     }
+
+     <div class="card">
+       <h2>What each person is owed</h2>
+       ${
+         run.lines.length
+           ? `<div class="scroll"><table>
+                <tr><th>Name</th><th>Choir</th><th class="num">Services</th><th class="num">Weddings</th>
+                    <th class="num">Not priced</th><th class="num">Due</th></tr>
+                ${run.lines
+                  .map(
+                    (l) => `<tr>
+                      <td>${esc(l.display_name)}</td>
+                      <td>${esc(CHOIRS.find((c) => c.value === l.choir)?.label ?? l.choir)}</td>
+                      <td class="num">${l.services}</td>
+                      <td class="num">${l.weddings}</td>
+                      <td class="num">${l.unrated || ""}</td>
+                      <td class="num">${esc(pounds(l.pence))}</td>
+                    </tr>`
+                  )
+                  .join("")}
+                <tr><td colspan="5"><strong>Total</strong></td>
+                    <td class="num"><strong>${esc(pounds(run.totalPence))}</strong></td></tr>
+              </table></div>
+              <p><a class="btn" href="/admin/people/pay.csv?quarter=${esc(run.quarter.ref)}">Download this as a spreadsheet</a></p>
+              <p class="muted small">A CSV, which opens in Excel and in Numbers. Downloading it is
+                 recorded in the activity log with a fingerprint of the file, so a printed pay run can
+                 always be matched back to the moment it was made.</p>`
+           : `<p class="muted">Nobody was marked present in this quarter.</p>`
+       }
+     </div>
+
+     <div class="card">
+       <h2>Rates</h2>
+       <p class="muted">A rate is a row with a date, not a figure that gets edited over: last quarter's
+          pay still works out at last quarter's rate, and a quarter that straddles a change comes out
+          right on its own. Nothing is set to start with — the figures are yours.</p>
+       <div class="scroll"><table>${RATE_ROLES.map(rateLine).join("")}</table></div>
+
+       <form method="POST" action="/admin/people/rates">
+         <input type="hidden" name="action" value="add">
+         <div class="row">
+           <div class="field">
+             <label for="role">What for</label>
+             <select id="role" name="role">
+               ${RATE_ROLES.map((r) => `<option value="${esc(r.value)}">${esc(r.label)}</option>`).join("")}
+             </select>
+           </div>
+           <div class="field">
+             <label for="amount">Amount</label>
+             <input type="text" id="amount" name="amount" placeholder="4.50" required inputmode="decimal">
+             <span class="hint">In pounds. Held as whole pence, so nothing rounds.</span>
+           </div>
+           <div class="field">
+             <label for="effective_from">In force from</label>
+             <input type="date" id="effective_from" name="effective_from" required>
+           </div>
+         </div>
+         <button type="submit">Set the rate</button>
+       </form>
+     </div>
+
+     <style>
+       .small-btn { font-size: 0.8rem; padding: 0.15rem 0.5rem; }
+     </style>`,
+    { admin: true, path: "/admin/people" }
   );
 }
