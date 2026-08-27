@@ -14,15 +14,32 @@ import { describe, expect, it } from "vitest";
 const MIGRATIONS_DIR = join(import.meta.dirname, "..", "migrations");
 
 const migrationFiles = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort();
-const sql = migrationFiles.map((f) => readFileSync(join(MIGRATIONS_DIR, f), "utf8")).join("\n");
+const fileContents = migrationFiles.map((f) => [f, readFileSync(join(MIGRATIONS_DIR, f), "utf8")] as const);
+const sql = fileContents.map(([, text]) => text).join("\n");
 
 /** Strip `-- comments` so a column named in prose is not mistaken for a real one. */
 function withoutComments(text: string): string {
   return text.replace(/--[^\n]*/g, "");
 }
 
+/**
+ * A table rebuilt by a later migration answers to its scratch name.
+ *
+ * SQLite cannot alter a CHECK constraint, so changing one means building
+ * `person_rebuilt`, copying the rows over and renaming it into place (migration
+ * 0003). The shape that ends up in the database is the scratch table's, so that
+ * is the body every test below must read — otherwise they go on quietly
+ * checking a `CREATE TABLE person` that no longer describes anything.
+ */
+function finalNameOf(name: string): string {
+  const re = new RegExp(`ALTER TABLE\\s+(\\w+)\\s+RENAME TO\\s+${name}\\b`, "i");
+  const match = re.exec(withoutComments(sql));
+  return match ? match[1]! : name;
+}
+
 /** The body of one CREATE TABLE, or null. */
-function tableBody(name: string): string | null {
+function tableBody(rawName: string): string | null {
+  const name = finalNameOf(rawName);
   const re = new RegExp(`CREATE TABLE (?:IF NOT EXISTS )?${name}\\s*\\(`, "i");
   const match = re.exec(withoutComments(sql));
   if (!match) return null;
@@ -76,8 +93,54 @@ describe("migration files", () => {
 
   // A migration that has already run against minster-data must never be edited
   // to drop something; that is what the next migration is for.
-  it("never drops a table or a column", () => {
-    expect(withoutComments(sql)).not.toMatch(/\bDROP\s+(TABLE|COLUMN)\b/i);
+  //
+  // The two exceptions are the halves of a table rebuild, which SQLite gives no
+  // other way to perform: the old table, dropped because a replacement is
+  // renamed into its place in the same file, and a scratch table created and
+  // destroyed within the same file. Anything else — a column, or a table that
+  // simply goes away — is a data loss, and the rule against it is absolute.
+  it("drops nothing except the two halves of a rebuild", () => {
+    for (const [file, text] of fileContents) {
+      const body = withoutComments(text);
+
+      expect(body, `${file} drops a column`).not.toMatch(/\bDROP\s+COLUMN\b/i);
+
+      for (const [, dropped] of body.matchAll(/\bDROP\s+TABLE\s+(?:IF EXISTS\s+)?(\w+)/gi)) {
+        const renamedInto = new RegExp(`ALTER TABLE\\s+\\w+\\s+RENAME TO\\s+${dropped}\\b`, "i").test(body);
+        const scratch = new RegExp(`CREATE TABLE (?:IF NOT EXISTS )?${dropped}\\b`, "i").test(body);
+        expect(
+          renamedInto || scratch,
+          `${file} drops ${dropped} without replacing it — that is a data loss, not a rebuild`
+        ).toBe(true);
+      }
+    }
+  });
+
+  // The rebuild in 0003 empties `attendance` on its way past: dropping `person`
+  // fires an implicit DELETE FROM, and attendance cascades from it. No pragma
+  // prevents that inside wrangler's transaction — both foreign_keys=OFF and
+  // legacy_alter_table=ON were measured and lost every row — so the register is
+  // carried out and put back by hand. If the restore is ever deleted, the
+  // migration keeps applying cleanly and silently wipes the register.
+  it("puts back the rows a rebuild's cascade takes with it", () => {
+    for (const [file, text] of fileContents) {
+      const body = withoutComments(text);
+      if (!/\bDROP\s+TABLE\s+person\b/i.test(body)) continue;
+      expect(body, `${file} drops person without carrying attendance out first`).toMatch(
+        /CREATE TABLE (?:IF NOT EXISTS )?attendance_carry\b/i
+      );
+      expect(body, `${file} never restores attendance from its carry table`).toMatch(
+        /INSERT (?:OR IGNORE )?INTO attendance\b[\s\S]*?FROM attendance_carry\b/i
+      );
+    }
+  });
+
+  // Both are documented no-ops inside a transaction, which is where wrangler
+  // applies a migration. Present in a file, they read as protection and give
+  // none — which is exactly how the register nearly went.
+  it("relies on no pragma that a migration's transaction ignores", () => {
+    expect(withoutComments(sql)).not.toMatch(/PRAGMA\s+foreign_keys/i);
+    expect(withoutComments(sql)).not.toMatch(/PRAGMA\s+legacy_alter_table/i);
   });
 
   it("creates tables idempotently, so a re-applied migration is not an outage", () => {
@@ -120,6 +183,13 @@ describe("the tables the brief specifies", () => {
     service_music: ["service_id", "slot", "raw_text", "piece_id", "match_state"],
     match_alias: ["raw_norm", "piece_id"],
     person: ["display_name", "choir", "voice_part", "active"],
+
+    // Addendum A (migration 0003). `person` is rebuilt there, so the columns
+    // above are read off the rebuilt body along with these.
+    admin_role: ["email", "role", "granted_by", "granted_at"],
+    parent_contact: ["person_id", "label", "name", "phone"],
+    rate: ["role", "amount_pence", "effective_from"],
+    duty: ["service_id", "person_id", "role", "is_backup", "note"],
     attendance: ["service_id", "person_id", "status", "marked_by", "marked_at"],
     feedback: ["at", "page", "category", "message", "ua"],
     scan_submission: [
@@ -274,10 +344,111 @@ describe("constraints that carry a decision", () => {
   });
 
   // Data protection: names and attendance, and nothing else about a person.
+  //
+  // Addendum A adds a parent's telephone number to the app, and this test is
+  // why it lives in `parent_contact` rather than as two more columns here: a
+  // plain `SELECT * FROM person` — which is what every list, picker and export
+  // does — cannot return a contact detail, because there is none to return.
   it("holds no contact details for a chorister", () => {
     const columns = columnsOf("person");
     for (const forbidden of ["email", "phone", "telephone", "mobile", "address", "postcode", "dob", "date_of_birth"]) {
       expect(columns, `person.${forbidden} has no business existing`).not.toContain(forbidden);
+    }
+  });
+
+  // We are given a school year and never a date of birth, so the app cannot
+  // compute a child's age. That is a deliberate limit on what it can leak.
+  it("holds a school year and no means of deriving an age", () => {
+    expect(columnsOf("person")).toContain("school_year");
+  });
+
+  it("restricts a choir to the five the department runs, junior choir included", () => {
+    const body = tableBody("person")!;
+    for (const choir of ["boys", "girls", "consort", "satb", "jc"]) {
+      expect(body, `person.choir does not admit '${choir}'`).toContain(`'${choir}'`);
+    }
+  });
+
+  it("restricts an in-app role to the three the addendum names", () => {
+    const body = tableBody("admin_role")!;
+    for (const role of ["librarian", "music_staff", "safeguarding"]) expect(body).toContain(`'${role}'`);
+  });
+
+  // Without a first music_staff nobody can grant anybody anything and the Roles
+  // screen is unreachable for ever.
+  it("bootstraps one administrator, so the roles screen is reachable at all", () => {
+    expect(withoutComments(sql)).toMatch(/INSERT OR IGNORE INTO admin_role[\s\S]*?'music_staff'/i);
+  });
+
+  it("grants a role to an email exactly once", () => {
+    expect(tableBody("admin_role")!).toMatch(/UNIQUE\s*\(\s*email\s*,\s*role\s*\)/i);
+  });
+
+  // Deleting a person must take their parent's telephone number with them.
+  it("cascades a parent contact from the child it belongs to", () => {
+    expect(tableBody("parent_contact")!).toMatch(/REFERENCES person\(id\) ON DELETE CASCADE/i);
+  });
+
+  // Last quarter's pay must still compute at last quarter's rate, so a rate is
+  // a row with a date rather than a figure that gets edited over.
+  it("dates a rate rather than overwriting it", () => {
+    const body = tableBody("rate")!;
+    expect(body).toMatch(/effective_from\s+TEXT\s+NOT NULL/i);
+    expect(body).toMatch(/UNIQUE\s*\(\s*role\s*,\s*effective_from\s*\)/i);
+  });
+
+  // Pence, so no floating point ever touches money.
+  it("holds money as whole pence and never negative", () => {
+    expect(tableBody("rate")!).toMatch(/amount_pence\s+INTEGER NOT NULL CHECK\s*\(\s*amount_pence\s*>=\s*0\s*\)/i);
+  });
+
+  // Inventing a figure would produce a plausible-looking pay run that is wrong.
+  it("seeds no rate — the real figures are the department's to set", () => {
+    expect(withoutComments(sql)).not.toMatch(/INSERT[^;]*INTO rate\b/i);
+  });
+
+  // Nothing about a real person may be invented: the workbook arrives later,
+  // through a reviewed importer.
+  it("seeds no people and no parent contacts", () => {
+    expect(withoutComments(sql)).not.toMatch(/INSERT[^;]*INTO person\s*\(/i);
+    expect(withoutComments(sql)).not.toMatch(/INSERT[^;]*INTO parent_contact\b/i);
+  });
+
+  it("restricts a duty to the three roles on the rota", () => {
+    const body = tableBody("duty")!;
+    for (const role of ["robing", "general", "dismissal"]) expect(body).toContain(`'${role}'`);
+  });
+
+  it("records one person once per duty per event", () => {
+    expect(tableBody("duty")!).toMatch(
+      /UNIQUE\s*\(\s*service_id\s*,\s*person_id\s*,\s*role\s*,\s*is_backup\s*\)/i
+    );
+  });
+
+  it("cascades a duty from both the event and the person", () => {
+    const body = tableBody("duty")!;
+    expect(body).toMatch(/REFERENCES service\(id\) ON DELETE CASCADE/i);
+    expect(body).toMatch(/REFERENCES person\(id\) ON DELETE CASCADE/i);
+  });
+
+  it("restricts an event type to the five kinds the department runs", () => {
+    const alter = withoutComments(sql).match(/ALTER TABLE service ADD COLUMN event_type[^;]+;/i)![0];
+    for (const kind of ["regular", "wedding", "concert", "tour", "other"]) expect(alter).toContain(`'${kind}'`);
+  });
+
+  // Dark by default: everything touching a person stays off until somebody
+  // deliberately turns it on.
+  it("ships every module touching a person switched off", () => {
+    const body = withoutComments(sql);
+    for (const module of ["library", "services"]) {
+      expect(body, `module.${module} should ship on`).toMatch(
+        new RegExp(`'module\\.${module}'\\s*,\\s*'on'`, "i")
+      );
+    }
+    for (const module of ["attendance", "safeguarding", "people", "wardrobe", "awards", "jc"]) {
+      expect(body, `module.${module} must ship off`).toMatch(
+        new RegExp(`'module\\.${module}'\\s*,\\s*'off'`, "i")
+      );
     }
   });
 
