@@ -15,6 +15,22 @@ routes = [
 # binding is served *ahead* of the Worker by default, which would bypass the
 # auth middleware. Everything goes through the Worker so the gate covers all routes.
 
+# --- Scheduled work ---
+# Hourly, on the half hour: read bmserviceapp's music feed for this month and
+# next, and fold it into `service` / `service_music` (see src/feed.ts).
+#
+# Hourly sounds eager for a document that changes monthly, and it is — but the
+# run is a single conditional GET and one string comparison against the
+# sourceHash bmserviceapp publishes. An unchanged month writes nothing at all.
+# What hourly buys is that a correction to the music list reaches the choir the
+# same morning rather than the next day.
+#
+# Estate rule: this reads bmserviceapp's OUTPUT. bmserviceapp's own cron is the
+# only parser of the Minster's music-list document in the estate, and nothing
+# here fetches or parses that document.
+[triggers]
+crons = ["30 * * * *"]
+
 # The committed draft index is bundled with the Worker as text, so the admin
 # import action reads it straight from the deployment rather than needing an
 # upload. See src/seed.ts and data/seed/README.md.

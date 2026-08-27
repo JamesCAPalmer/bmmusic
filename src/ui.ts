@@ -32,6 +32,7 @@ import type {
 } from "./catalogue";
 import type { ImportSummary } from "./seed";
 import type { ExtractedLabel } from "./extract";
+import { slotLabel, type IngestSummary, type ServiceMusicWithPiece } from "./services";
 
 // ---------------------------------------------------------------------------
 // Escaping and small helpers
@@ -251,6 +252,7 @@ function navFor(opts: PageOptions): string {
       <a href="/admin" class="brand">${esc(CHURCH.appName)} <span class="where">Librarian</span></a>
       <nav class="nav-actions">
         <a href="/admin/review">Review queue</a>
+        <a href="/admin/services">Music lists</a>
         <a href="/admin/intake">Photo intake</a>
         <a href="/admin/import">Import draft index</a>
         <a href="/">Choir view</a>
@@ -1183,6 +1185,143 @@ export function adminIntakeDonePage(pieceId: number, title: string): string {
      <p><a class="btn" href="/admin/intake">Add another</a></p>
      <p><a href="/piece/${pieceId}">See it in the catalogue</a> ·
         <a href="/admin/piece/${pieceId}">Edit it</a></p>`,
+    { admin: true }
+  );
+}
+
+// --- The service feed and its match queue -----------------------------------
+
+/**
+ * The match queue: music-list lines waiting for a human to say what they are.
+ *
+ * Ordered with the matcher's own proposals first, because confirming a correct
+ * guess is one tap and clearing the easy ones makes the hard ones visible.
+ * Each row offers the proposal, a search box for correcting it, and a way to
+ * say the piece is simply not in the library — which is a real answer, not a
+ * failure to answer.
+ */
+export function adminMatchQueuePage(
+  lines: (ServiceMusicWithPiece & { service_date: string; service_title: string })[],
+  total: number,
+  offset: number
+): string {
+  if (!lines.length) {
+    return page(
+      `Music lists — ${CHURCH.appName}`,
+      `<h1>Music lists</h1>
+       <div class="notice ok"><p>Every line of every service has been matched or accounted for.</p></div>
+       ${feedFetchCard()}
+       <p><a href="/admin">← Back to the librarian's page</a></p>`,
+      { admin: true }
+    );
+  }
+
+  const next = offset + 25 < total ? `<a href="/admin/services?offset=${offset + 25}">Next 25 →</a>` : "<span></span>";
+  const prev = offset > 0 ? `<a href="/admin/services?offset=${Math.max(offset - 25, 0)}">← Previous</a>` : "<span></span>";
+
+  return page(
+    `Music lists — ${CHURCH.appName}`,
+    `<h1>Music lists<span class="sub">${total} ${total === 1 ? "line" : "lines"} to check</span></h1>
+     <p class="muted">These come from the Minster's music list, read through the
+        ${esc(CHURCH.shortName)}'s service app. Where the matcher has proposed a piece, confirming it
+        takes one tap — and teaches it that phrasing for good, so the same line never comes back.</p>
+     ${feedFetchCard()}
+     ${lines.map(matchRow).join("")}
+     <div class="pager">${prev}${next}</div>`,
+    { admin: true }
+  );
+}
+
+function feedFetchCard(): string {
+  return `<div class="card no-print">
+      <h2>Read the music list now</h2>
+      <p class="muted small">This happens by itself every hour. Use this when the list has just been
+         corrected and you would rather not wait.</p>
+      <form method="POST" action="/admin/services/fetch">
+        <button type="submit" class="secondary">Read it now</button>
+        <label class="small muted" style="font-weight:400;display:inline-block;margin-left:0.6rem">
+          <input type="checkbox" name="force" value="1" style="width:auto"> even if nothing has changed
+        </label>
+      </form>
+    </div>`;
+}
+
+function matchRow(
+  line: ServiceMusicWithPiece & { service_date: string; service_title: string }
+): string {
+  const proposal =
+    line.piece_id && line.match_state === "auto"
+      ? `<div class="notice info">
+           <p style="margin:0">Proposed: <strong>${esc(line.piece_title)}</strong> —
+              ${esc(line.piece_composer)}${line.piece_accession ? ` <span class="pill grey">${esc(line.piece_accession)}</span>` : ""}</p>
+         </div>`
+      : `<p class="muted small">Nothing in the library obviously matches this.</p>`;
+
+  return `<div class="card">
+      <p class="muted small" style="margin-top:0">
+        ${esc(prettyDate(line.service_date))} · ${esc(line.service_title)} · ${esc(slotLabel(line.slot))}
+      </p>
+      <p style="font-size:1.1rem;margin:0.2rem 0"><strong>${esc(line.raw_text)}</strong></p>
+      ${proposal}
+      <form method="POST" action="/admin/services/line/${line.id}">
+        ${
+          line.piece_id && line.match_state === "auto"
+            ? `<button type="submit" name="piece_id" value="${line.piece_id}" class="confirm">That's right</button> `
+            : ""
+        }
+        <div class="field" style="margin-top:0.6rem">
+          <label for="piece-${line.id}">Or match it to a different piece</label>
+          <input type="number" id="piece-${line.id}" name="piece_id" min="1"
+                 placeholder="Piece number — search below to find it">
+          <span class="hint">
+            <a href="/?q=${encodeURIComponent(line.raw_text)}" target="_blank" rel="noopener">
+              Search the catalogue for “${esc(line.raw_text)}”</a> and use the number from the piece's address.
+          </span>
+        </div>
+        <button type="submit" class="secondary">Save that match</button>
+        <button type="submit" name="action" value="reject" class="secondary">Not in the library</button>
+      </form>
+    </div>`;
+}
+
+export function adminFeedResultPage(
+  results: IngestSummary[],
+  errors: { month: string; message: string }[]
+): string {
+  const rows = results
+    .map((r) => {
+      if (r.unchanged) {
+        return `<li><strong>${esc(r.month)}</strong> — unchanged since the last read, so nothing was written.</li>`;
+      }
+      return `<li><strong>${esc(r.month)}</strong> — ${r.servicesWritten} ${
+        r.servicesWritten === 1 ? "service" : "services"
+      }, ${r.linesWritten} ${r.linesWritten === 1 ? "line" : "lines"};
+        ${r.autoMatched} matched, ${r.unmatched} for you to check.
+        ${
+          r.skipped.length
+            ? `<br><span class="muted small">${r.skipped.length} entr${
+                r.skipped.length === 1 ? "y was" : "ies were"
+              } skipped: ${esc(r.skipped.map((s) => `${s.at} (${s.reason})`).join("; "))}</span>`
+            : ""
+        }</li>`;
+    })
+    .join("");
+
+  return page(
+    `Music list read — ${CHURCH.appName}`,
+    `<h1>Music list read</h1>
+     ${results.length ? `<div class="notice ok"><ul style="margin:0">${rows}</ul></div>` : ""}
+     ${
+       errors.length
+         ? `<div class="notice">
+              <p><strong>Some months could not be read:</strong></p>
+              <ul>${errors.map((e) => `<li>${esc(e.month)} — ${esc(e.message)}</li>`).join("")}</ul>
+              <p class="small">Next month's list often does not exist yet, which is not a problem.</p>
+            </div>`
+         : ""
+     }
+     <p><a class="btn" href="/admin/services">Check the music lists</a></p>
+     <p><a href="/admin">← Back to the librarian's page</a></p>`,
     { admin: true }
   );
 }
