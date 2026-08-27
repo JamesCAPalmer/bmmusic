@@ -93,6 +93,7 @@ import { serveAsset } from "./assets";
 import { buildAverySheet, buildVolunteerSheets } from "./labelsheet";
 import { copiesRag, ragLabel, ragPill } from "./rag";
 import { childrenFor } from "./choirsize";
+import { pruneBackups, runBackup } from "./backup";
 import { toCsv } from "./csv";
 import {
   addRate,
@@ -129,6 +130,7 @@ import {
   registerFor,
   registerTally,
   revealContacts,
+  rollOverSchoolYears,
   updatePerson,
 } from "./people";
 import { isModuleKey, moduleForPath, readModuleState, setModule } from "./modules";
@@ -2235,25 +2237,110 @@ export default {
    * scheduled run is in an hour and will find the feed either back or still
    * gone; either way one line in the log is the right amount of fuss.
    */
-  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(
-      (async () => {
-        try {
-          const outcome = await runFeedIngest(env);
-          for (const result of outcome.results) {
-            if (result.unchanged) continue;
-            console.log(
-              `feed ${result.month}: ${result.servicesWritten} services, ${result.linesWritten} lines, ` +
-                `${result.autoMatched} matched, ${result.unmatched} for review`
-            );
-          }
-          for (const error of outcome.errors) {
-            console.warn(`feed ${error.month}: ${error.message}`);
-          }
-        } catch (e) {
-          console.error("scheduled feed read failed", e);
-        }
-      })()
-    );
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runScheduled(event.cron, env));
   },
 } satisfies ExportedHandler<Env>;
+
+/**
+ * Three schedules, told apart by their cron expression.
+ *
+ * Dispatching on the expression rather than on the clock means each job runs
+ * exactly when `wrangler.toml` says and can be triggered on its own in
+ * development. An unrecognised expression falls through to the feed read,
+ * which is the one that must never silently stop.
+ */
+async function runScheduled(cron: string, env: Env): Promise<void> {
+  if (cron === CRON_BACKUP) return runNightlyBackup(env);
+  if (cron === CRON_ROLLOVER) return runSeptemberRollover(env);
+  return runFeedIngestJob(env);
+}
+
+/** Must match `[triggers] crons` in `wrangler.toml`. */
+const CRON_FEED = "30 * * * *";
+const CRON_BACKUP = "15 2 * * *";
+const CRON_ROLLOVER = "0 3 1 9 *";
+
+export const CRON_EXPRESSIONS = [CRON_FEED, CRON_BACKUP, CRON_ROLLOVER] as const;
+
+async function runFeedIngestJob(env: Env): Promise<void> {
+  try {
+    const outcome = await runFeedIngest(env);
+    for (const result of outcome.results) {
+      if (result.unchanged) continue;
+      console.log(
+        `feed ${result.month}: ${result.servicesWritten} services, ${result.linesWritten} lines, ` +
+          `${result.autoMatched} matched, ${result.unmatched} for review`
+      );
+    }
+    for (const error of outcome.errors) {
+      console.warn(`feed ${error.month}: ${error.message}`);
+    }
+  } catch (e) {
+    console.error("scheduled feed read failed", e);
+  }
+}
+
+/**
+ * The nightly dump to R2, and the prune.
+ *
+ * Swallows its own failures for the same reason the feed read does: a cron
+ * handler that throws is retried by the platform, and a bucket that is briefly
+ * unreachable does not become reachable by being asked again in five minutes.
+ *
+ * Nothing about the contents is logged. The counts are the whole of it — this
+ * dump contains children's names and their parents' telephone numbers, and a
+ * log line quoting a row would put them somewhere with none of the protections
+ * the bucket has.
+ */
+async function runNightlyBackup(env: Env): Promise<void> {
+  if (!env.SCANS) {
+    console.warn("nightly backup skipped: no R2 bucket bound");
+    return;
+  }
+  try {
+    const date = new Date().toISOString().slice(0, 10);
+    const manifest = await runBackup(env.DB, env.SCANS, date, new Date().toISOString());
+    const pruned = await pruneBackups(env.SCANS, date);
+
+    const failed = manifest.tables.filter((t) => t.error);
+    for (const table of failed) console.warn(`backup ${table.table}: ${table.error}`);
+
+    console.log(
+      `backup ${date}: ${manifest.totalRows} rows, ${manifest.totalBytes} bytes, ` +
+        `${pruned} old objects removed${failed.length ? `, ${failed.length} tables failed` : ""}`
+    );
+
+    await audit(env.DB, {
+      userEmail: "system",
+      action: "backup.run",
+      entity: "app_setting",
+      detail:
+        `${date}: ${manifest.totalRows} rows in ${manifest.tables.length} tables, ` +
+        `${manifest.totalBytes} bytes, ${pruned} expired objects removed` +
+        (failed.length ? `, ${failed.length} tables failed` : ""),
+    });
+  } catch (e) {
+    console.error("nightly backup failed", e);
+  }
+}
+
+/** Everybody moves up a year. Audited as the system, because nobody did it. */
+async function runSeptemberRollover(env: Env): Promise<void> {
+  try {
+    const result = await rollOverSchoolYears(env.DB);
+    console.log(`september rollover: ${result.movedUp} moved up, ${result.atTheTop} already at Year 13`);
+    await audit(env.DB, {
+      userEmail: "system",
+      action: "person.rollover",
+      entity: "person",
+      detail:
+        `${result.movedUp} moved up a school year` +
+        (result.atTheTop
+          ? `; ${result.atTheTop} already in Year 13 and left where they are`
+          : ""),
+    });
+  } catch (e) {
+    console.error("september rollover failed", e);
+  }
+}

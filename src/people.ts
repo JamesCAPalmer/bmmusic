@@ -468,3 +468,50 @@ export function registerTally(rows: RegisterRow[]): { present: number; absent: n
   }
   return tally;
 }
+
+// ---------------------------------------------------------------------------
+// The September rollover
+// ---------------------------------------------------------------------------
+
+export interface RolloverResult {
+  movedUp: number;
+  /** Children already in Year 13, who cannot move up any further. */
+  atTheTop: number;
+}
+
+/**
+ * Everybody moves up a year on 1 September.
+ *
+ * Reception is 0, so this is `school_year + 1` with no special case anywhere.
+ *
+ * **Year 13 stays at Year 13.** Somebody leaving school is a person leaving
+ * the choir or not, and that is a decision for the music staff rather than a
+ * cron job — quietly promoting them to "Year 14" would put a number on a
+ * screen that means nothing. They stay at the top of the school and show as
+ * such until somebody marks them as having left.
+ *
+ * Leavers are skipped: their school year is a fact about the September they
+ * left in, and moving it on every year would make a past record drift.
+ */
+export async function rollOverSchoolYears(db: D1Database): Promise<RolloverResult> {
+  const before = await db
+    .prepare(
+      `SELECT
+         SUM(CASE WHEN school_year < 13 THEN 1 ELSE 0 END) AS movable,
+         SUM(CASE WHEN school_year >= 13 THEN 1 ELSE 0 END) AS top
+       FROM person
+       WHERE school_year IS NOT NULL AND left_on IS NULL`
+    )
+    .first<{ movable: number | null; top: number | null }>();
+
+  await db
+    .prepare(
+      `UPDATE person
+          SET school_year = school_year + 1,
+              updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+        WHERE school_year IS NOT NULL AND school_year < 13 AND left_on IS NULL`
+    )
+    .run();
+
+  return { movedUp: before?.movable ?? 0, atTheTop: before?.top ?? 0 };
+}
