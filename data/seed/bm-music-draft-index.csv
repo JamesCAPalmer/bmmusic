@@ -1,325 +1,411 @@
-ref,composer,titles,category,handwritten,confidence,source_photos,flags
-D-001,ADAMS,Is it not wheat harvest today?,anthem,yes,0.95,IMG_4285,
-D-002,ALLEGRI,Miserere,anthem,no,0.95,IMG_4272,
-D-003,ALLEGRI,Veni Sancte Spiritus,anthem,yes,0.85,IMG_4272,
-D-004,AMNER,"Come, let's rejoice",anthem,yes,0.70,IMG_4272,check
-D-005,ANDREWS,O sing the glories,anthem,no,0.90,IMG_4272,
-D-006,ANERIO,Christus factus est,anthem,no,0.95,IMG_4272,
-D-007,ANON (16th c.),Rejoice in the Lord alway,anthem,no,0.90,IMG_4272,see also REDFORD D-172
-D-008,ARCADELT,O sacrum convivium,anthem,yes,0.85,IMG_4272,
-D-009,ASTON,The true glory,anthem,no,0.90,IMG_4272,
-D-010,ASTON,Alleluya psallat,anthem,no,0.90,IMG_4272,
-D-011,ASTON,For I went,anthem,no,0.90,IMG_4272,
-D-012,ATTWOOD,Teach me O Lord,anthem,no,0.95,IMG_4272,
-D-013,ATTWOOD,Turn Thy face,anthem,no,0.90,IMG_4272,damaged
-D-014,ATTWOOD,Come Holy Ghost,anthem,no,0.85,IMG_4272,damaged
-D-015,BACH,Three Chorales,anthem,no,0.97,IMG_4272,
-D-016,BACH,Zion hears,anthem,no,0.95,IMG_4272,
-D-017,BACH,My heart ever faithful,anthem,no,0.95,IMG_4272,
-D-018,BACH,God liveth aye,anthem,no,0.80,IMG_4272,damaged
-D-019,BACH,"Jesu, joy",anthem,no,0.95,IMG_4272;IMG_4273,
-D-020,BACH,Commit thy way,anthem,no,0.95,IMG_4272,
-D-021,BAINTON,And I saw a new heaven,anthem,yes,0.85,IMG_4273,
-D-022,BAIRSTOW,Lamentation; Jesu grant me this,anthem,no,0.85,IMG_4273,
-D-023,BAIRSTOW,Let all mortal flesh keep silence,anthem,yes,0.55,IMG_4273,check
-D-024,BAIRSTOW,"Save us, O Lord",anthem,no,0.98,IMG_4277,cover photo
-D-025,BALFOUR GARDINER,Evening Hymn,anthem,yes,0.90,IMG_4273,
-D-026,BATTEN,O sing joyfully; Deliver us O Lord; O praise the Lord,anthem,no,0.95,IMG_4273,
-D-027,BATTISHILL,O Lord look down from heaven,anthem,yes,0.70,IMG_4273,
-D-028,BLITHEMAN,In pace,anthem,yes,0.40,IMG_4287,check; possible old ref CC10
-D-029,BLOW,Let Thy hand; O pray for the peace; My God my God; Salvator mundi,anthem,no,0.95,IMG_4286;IMG_4287,
-D-030,BOYCE,I have surely built,anthem,no,0.90,IMG_4286;IMG_4287,pencil 44 on box
-D-031,BOYCE,Turn thee unto me,anthem,yes,0.95,IMG_4273;IMG_4286,
-D-032,BOYCE,All the ends of the world; O where shall wisdom; O turn away (Trebles); The Lord is King (ATB),anthem,no,0.80,IMG_4286;IMG_4287,
-D-033,BRAHMS,Wie lieblich sind,anthem,yes,0.90,IMG_4273;IMG_4286,
-D-034,BRAHMS,How lovely are; Behold all flesh,anthem,no,0.90,IMG_4286;IMG_4287,
-D-035,BRITTEN,A Ceremony of Carols,carol,no,1.00,IMG_4288,cover photo; SATB Boosey & Hawkes
-D-036,BRITTEN,Rejoice in the Lamb,anthem,yes,0.80,IMG_4275,
-D-037,BRITTEN,Jubilate Deo,canticle,no,0.95,IMG_4275,
-D-038,BRUCKNER,Locus iste; Christus factus est,anthem,no,0.95,IMG_4275,
-D-039,BUCK,O Lord God,anthem,yes,0.90,IMG_4276,(SS) circled
-D-040,BULLOCK,Give us the wings of faith,anthem,yes,0.95,IMG_4276;IMG_4286,
-D-041,BYRD,Christe qui lux; Sacerdotes Domini; Victimae Paschali,anthem,no,0.95,IMG_4275,
-D-042,BYRD,Bow thine ear,anthem,no,0.90,IMG_4275,
-D-043,BYRD,Ave verum corpus; Terra tremuit,anthem,no,0.95,IMG_4275,
-D-044,BYRD,Laudibus in sanctis; Emendemus in melius,anthem,yes,0.80,IMG_4275,
-D-045,BYRD,Non vos relinquam; O Lord make Thy servant Elizabeth; Sing joyfully,anthem,no,0.90,IMG_4278,
-D-046,BYRD,Senex puerum portabat; Teach me O Lord,anthem,yes,0.55,IMG_4278,check attribution
-D-047,BYRD,Hodie beata virgo; Ecce advenit,anthem,yes,0.90,IMG_4278;IMG_4279,
-D-048,BYRD,Laetentur coeli,anthem,no,0.85,IMG_4278,
-D-049,BYRD,O quam gloriosum; Two Sacred Songs,anthem,no,0.95,IMG_4278,
-D-050,BYRD,Prevent us O Lord; Miserere mei; Lord in Thy rage (ATB),anthem,no,0.90,IMG_4278,
-D-051,BYRD,O admirabile commercium; Veni Sancte (ATB),anthem,yes,0.80,IMG_4279,check
-D-052,CAMPBELL,Fanfare for Michaelmas,anthem,no,0.95,IMG_4281,
-D-053,CAMPBELL,Sing we merrily,anthem,no,0.95,IMG_4281,
-D-054,CARTER,God be in my head,anthem,yes,0.90,IMG_4281,
-D-055,CORNYSHE,Woefully array'd,anthem,no,0.95,IMG_4281,
-D-056,CROFT,Funeral Service,anthem,yes,0.90,IMG_4281,
-D-057,DALEY,Upon Your Heart,anthem,yes,0.90,IMG_4281,
-D-058,DOVE,Seek Him,anthem,yes,0.90,IMG_4283,two copies/parcels
-D-059,DUNSTAPLE,Kyrie (ATBar ed. Biazeck),anthem,no,0.95,IMG_4282,cover photo
-D-060,DURUFLE,Ubi caritas,anthem,yes,0.90,IMG_4281,
-D-061,DURUFLE,Tu es Petrus,anthem,yes,0.90,IMG_4281,
-D-062,EAST,When Israel came out of Egypt,anthem,yes,0.90,IMG_4283,OCT 19 note
-D-063,ECCARD,When to the Temple,anthem,yes,0.85,IMG_4283,old code under label
-D-064,ELGAR,The Spirit of the Lord,anthem,yes,0.90,IMG_4283,
-D-065,ELGAR,Give unto the Lord,anthem,yes,0.90,IMG_4283,
-D-066,ELGAR,Ave verum corpus,anthem,yes,0.85,IMG_4283,
-D-067,FARRANT,Hide not Thou; Call to remembrance,anthem,no,0.90,IMG_4283,
-D-068,FAURE,Ave verum,anthem,yes,0.90,IMG_4284,
-D-069,FAURE,Cantique de Jean Racine,anthem,yes,0.90,IMG_4284,
-D-070,FAURE,Requiem (2 parcels),major work,yes,0.95,IMG_4284,
-D-071,de FEVIN,Sancta Trinitas,anthem,no,0.75,IMG_4283,
-D-072,FINZI,God is gone up,anthem,yes,0.75,IMG_4284,
-D-073,FRANCK,Panis angelicus,anthem,yes,0.90,IMG_4284,
-D-074,GESUALDO,O vos omnes,anthem,no,0.90,IMG_4290,
-D-075,GIBBONS,This is the record,anthem,no,0.80,IMG_4290,
-D-076,GIBBONS,Hosanna to the Son of David; Almighty and everlasting God,anthem,yes,0.55,IMG_4290,check
-D-077,GOWER,Tune me O Lord,anthem,yes,0.75,IMG_4290,
-D-078,GREENE,My lips shall speak; Thou visitest the earth; Lord let me know; Acquaint thyself,anthem,no,0.90,IMG_4291,pencil 26?
-D-079,GUERRERO,Accepit Iesu panes,anthem,yes,0.55,IMG_4290,check
-D-080,GOODALL,The Lord is my Shepherd,anthem,yes,0.90,IMG_4291,
-D-081,HADLEY,My beloved spake,anthem,no,0.55,IMG_4304,check vs SANDERS D-176
-D-082,HANDEL,Worthy is the Lamb,anthem,yes,0.98,IMG_4291;IMG_4292,
-D-083,HANDEL,My belov'd is mine,anthem,yes,0.40,IMG_4291,check
-D-084,HANDEL,Let the bright seraphim (Trebles); Zadok the Priest,anthem,yes,0.75,IMG_4291,damaged
-D-085,HANDEL,Since by man came death; Behold the Lamb of God; And the glory of the Lord,anthem,yes,0.85,IMG_4291,
-D-086,HANDEL,Hallelujah Chorus,anthem,yes,0.90,IMG_4291,
-D-087,HANDEL,Zadok the Priest (York Series SSAATBB),anthem,no,0.97,IMG_4293,cover; Leeds Parish Church stamp; refs 232 / Y.S.370
-D-088,HANDL (GALLUS),In nomine Jesu; Mirabile mysterium,anthem,yes,0.40,IMG_4291,check
-D-089,HANDL (GALLUS),Pater noster; Egredietur virga; Cantate tuba,anthem,yes,0.40,IMG_4304,check; label reads Harell
-D-090,HARRIS,Faire is the heaven,anthem,no,0.90,IMG_4299;IMG_4304,
-D-091,HARRIS,O what their joy,anthem,no,0.90,IMG_4296;IMG_4299;IMG_4304,
-D-092,HARRIS,Bring us O Lord,anthem,yes,0.55,IMG_4299;IMG_4304,
-D-093,HARRIS,The Holy Eucharist,setting,no,0.90,IMG_4304,
-D-094,HARRIS,Come down O Love divine,anthem,yes,0.85,IMG_4295,
-D-095,HARRIS,King of glory King of peace,anthem,yes,0.90,IMG_4296,SSS circled
-D-096,HARRIS,Vox ultima Crucis (in English),anthem,yes,0.92,IMG_4297,U circled
-D-097,HARRIS,Behold the tabernacle of God,anthem,yes,0.95,IMG_4298,
-D-098,HARWOOD,O how glorious is the Kingdom (2 parcels),anthem,mixed,0.90,IMG_4299;IMG_4304,
-D-099,HASSLER,Laetentur coeli (TTBB),anthem,no,0.90,IMG_4302,
-D-100,HAYDN,Insanae et vanae curae,anthem,no,0.92,IMG_4302,damaged
-D-101,HAYDN,The heavens are telling,anthem,no,0.95,IMG_4302,
-D-102,HAYDN,Achieved is the glorious work,anthem,no,0.85,IMG_4304,
-D-103,HEWITT-JONES,At the round earth's imagin'd corners,anthem,yes,0.85,IMG_4303,
-D-104,HEWITT-JONES,New Service,setting,yes,0.35,IMG_4303,check
-D-105,HEWITT-JONES,In our service,anthem,yes,0.50,IMG_4302,check
-D-106,HILTON,Lord for Thy tender,anthem,no,0.90,IMG_4302,
-D-107,HOLLINS,Why seek ye the living among the dead,anthem,yes,0.75,IMG_4306,
-D-108,HOLLINS,God the All-Fatherly,anthem,yes,0.90,IMG_4307,
-D-109,HOLST,Turn back O man,anthem,yes,0.95,IMG_4308,
-D-110,HOLST,Ave Maria,anthem,yes,0.55,IMG_4309,check contents
-D-111,HOWELLS,Behold O God our defender; Salve Regina; O salutaris hostia,anthem,yes,0.75,IMG_4302,
-D-112,HOWELLS,Like as the hart,anthem,mixed,0.95,IMG_4302;IMG_4312,two parcels
-D-113,HOWELLS,My eyes for beauty,anthem,no,0.90,IMG_4302,
-D-114,HOWELLS,When first thine eies,anthem,no,0.90,IMG_4302,
-D-115,HOWELLS,A Hymn for St Cecilia,anthem,yes,0.92,IMG_4311,
-D-116,HOWELLS,O pray for the peace of Jerusalem,anthem,yes,0.97,IMG_4310,
-D-117,HURFORD,Litany to the Holy Spirit,anthem,no,0.88,IMG_4314,shared box with next two
-D-118,HUMFREY,Rejoice in the Lord,anthem,no,0.95,IMG_4314,
-D-119,HURD,O come let us sing,anthem,no,0.95,IMG_4314,
-D-120,IRELAND,Greater love; Ex ore innocentium,anthem,no,0.93,IMG_4314,
-D-121,JACOB (arr.),Brother James's Air (SATB),anthem,yes,0.90,IMG_4315;IMG_4316;IMG_4317,also OUP unison/descant copy
-D-122,JOHNSON,Benedicam Domino; Crux fidelis,anthem,no,0.80,IMG_4314;IMG_4318,
-D-123,JONES,Morte Christe,anthem,yes,0.65,IMG_4314,check
-D-124,JOUBERT,O Lorde the maker,anthem,no,0.45,IMG_4314,check title
-D-125,KING (John IV of Portugal),Crux fidelis; Bread of the world,anthem,yes,0.55,IMG_4320,check
-D-126,LASSUS,Tristis est anima,anthem,yes,0.75,IMG_4320,
-D-127,LAURIDSEN,O magnum mysterium,anthem,yes,0.90,IMG_4319,
-D-128,LEIGHTON,Let all the world,anthem,yes,0.90,IMG_4320,
-D-129,LEY,The strife is o'er,anthem,yes,0.90,IMG_4322,
-D-130,LINDLEY,Ave Maria,anthem,yes,0.45,IMG_4320,check
-D-131,LOCK,Love is patient,anthem,yes,0.40,IMG_4320,check
-D-132,LOOSEMORE,O Lord increase my faith,anthem,yes,0.55,IMG_4320,
-D-133,LOTTI,Crucifixus,anthem,yes,0.70,IMG_4320,
-D-134,MACMILLAN,O give thanks unto the Lord,anthem,yes,0.60,IMG_4320,check
-D-135,MARCELLO,Give ear unto me (Trebles),anthem,no,0.85,IMG_4324,
-D-136,MARCHANT,The souls of the righteous,anthem,yes,0.97,IMG_4325,
-D-137,MARTIN,Magnify His name,anthem,yes,0.97,IMG_4326,
-D-138,MASCAGNI,Easter Hymn (Cavalleria Rusticana),anthem,no,0.97,IMG_4323,cover; old ref S.11?
-D-139,MATHIAS,Lift up your heads O ye gates,anthem,yes,0.97,IMG_4327,
-D-140,MAWBY,Libera me Domine,anthem,no,0.50,IMG_4324,check
-D-141,MAWBY?,Christ is Born,carol,yes,0.50,IMG_4300,label reads MAWES; check
-D-142,MCKIE,We wait for thy loving kindness,anthem,no,0.65,IMG_4331;IMG_4332,
-D-143,MENDELSSOHN,Hear my prayer,anthem,yes,0.85,IMG_4324,
-D-144,MENDELSSOHN,How lovely are Thy messengers,anthem,yes,0.85,IMG_4324;IMG_4325;IMG_4326;IMG_4327,
-D-145,MENDELSSOHN,Lift thine eyes,anthem,no,0.70,IMG_4324,
-D-146,MENDELSSOHN,He that shall endure; When Jesus our Lord; Say where He is born; There shall a star,anthem,yes,0.65,IMG_4324,
-D-147,MENDELSSOHN,Behold God the Lord,anthem,yes,0.70,IMG_4324,
-D-148,MESSIAEN,O sacrum convivium,anthem,yes,0.95,IMG_4328,
-D-149,MONTEVERDI,Ave maris stella,anthem,no,0.85,IMG_4324,
-D-150,MOORE,Through the day,anthem,yes,0.60,IMG_4324,
-D-151,MORLEY,Agnus Dei,anthem,no,0.85,IMG_4324,
-D-152,MORLEY,I am the resurrection,anthem,no,0.75,IMG_4324;IMG_4328,
-D-153,MORLEY,Nolo mortem peccatoris; Out of the deep,anthem,yes,0.90,IMG_4329;IMG_4331,two parcels
-D-154,MORLEY,Let my complaint,anthem,no,0.97,IMG_4333,cover photo
-D-155,MOZART,Ave verum corpus,anthem,mixed,0.90,IMG_4331;IMG_4332,
-D-156,MOZART,Laudate pueri,anthem,no,0.70,IMG_4331,check
-D-157,MOZART,Laudate Dominum,anthem,yes,0.95,IMG_4331,
-D-158,MUDD,Let Thy merciful ears,anthem,yes,0.90,IMG_4331,possible old ref F7
-D-159,MUDD,O Lord the maker of all things; Sing joyfully,anthem,yes,0.85,IMG_4331,Sing Joyfully likely Byrd
-D-160,MUNDY,O Lord the maker of all thing,anthem,yes,0.95,IMG_4334,Tudor Church Music wallet
-D-161,NARES,The voice of joy (Trebles); Try me O God,anthem,no,0.75,IMG_4335,damaged
-D-162,NAYLOR,Vox dicentis: Clama,anthem,yes,0.85,IMG_4335;IMG_4340,
-D-163,NICHOLSON,Two motets: O salutaris / Tantum ergo,anthem,no,0.75,IMG_4335,damaged
-D-164,OLDROYD,Prayer to Jesus,anthem,no,0.40,IMG_4336,check
-D-165,OUSELEY,For He is good,anthem,yes,0.95,IMG_4339,
-D-166,OUSELEY,From the rising of the sun,anthem,yes,0.95,IMG_4340,
-D-167,PALESTRINA,Adoramus te; O bone Jesu; Tu es Petrus,anthem,no,0.90,IMG_4335,
-D-168,PALESTRINA,Exsultate Deo,anthem,no,0.85,IMG_4335,
-D-169,PALESTRINA/PLAINSONG,Now my tongue,anthem,no,0.85,IMG_4335,
-D-170,PALESTRINA,Sicut cervus; Deus tu convertens,anthem,yes,0.85,IMG_4335,
-D-171,PALESTRINA,Benedicta sit Sancta Trinitas (F and E flat),anthem,yes,0.85,IMG_4335,
-D-172,PARRY,Hear my words,anthem,yes,0.90,IMG_4336,
-D-173,PARRY,My soul there is a country; Long since in Egypt,anthem,yes,0.65,IMG_4336,
-D-174,PARRY,Blest pair of sirens (2 parcels),anthem,yes,0.65,IMG_4336,
-D-175,PARRY,Crossing the bar,anthem,no,0.35,IMG_4336,damaged; check
-D-176,PARRY,I was glad,anthem,no,0.40,IMG_4336,damaged; check
-D-177,PARRY,There is an old belief,anthem,yes,0.95,IMG_4341,
-D-178,PARSONS,Ave Maria,anthem,yes,0.85,IMG_4336,
-D-179,PHILIPS,Ascendit Deus,anthem,no,0.85,IMG_4336,
-D-180,PITONI,Cantate Domino,anthem,no,0.80,IMG_4336,
-D-181,PITONI,Laudate Dominum,anthem,yes,0.95,IMG_4342,Musica Sacra Nr.30 insert
-D-182,POWER,Beata progenies (ATB?),anthem,no,0.30,IMG_4336,damaged; check
-D-183,POWELL (Rosephanye),The Word Was God,anthem,no,0.97,IMG_4345,cover; modern addition
-D-184,POYSER,Hail bright Cecilia; O come let us sing; Immortal love; We beseech thee,anthem,yes,0.55,IMG_4337,check name (or Poston)
-D-185,POYSER,The Angel Gabriel; Lo Sages from the East; O God my heart is ready; What child is this,carol,yes,0.55,IMG_4337,check name (or Poston)
-D-186,PURCELL,Rejoice in the Lord,anthem,no,0.90,IMG_4337,
-D-187,PURCELL,Thou knowest Lord,anthem,no,0.90,IMG_4337;IMG_4343,
-D-188,PURCELL,Praise the Lord O Jerusalem,anthem,yes,0.70,IMG_4337,
-D-189,PURCELL,Hear my prayer,anthem,yes,0.50,IMG_4337,check
-D-190,PURCELL,Lord how long,anthem,no,0.90,IMG_4337,
-D-191,PURCELL,O God Thou art my God,anthem,no,0.90,IMG_4337,
-D-192,PURCELL,Jehova quam multi sunt hostes (2 parcels),anthem,mixed,0.85,IMG_4337;IMG_4343,
-D-193,PURCELL,Man that is born,anthem,no,0.90,IMG_4337,
-D-194,PURCELL,Remember not Lord,anthem,no,0.90,IMG_4337,
-D-195,PURCELL,Thy word is a lantern,anthem,no,0.85,IMG_4337;IMG_4338,possible old ref 94
-D-196,RADCLIFFE,O bone Jesu; Fecisti nos / Pacem nobis,anthem,no,0.55,IMG_4337;IMG_4338;IMG_4348,check second title
-D-197,REDFORD,Rejoice in the Lord alway,anthem,yes,0.92,IMG_4348,
-D-198,RUTTER,God be in my head; A Gaelic blessing; The Lord bless you; Christ the Lord is risen; For the beauty of the earth,anthem,no,0.85,IMG_4338,
-D-199,RUTTER,A Clare Benediction,anthem,no,0.98,IMG_4347,cover; St Mark's Anlaby Common stamp
-D-200,SAMPSON,O ye who bear Christ's holy name,anthem,yes,0.80,IMG_4346,
-D-201,SANDERS,My beloved spake / spoke,anthem,mixed,0.85,IMG_4337;IMG_4338,check vs Hadley
-D-202,SCARLATTI (A.),Exsultate Deo,anthem,no,0.85,IMG_4338,
-D-203,SCHUTZ,Praise to Thee,anthem,no,0.80,IMG_4338,
-D-204,SYMONS,Sing we merrily (Trebles),anthem,no,0.80,IMG_4338,
-D-205,SANDERS,The Reproaches,anthem,yes,0.85,IMG_4353,
-D-206,DE SEVERAC,Tantum ergo,anthem,yes,0.75,IMG_4353,
-D-207,SAINT-SAENS,Ave Maria,anthem,yes,0.55,IMG_4353,damaged; check
-D-208,SHEPHARD,The Secret of Christ,anthem,no,0.90,IMG_4353,
-D-209,SHEPHARD,Three anthems (Jesu dulcis / Prayer for a new Mother / The Birds),anthem,no,0.90,IMG_4353,
-D-210,SHEPPARD,In manus tuas,anthem,yes,0.85,IMG_4353,
-D-211,STAINER,Crucifixion,major work,yes,0.85,IMG_4353;IMG_4355,
-D-212,STAINER,God so loved the world,anthem,yes,0.45,IMG_4353,check
-D-213,STANFORD,Justorum animae; Coelos ascendit; Beati quorum via,anthem,no,0.90,IMG_4355;IMG_4357,
-D-214,STANFORD,A Song of Peace,anthem,yes,0.85,IMG_4355;IMG_4357;IMG_4360,
-D-215,STANFORD,A Song of Wisdom,anthem,yes,0.50,IMG_4357;IMG_4360,check
-D-216,STANFORD,Glorious and powerful; The Lord is my shepherd,anthem,no,0.85,IMG_4357,
-D-217,STANFORD,Ye choirs of new Jerusalem,anthem,yes,0.50,IMG_4355;IMG_4357,check
-D-218,SULLIVAN,Lead kindly light,anthem,yes,0.65,IMG_4357;IMG_4360,
-D-219,TALLIS,Salvator mundi,anthem,yes,0.85,IMG_4353;IMG_4354,
-D-220,TALLIS,Litany,anthem,no,0.40,IMG_4353;IMG_4354,check
-D-221,TALLIS,Lamentations (ATTBB),anthem,no,0.85,IMG_4353;IMG_4354,
-D-222,TALLIS,O Lord give Thy Holy Spirit; O nata lux; Te lucis ante terminum,anthem,no,0.90,IMG_4353;IMG_4354,
-D-223,TALLIS,O sacrum convivium; Videte miraculum,anthem,yes,0.85,IMG_4353;IMG_4354,
-D-224,TAVENER / GORECKI,The Lamb; Totus tuus,anthem,yes,0.85,IMG_4353;IMG_4354,
-D-225,TCHAIKOVSKY,Hymn to the Trinity,anthem,yes,0.85,IMG_4353;IMG_4354,
-D-226,TCHAIKOVSKY,Hymn to the Cherubim,anthem,yes,0.85,IMG_4353;IMG_4354,
-D-227,TOMKINS / TYE,When David heard; O come ye servants; Praise ye the Lord,anthem,yes,0.50,IMG_4354,check
-D-228,TRAVERS,O worship,anthem,no,0.60,IMG_4355;IMG_4356,label reads TRAVRAS; check
-D-229,TYE,Give almes of thy goods,anthem,yes,0.65,IMG_4355;IMG_4356,
-D-230,VAUGHAN WILLIAMS,O taste and see; Antiphon,anthem,no,0.85,IMG_4354;IMG_4356,
-D-231,VICTORIA,O magnum mysterium,anthem,yes,0.90,IMG_4355;IMG_4356,
-D-232,VICTORIA,Gaudent in coelis; Jesu dulcis memoria; Domine non sum dignus; O vos omnes,anthem,yes,0.80,IMG_4355;IMG_4356;IMG_4360,
-D-233,VICTORIA,O quam gloriosum,anthem,yes,0.90,IMG_4355;IMG_4356;IMG_4360,
-D-234,VICTORIA,Palm Sunday Passion,anthem,yes,0.85,IMG_4355;IMG_4356;IMG_4357;IMG_4360,
-D-235,VIVALDI,Gloria,major work,yes,0.55,IMG_4355;IMG_4356;IMG_4357,check
-D-236,WALKER,I will lift up mine eyes (ATB),anthem,yes,0.80,IMG_4355;IMG_4356;IMG_4357;IMG_4360,
-D-237,WELDON,In Thee O Lord,anthem,no,0.80,IMG_4357,
-D-238,WELDON,O praise God (Ps 150),anthem,no,0.80,IMG_4357,
-D-239,WEELKES,Alleluia I heard a voice,anthem,no,0.85,IMG_4357;IMG_4360,
-D-240,WEELKES,All people clap your hands,anthem,no,0.85,IMG_4357,
-D-241,WEELKES,Gloria in excelsis,anthem,no,0.85,IMG_4357,
-D-242,WEELKES,Hosanna to the Son of David,anthem,no,0.85,IMG_4357,
-D-243,WISE,Prepare ye the way; The ways of Zion,anthem,no,0.85,IMG_4356,
-D-244,WOOD,Glory and honour; Expectans expectavi,anthem,no,0.90,IMG_4356,
-D-245,WOOD,O most merciful; Oculi omnium; O Thou the central orb,anthem,no,0.80,IMG_4356;IMG_4360,
-D-246,WOOD,Great Lord of Lords; Hail gladdening light,anthem,no,0.80,IMG_4356;IMG_4357;IMG_4360,
-D-247,WOOD,This joyful Eastertide; Jesus Christ is risen today,anthem,yes,0.75,IMG_4356;IMG_4360,
-D-248,RESPONSES BOX,Ayleward; Ebdon; Dewhurst,responses,yes,0.85,IMG_4349;IMG_4351,
-D-249,RESPONSES BOX,Byrd; Morley; Smith; Tomkins,responses,yes,0.90,IMG_4349,
-D-250,RESPONSES BOX,Gibbons and Barnard; Leighton; Neary,responses,yes,0.85,IMG_4349,
-D-251,RESPONSES BOX,Rawlings?; Shephard; Smith,responses,yes,0.35,IMG_4349,check first name
-D-252,RESPONSES BOX,Plainsong; Payne?,responses,yes,0.50,IMG_4349,check second name
-D-253,RESPONSES BOX,Rose,responses,yes,0.95,IMG_4349,
-D-254,RESPONSES BOX,Spedding; Tallis Ferial (TT/BB); Stone / Farmer Lord's Prayer,responses,yes,0.80,IMG_4349,
-D-255,HYMN DESCANTS,St Patrick's Breastplate binder + Hymn Descants binder + numbered binders 1-150 (18 binders),hymn,yes,0.90,IMG_4350;IMG_4351;IMG_4352,indexed by hymn number
-D-256,ANDREWS,Fauxbourdons; Psalm in F,setting,yes,0.50,IMG_4359,check
-D-257,ARNOLD,in A,setting,no,0.75,IMG_4359,
-D-258,ATKINS,in G,setting,yes,0.55,IMG_4359,check
-D-259,BAIRSTOW,in E flat,setting,no,0.55,IMG_4359,check
-D-260,BLAIR,in B minor,setting,no,0.75,IMG_4359,
-D-261,BREWER,in D,setting,yes,0.75,IMG_4359,
-D-262,BRITTEN,Jubilate in C,setting,yes,0.80,IMG_4364;IMG_4367,
-D-263,BYRD,Mag & Nunc 2nd F (2 of 2),setting,yes,0.70,IMG_4358,
-D-264,DYSON,in F; in D; in C minor,setting,no,0.85,IMG_4358;IMG_4359,
-D-265,FARRANT,(services) + Greg. Tone + Gibbons cross-refs,setting,yes,0.55,IMG_4358;IMG_4359,check
-D-266,GIBBONS,Second Service,setting,no,0.85,IMG_4358,
-D-267,HARWOOD,in A flat,setting,no,0.85,IMG_4358,
-D-268,HOWELLS,Collegium Regale,setting,no,0.85,IMG_4358,
-D-269,HOWELLS,Gloucester Service,setting,no,0.85,IMG_4358,
-D-270,HOWELLS,St Paul's Service (2 boxes),setting,yes,0.85,IMG_4359,
-D-271,HOWELLS,Collegium Regale Communion,setting,yes,0.60,IMG_4365,
-D-272,IRELAND,in F,setting,yes,0.80,IMG_4359,
-D-273,IRELAND,in C,setting,yes,0.70,IMG_4365,
-D-274,IRELAND,Te Deum Laudamus (2 boxes),canticle,mixed,0.85,IMG_4363;IMG_4364;IMG_4367,
-D-275,JACKSON,in G,setting,yes,0.60,IMG_4359,
-D-276,KELLY,in C,setting,no,0.75,IMG_4359,
-D-277,LANGLAIS,Messe solennelle,setting,yes,0.85,IMG_4365,
-D-278,LEIGHTON,Collegium Magdalenae Oxoniense,setting,yes,0.55,IMG_4359,
-D-279,LONG,in A; Mag and Nunc,setting,yes,0.65,IMG_4359,
-D-280,LOTTI,Missa a tre voci (ATB),setting,yes,0.60,IMG_4365,
-D-281,MORRILL (E.),(service setting),setting,yes,0.70,IMG_4358;IMG_4359,check
-D-282,MOZART,Missa brevis in C,setting,yes,0.75,IMG_4365;IMG_4366,K number illegible
-D-283,NOBLE,in A minor,setting,no,0.85,IMG_4358;IMG_4359,
-D-284,NOBLE,Second (Service?),setting,yes,0.40,IMG_4358,check
-D-285,PALESTRINA,Missa brevis in F,setting,yes,0.85,IMG_4365;IMG_4366,
-D-286,PAYNE,(Service); in C,setting,yes,0.40,IMG_4358,check
-D-287,PLAINSONG,Magnificat Tone VI; Nunc Dimittis Tone IV,setting,yes,0.45,IMG_4359,check
-D-288,RHEINBERGER,Mass in E flat,setting,yes,0.80,IMG_4365;IMG_4366,
-D-289,SEIBER,Missa brevis,setting,yes,0.85,IMG_4366,
-D-290,SPEDDING,in B flat,setting,yes,0.80,IMG_4362,
-D-291,SPEDDING,(another setting),setting,yes,0.30,IMG_4367,check
-D-292,STANFORD,in B flat (+ Te Deum),setting,mixed,0.85,IMG_4362;IMG_4363;IMG_4364;IMG_4367,
-D-293,STANFORD,in C (+ Te Deum),setting,yes,0.70,IMG_4362;IMG_4364,
-D-294,STANFORD,in E (+ Reproaches?),setting,yes,0.40,IMG_4364,check
-D-295,STANFORD,Jubilate in B flat,canticle,yes,0.55,IMG_4364,
-D-296,STANFORD,Communion Service in B flat,setting,yes,0.55,IMG_4365;IMG_4366,
-D-297,STATHAM,in E minor,setting,no,0.75,IMG_4362,
-D-298,SUMSION,in G (Mag & Nunc),setting,yes,0.60,IMG_4362;IMG_4367,
-D-299,SUMSION,in A (+ in C?),setting,yes,0.65,IMG_4362;IMG_4367,
-D-300,SUMSION,in D and G,setting,yes,0.60,IMG_4362,
-D-301,SUMSION,in F,setting,yes,0.85,IMG_4366;IMG_4367,
-D-302,TALLIS,Short Service (Dorian),setting,yes,0.80,IMG_4363;IMG_4367,
-D-303,THORNE,Mass of St Thomas,setting,yes,0.85,IMG_4366;IMG_4367,
-D-304,TOMKINS,Second Service; Fauxbourdons?,setting,yes,0.50,IMG_4363;IMG_4367,
-D-305,TOMKINS,Fifth Service (2 boxes),setting,yes,0.85,IMG_4363;IMG_4367,
-D-306,WALMISLEY,in D minor,setting,yes,0.85,IMG_4363;IMG_4367,
-D-307,WEELKES,(Service) for 5 voices,setting,yes,0.85,IMG_4363;IMG_4367,
-D-308,WEELKES / WALMISLEY,Weelkes Short Service; Walmisley in D,setting,yes,0.45,IMG_4363;IMG_4367,damaged; check
-D-309,WESLEY,in E (2 boxes),setting,yes,0.90,IMG_4363;IMG_4367,
-D-310,WEST,in C (ATB),setting,yes,0.50,IMG_4363;IMG_4367,check
-D-311,WOOD,in D,setting,yes,0.80,IMG_4363,
-D-312,WOOD,in E flat no.1; in E flat no.2,setting,yes,0.70,IMG_4363,
-D-313,WOOD,in G (ATB),setting,yes,0.75,IMG_4364;IMG_4367,
-D-314,WESLEY,Blessed be the God and Father,anthem,mixed,0.85,IMG_4354,two parcels (hw + SS Wesley typed set)
-D-315,WESLEY,Thou wilt keep him; Wash me throughly (S.S. Wesley set),anthem,no,0.80,IMG_4354,
-D-316,WESLEY,The Wilderness (2 boxes),anthem,yes,0.85,IMG_4354;IMG_4360,
-D-317,WESLEY,Ascribe unto the Lord (2 boxes),anthem,yes,0.80,IMG_4354,
-D-318,WESLEY,In exitu Israel,anthem,yes,0.80,IMG_4354,
-D-319,WESLEY,The Lord (title incomplete),anthem,yes,0.30,IMG_4354,check
-D-320,MISC BOX,Misc. Sacred,collection,no,0.55,IMG_4361,
-D-321,HANDEL,Messiah (Novello vocal scores ~10 copies),major work,no,0.75,IMG_4361,
-D-322,COLLECTION,Anthems - Stainer & Simper?,collection,no,0.60,IMG_4358;IMG_4359,check label
-D-323,COLLECTION,Unison / S.A. Evenings,collection,no,0.90,IMG_4320,
-D-324,SCHUBERT?,Nunc dimittis? (reddish parcel),anthem,yes,0.20,IMG_4338,check; re-shoot
+ref,composer,composer_full,surname,season,titles,category,handwritten,confidence,source_photos,flags
+D-001,ADAMS,Adams,Adams,harvest,Is it not wheat harvest today?,anthem,yes,0.95,IMG_4285,
+D-002,ALLEGRI,Gregorio Allegri,Allegri,lent;passiontide,Miserere,anthem,no,0.95,IMG_4272,
+D-003,ALLEGRI,Gregorio Allegri,Allegri,pentecost,Veni Sancte Spiritus,anthem,yes,0.85,IMG_4272,
+D-004,AMNER,John Amner,Amner,,"Come, let's rejoice",anthem,yes,0.70,IMG_4272,check
+D-005,ANDREWS,Andrews,Andrews,,O sing the glories,anthem,no,0.90,IMG_4272,
+D-006,ANERIO,Felice Anerio,Anerio,passiontide;holyweek,Christus factus est,anthem,no,0.95,IMG_4272,
+D-007,ANON (16th c.),Anonymous,Anon,,Rejoice in the Lord alway,anthem,no,0.90,IMG_4272,see also REDFORD D-172
+D-008,ARCADELT,Jacques Arcadelt,Arcadelt,,O sacrum convivium,anthem,yes,0.85,IMG_4272,
+D-009,ASTON,Peter Aston,Aston,,The true glory,anthem,no,0.90,IMG_4272,
+D-010,ASTON,Peter Aston,Aston,,Alleluya psallat,anthem,no,0.90,IMG_4272,
+D-011,ASTON,Peter Aston,Aston,,For I went,anthem,no,0.90,IMG_4272,
+D-012,ATTWOOD,Thomas Attwood,Attwood,,Teach me O Lord,anthem,no,0.95,IMG_4272,
+D-013,ATTWOOD,Thomas Attwood,Attwood,,Turn Thy face,anthem,no,0.90,IMG_4272,damaged
+D-014,ATTWOOD,Thomas Attwood,Attwood,pentecost,Come Holy Ghost,anthem,no,0.85,IMG_4272,damaged
+D-015,BACH,Johann Sebastian Bach,Bach,,Three Chorales,anthem,no,0.97,IMG_4272,
+D-016,BACH,Johann Sebastian Bach,Bach,advent,Zion hears,anthem,no,0.95,IMG_4272,
+D-017,BACH,Johann Sebastian Bach,Bach,,My heart ever faithful,anthem,no,0.95,IMG_4272,
+D-018,BACH,Johann Sebastian Bach,Bach,,God liveth aye,anthem,no,0.80,IMG_4272,damaged
+D-019,BACH,Johann Sebastian Bach,Bach,,"Jesu, joy",anthem,no,0.95,IMG_4272;IMG_4273,
+D-020,BACH,Johann Sebastian Bach,Bach,,Commit thy way,anthem,no,0.95,IMG_4272,
+D-021,BAINTON,Edgar Bainton,Bainton,,And I saw a new heaven,anthem,yes,0.85,IMG_4273,
+D-022,BAIRSTOW,Edward Bairstow,Bairstow,lent,Lamentation; Jesu grant me this,anthem,no,0.85,IMG_4273,
+D-023,BAIRSTOW,Edward Bairstow,Bairstow,,Let all mortal flesh keep silence,anthem,yes,0.95,IMG_4273;IMG_4450,
+D-024,BAIRSTOW,Edward Bairstow,Bairstow,,"Save us, O Lord",anthem,no,0.98,IMG_4277,cover photo
+D-025,BALFOUR GARDINER,Henry Balfour Gardiner,Balfour Gardiner,,Evening Hymn,anthem,yes,0.90,IMG_4273,
+D-026,BATTEN,Adrian Batten,Batten,,O sing joyfully; Deliver us O Lord; O praise the Lord,anthem,no,0.95,IMG_4273,
+D-027,BATTISHILL,Jonathan Battishill,Battishill,,O Lord look down from heaven,anthem,yes,0.70,IMG_4273,
+D-028,BLITHEMAN,Blitheman,Blitheman,lent,In pace,anthem,yes,0.40,IMG_4287,check; possible old ref CC10
+D-029,BLOW,John Blow,Blow,,Let Thy hand; O pray for the peace; My God my God; Salvator mundi,anthem,no,0.95,IMG_4286;IMG_4287,
+D-030,BOYCE,William Boyce,Boyce,,I have surely built,anthem,no,0.90,IMG_4286;IMG_4287,pencil 44 on box
+D-031,BOYCE,William Boyce,Boyce,,Turn thee unto me,anthem,yes,0.95,IMG_4273;IMG_4286,
+D-032,BOYCE,William Boyce,Boyce,,All the ends of the world; O where shall wisdom; O turn away (Trebles); The Lord is King (ATB),anthem,no,0.80,IMG_4286;IMG_4287,
+D-033,BRAHMS,Johannes Brahms,Brahms,,Wie lieblich sind,anthem,yes,0.90,IMG_4273;IMG_4286,
+D-034,BRAHMS,Johannes Brahms,Brahms,,How lovely are; Behold all flesh,anthem,no,0.90,IMG_4286;IMG_4287,
+D-035,BRITTEN,Benjamin Britten,Britten,christmas,A Ceremony of Carols,carol,no,1.00,IMG_4288,cover photo; SATB Boosey & Hawkes
+D-036,BRITTEN,Benjamin Britten,Britten,,Rejoice in the Lamb,anthem,yes,0.80,IMG_4275,
+D-037,BRITTEN,Benjamin Britten,Britten,,Jubilate Deo,canticle,no,0.95,IMG_4275,
+D-038,BRUCKNER,Anton Bruckner,Bruckner,passiontide,Locus iste; Christus factus est,anthem,no,0.95,IMG_4275,
+D-039,BUCK,Buck,Buck,,O Lord God,anthem,yes,0.90,IMG_4276,(SS) circled
+D-040,BULLOCK,Ernest Bullock,Bullock,allsaints;saints,Give us the wings of faith,anthem,yes,0.95,IMG_4276;IMG_4286,
+D-041,BYRD,William Byrd,Byrd,lent;easter,Christe qui lux; Sacerdotes Domini; Victimae Paschali,anthem,no,0.95,IMG_4275,
+D-042,BYRD,William Byrd,Byrd,,Bow thine ear,anthem,no,0.90,IMG_4275,
+D-043,BYRD,William Byrd,Byrd,easter,Ave verum corpus; Terra tremuit,anthem,no,0.95,IMG_4275,
+D-044,BYRD,William Byrd,Byrd,,Laudibus in sanctis; Emendemus in melius,anthem,yes,0.80,IMG_4275,
+D-045,BYRD,William Byrd,Byrd,,Non vos relinquam; O Lord make Thy servant Elizabeth; Sing joyfully,anthem,no,0.90,IMG_4278,
+D-046,BYRD,William Byrd,Byrd,candlemas,Senex puerum portabat; Teach me O Lord,anthem,yes,0.55,IMG_4278,check attribution
+D-047,BYRD,William Byrd,Byrd,candlemas;epiphany,Hodie beata virgo; Ecce advenit,anthem,yes,0.90,IMG_4278;IMG_4279,
+D-048,BYRD,William Byrd,Byrd,christmas,Laetentur coeli,anthem,no,0.85,IMG_4278,
+D-049,BYRD,William Byrd,Byrd,allsaints,O quam gloriosum; Two Sacred Songs,anthem,no,0.95,IMG_4278,
+D-050,BYRD,William Byrd,Byrd,,Prevent us O Lord; Miserere mei; Lord in Thy rage (ATB),anthem,no,0.90,IMG_4278,
+D-051,BYRD,William Byrd,Byrd,christmas;pentecost,O admirabile commercium; Veni Sancte Spiritus reple (men's voices),anthem,yes,0.90,IMG_4279;IMG_4451,
+D-052,CAMPBELL,Sidney Campbell,Campbell,saints,Fanfare for Michaelmas,anthem,no,0.95,IMG_4281,
+D-053,CAMPBELL,Sidney Campbell,Campbell,,Sing we merrily,anthem,no,0.95,IMG_4281,
+D-054,CARTER,Carter,Carter,,God be in my head,anthem,yes,0.90,IMG_4281,
+D-055,CORNYSHE,William Cornysh,Cornyshe,passiontide,Woefully array'd,anthem,no,0.95,IMG_4281,
+D-056,CROFT,William Croft,Croft,funeral,Funeral Service,anthem,yes,0.90,IMG_4281,
+D-057,DALEY,Eleanor Daley,Daley,,Upon your heart,anthem,yes,0.90,IMG_4281,
+D-058,DOVE,Jonathan Dove,Dove,,Seek Him,anthem,yes,0.90,IMG_4283,two copies/parcels
+D-059,DUNSTAPLE,John Dunstaple,Dunstaple,,Kyrie (ATBar ed. Biazeck),anthem,no,0.95,IMG_4282,cover photo
+D-060,DURUFLE,Maurice Duruflé,Duruflé,holyweek,Ubi caritas,anthem,yes,0.90,IMG_4281,
+D-061,DURUFLE,Maurice Duruflé,Duruflé,saints,Tu es Petrus,anthem,yes,0.90,IMG_4281,
+D-062,EAST,Michael East,East,,When Israel came out of Egypt,anthem,yes,0.90,IMG_4283,OCT 19 note
+D-063,ECCARD,Johannes Eccard,Eccard,candlemas,When to the Temple,anthem,yes,0.85,IMG_4283,old code under label
+D-064,ELGAR,Edward Elgar,Elgar,,The Spirit of the Lord,anthem,yes,0.90,IMG_4283,
+D-065,ELGAR,Edward Elgar,Elgar,,Give unto the Lord,anthem,yes,0.90,IMG_4283,
+D-066,ELGAR,Edward Elgar,Elgar,,Ave verum corpus,anthem,yes,0.85,IMG_4283,
+D-067,FARRANT,Richard Farrant,Farrant,lent,Hide not Thou; Call to remembrance,anthem,no,0.90,IMG_4283,
+D-068,FAURE,Gabriel Fauré,Fauré,,Ave verum,anthem,yes,0.90,IMG_4284,
+D-069,FAURE,Gabriel Fauré,Fauré,,Cantique de Jean Racine,anthem,yes,0.90,IMG_4284,
+D-070,FAURE,Gabriel Fauré,Fauré,funeral,Requiem (2 parcels),major work,yes,0.95,IMG_4284,
+D-071,de FEVIN,Antoine de Févin,de Févin,trinity,Sancta Trinitas,anthem,no,0.75,IMG_4283,
+D-072,FINZI,Gerald Finzi,Finzi,ascension,God is gone up,anthem,yes,0.75,IMG_4284,
+D-073,FRANCK,César Franck,Franck,,Panis angelicus,anthem,yes,0.90,IMG_4284,
+D-074,GESUALDO,Carlo Gesualdo,Gesualdo,passiontide;holyweek,O vos omnes,anthem,no,0.90,IMG_4290;IMG_4453,
+D-075,GIBBONS,Orlando Gibbons,Gibbons,advent,This is the record of John; Spirit all-Holy (Song 22),anthem,no,0.90,IMG_4290;IMG_4452;IMG_4453,
+D-076,GIBBONS,Orlando Gibbons,Gibbons,advent;holyweek,Hosanna to the Son of David; Almighty and everlasting God,anthem,yes,0.55,IMG_4290,check
+D-077,GOWER,Gower,Gower,,Tune me O Lord,anthem,yes,0.75,IMG_4290,
+D-078,GREENE,Maurice Greene,Greene,harvest,My lips shall speak; Thou visitest the earth; Lord let me know; Acquaint thyself,anthem,no,0.90,IMG_4291,pencil 26?
+D-079,GUERRERO,Francisco Guerrero,Guerrero,,Accepit Iesu panes,anthem,yes,0.55,IMG_4290,check
+D-080,GOODALL,Howard Goodall,Goodall,,The Lord is my Shepherd,anthem,yes,0.90,IMG_4291,
+D-081,HADLEY,Patrick Hadley,Hadley,,My beloved spake,anthem,no,0.55,IMG_4304,check vs SANDERS D-176
+D-082,HANDEL,George Frideric Handel,Handel,,Worthy is the Lamb,anthem,yes,0.98,IMG_4291;IMG_4292,
+D-083,HANDEL,George Frideric Handel,Handel,,My belov'd is mine,anthem,yes,0.40,IMG_4291,check
+D-084,HANDEL,George Frideric Handel,Handel,,Let the bright seraphim (Trebles); Zadok the Priest,anthem,yes,0.75,IMG_4291,damaged
+D-085,HANDEL,George Frideric Handel,Handel,advent;passiontide;easter,Since by man came death; Behold the Lamb of God; And the glory of the Lord,anthem,yes,0.85,IMG_4291,
+D-086,HANDEL,George Frideric Handel,Handel,christmas;easter,Hallelujah Chorus,anthem,yes,0.90,IMG_4291,
+D-087,HANDEL,George Frideric Handel,Handel,,Zadok the Priest (York Series SSAATBB),anthem,no,0.97,IMG_4293,cover; Leeds Parish Church stamp; refs 232 / Y.S.370
+D-088,HANDL (GALLUS),Jacob Handl,Handl,christmas,In nomine Jesu; Mirabile mysterium,anthem,yes,0.40,IMG_4291,check
+D-089,HANDL (GALLUS),Jacob Handl,Handl,advent,Pater noster; Egredietur virga; Cantate tuba,anthem,yes,0.40,IMG_4304,check; label reads Harell
+D-090,HARRIS,William H. Harris,Harris,,Faire is the heaven,anthem,no,0.90,IMG_4299;IMG_4304,
+D-091,HARRIS,William H. Harris,Harris,,O what their joy,anthem,no,0.90,IMG_4296;IMG_4299;IMG_4304,
+D-092,HARRIS,William H. Harris,Harris,,Bring us O Lord,anthem,yes,0.55,IMG_4299;IMG_4304,
+D-093,HARRIS,William H. Harris,Harris,,The Holy Eucharist,setting,no,0.90,IMG_4304,
+D-094,HARRIS,William H. Harris,Harris,pentecost,Come down O Love divine,anthem,yes,0.85,IMG_4295,
+D-095,HARRIS,William H. Harris,Harris,,King of glory King of peace,anthem,yes,0.90,IMG_4296,SSS circled
+D-096,HARRIS,William H. Harris,Harris,passiontide,Vox ultima Crucis (in English),anthem,yes,0.92,IMG_4297,U circled
+D-097,HARRIS,William H. Harris,Harris,,Behold the tabernacle of God,anthem,yes,0.95,IMG_4298,
+D-098,HARWOOD,Basil Harwood,Harwood,allsaints,O how glorious is the Kingdom (2 parcels),anthem,mixed,0.90,IMG_4299;IMG_4304,
+D-099,HASSLER,Hans Leo Hassler,Hassler,christmas,Laetentur coeli (TTBB),anthem,no,0.90,IMG_4302,
+D-100,HAYDN,Joseph Haydn,Haydn,,Insanae et vanae curae,anthem,no,0.92,IMG_4302,damaged
+D-101,HAYDN,Joseph Haydn,Haydn,,The heavens are telling,anthem,no,0.95,IMG_4302,
+D-102,HAYDN,Joseph Haydn,Haydn,,Achieved is the glorious work,anthem,no,0.85,IMG_4304,
+D-103,HEWITT-JONES,Tony Hewitt-Jones,Hewitt-Jones,,At the round earth's imagin'd corners,anthem,yes,0.85,IMG_4303,
+D-104,HEWITT-JONES,Tony Hewitt-Jones,Hewitt-Jones,,New Service,setting,yes,0.35,IMG_4303,check
+D-105,HEWITT-JONES,Tony Hewitt-Jones,Hewitt-Jones,,In our service,anthem,yes,0.50,IMG_4302,check
+D-106,HILTON,John Hilton,Hilton,lent,Lord for Thy tender,anthem,no,0.90,IMG_4302,
+D-107,HOLLINS,Alfred Hollins,Hollins,easter,Why seek ye the living among the dead,anthem,yes,0.75,IMG_4306,
+D-108,HOLLINS,Alfred Hollins,Hollins,,God the All-Fatherly,anthem,yes,0.90,IMG_4307,
+D-109,HOLST,Gustav Holst,Holst,,Turn back O man,anthem,yes,0.95,IMG_4308,
+D-110,HOLST,Gustav Holst,Holst,marian,Ave Maria,anthem,yes,0.55,IMG_4309,check contents
+D-111,HOWELLS,Herbert Howells,Howells,marian,Behold O God our defender; Salve Regina; O salutaris hostia,anthem,yes,0.75,IMG_4302,
+D-112,HOWELLS,Herbert Howells,Howells,,Like as the hart,anthem,mixed,0.95,IMG_4302;IMG_4312,two parcels
+D-113,HOWELLS,Herbert Howells,Howells,,My eyes for beauty,anthem,no,0.90,IMG_4302,
+D-114,HOWELLS,Herbert Howells,Howells,,When first thine eies,anthem,no,0.90,IMG_4302,
+D-115,HOWELLS,Herbert Howells,Howells,saints,A Hymn for St Cecilia,anthem,yes,0.92,IMG_4311,
+D-116,HOWELLS,Herbert Howells,Howells,,O pray for the peace of Jerusalem,anthem,yes,0.97,IMG_4310,
+D-117,HURFORD,Peter Hurford,Hurford,pentecost,Litany to the Holy Spirit,anthem,no,0.88,IMG_4314,shared box with next two
+D-118,HUMFREY,Pelham Humfrey,Humfrey,,Rejoice in the Lord,anthem,no,0.95,IMG_4314,
+D-119,HURD,Michael Hurd,Hurd,,O come let us sing,anthem,no,0.95,IMG_4314,
+D-120,IRELAND,John Ireland,Ireland,passiontide;remembrance,Greater love; Ex ore innocentium,anthem,no,0.93,IMG_4314,
+D-121,JACOB (arr.),Gordon Jacob,Jacob,,Brother James's Air (SATB),anthem,yes,0.90,IMG_4315;IMG_4316;IMG_4317,also OUP unison/descant copy
+D-122,JOHNSON,Johnson,Johnson,passiontide;holyweek,Benedicam Domino; Crux fidelis,anthem,no,0.80,IMG_4314;IMG_4318,
+D-123,JONES,Jones,Jones,passiontide,Morte Christe,anthem,yes,0.65,IMG_4314,check
+D-124,JOUBERT,John Joubert,Joubert,,O Lorde the maker,anthem,no,0.45,IMG_4314,check title
+D-125,KING (John IV of Portugal),John IV of Portugal,King,passiontide;holyweek,Crux fidelis; Bread of the world,anthem,yes,0.55,IMG_4320,check
+D-126,LASSUS,Orlande de Lassus,Lassus,passiontide;holyweek,Tristis est anima,anthem,yes,0.75,IMG_4320,
+D-127,LAURIDSEN,Morten Lauridsen,Lauridsen,christmas,O magnum mysterium,anthem,yes,0.90,IMG_4319,
+D-128,LEIGHTON,Kenneth Leighton,Leighton,,Let all the world,anthem,yes,0.90,IMG_4320,
+D-129,LEY,Henry Ley,Ley,easter,The strife is o'er,anthem,yes,0.90,IMG_4322,
+D-130,LINDLEY,Simon Lindley,Lindley,marian,Ave Maria,anthem,yes,0.45,IMG_4320,check
+D-131,LOCK,Lock,Lock,wedding,Love is patient,anthem,yes,0.40,IMG_4320,check
+D-132,LOOSEMORE,Henry Loosemore,Loosemore,,O Lord increase my faith,anthem,yes,0.55,IMG_4320,
+D-133,LOTTI,Antonio Lotti,Lotti,passiontide,Crucifixus,anthem,yes,0.70,IMG_4320,
+D-134,MACMILLAN,James MacMillan,MacMillan,,O give thanks unto the Lord,anthem,yes,0.60,IMG_4320,check
+D-135,MARCELLO,Benedetto Marcello,Marcello,,Give ear unto me (Trebles),anthem,no,0.85,IMG_4324,
+D-136,MARCHANT,Stanley Marchant,Marchant,allsaints,The souls of the righteous,anthem,yes,0.97,IMG_4325,
+D-137,MARTIN,Martin,Martin,,Magnify His name,anthem,yes,0.97,IMG_4326,
+D-138,MASCAGNI,Pietro Mascagni,Mascagni,easter,Easter Hymn (Cavalleria Rusticana),anthem,no,0.97,IMG_4323,cover; old ref S.11?
+D-139,MATHIAS,William Mathias,Mathias,ascension,Lift up your heads O ye gates,anthem,yes,0.97,IMG_4327,
+D-140,MAWBY,Colin Mawby,Mawby,funeral,Libera me Domine,anthem,no,0.50,IMG_4324,check
+D-141,MAWBY?,Mawby,Mawby,christmas,Christ is born,carol,yes,0.50,IMG_4300,label reads MAWES; check
+D-142,MCKIE,William McKie,McKie,,We wait for thy loving kindness,anthem,no,0.65,IMG_4331;IMG_4332,
+D-143,MENDELSSOHN,Felix Mendelssohn,Mendelssohn,,Hear my prayer,anthem,yes,0.85,IMG_4324,
+D-144,MENDELSSOHN,Felix Mendelssohn,Mendelssohn,,How lovely are Thy messengers,anthem,yes,0.85,IMG_4324;IMG_4325;IMG_4326;IMG_4327,
+D-145,MENDELSSOHN,Felix Mendelssohn,Mendelssohn,,Lift thine eyes,anthem,no,0.70,IMG_4324,
+D-146,MENDELSSOHN,Felix Mendelssohn,Mendelssohn,christmas;epiphany,He that shall endure; When Jesus our Lord; Say where He is born; There shall a star,anthem,yes,0.65,IMG_4324,
+D-147,MENDELSSOHN,Felix Mendelssohn,Mendelssohn,,Behold God the Lord,anthem,yes,0.70,IMG_4324,
+D-148,MESSIAEN,Olivier Messiaen,Messiaen,,O sacrum convivium,anthem,yes,0.95,IMG_4328,
+D-149,MONTEVERDI,Claudio Monteverdi,Monteverdi,marian,Ave maris stella,anthem,no,0.85,IMG_4324,
+D-150,MOORE,Moore,Moore,,Through the day,anthem,yes,0.60,IMG_4324,
+D-151,MORLEY,Thomas Morley,Morley,,Agnus Dei,anthem,no,0.85,IMG_4324,
+D-152,MORLEY,Thomas Morley,Morley,funeral,I am the resurrection,anthem,no,0.75,IMG_4324;IMG_4328,
+D-153,MORLEY,Thomas Morley,Morley,lent;passiontide,Nolo mortem peccatoris; Out of the deep,anthem,yes,0.90,IMG_4329;IMG_4331,two parcels
+D-154,MORLEY,Thomas Morley,Morley,,Let my complaint,anthem,no,0.97,IMG_4333,cover photo
+D-155,MOZART,Wolfgang Amadeus Mozart,Mozart,,Ave verum corpus,anthem,mixed,0.90,IMG_4331;IMG_4332,
+D-156,MOZART,Wolfgang Amadeus Mozart,Mozart,,Laudate pueri,anthem,no,0.70,IMG_4331,check
+D-157,MOZART,Wolfgang Amadeus Mozart,Mozart,,Laudate Dominum,anthem,yes,0.95,IMG_4331,
+D-158,MUDD,Thomas Mudd,Mudd,,Let Thy merciful ears,anthem,yes,0.90,IMG_4331,possible old ref F7
+D-159,MUDD,Thomas Mudd,Mudd,,O Lord the maker of all things; Sing joyfully,anthem,yes,0.85,IMG_4331,Sing Joyfully likely Byrd
+D-160,MUNDY,William Mundy,Mundy,,O Lord the maker of all thing,anthem,yes,0.95,IMG_4334,Tudor Church Music wallet
+D-161,NARES,James Nares,Nares,,The voice of joy (Trebles); Try me O God,anthem,no,0.75,IMG_4335,damaged
+D-162,NAYLOR,Edward Naylor,Naylor,advent,Vox dicentis: Clama,anthem,yes,0.85,IMG_4335;IMG_4340,
+D-163,NICHOLSON,Sydney Nicholson,Nicholson,,Two motets: O salutaris / Tantum ergo,anthem,no,0.75,IMG_4335,damaged
+D-164,OLDROYD,George Oldroyd,Oldroyd,,Prayer to Jesus,anthem,no,0.40,IMG_4336,check
+D-165,OUSELEY,Frederick Ouseley,Ouseley,,For He is good,anthem,yes,0.95,IMG_4339,
+D-166,OUSELEY,Frederick Ouseley,Ouseley,,From the rising of the sun,anthem,yes,0.95,IMG_4340,
+D-167,PALESTRINA,Giovanni Pierluigi da Palestrina,Palestrina,,Adoramus te; O bone Jesu; Tu es Petrus,anthem,no,0.90,IMG_4335,
+D-168,PALESTRINA,Giovanni Pierluigi da Palestrina,Palestrina,,Exsultate Deo,anthem,no,0.85,IMG_4335,
+D-169,PALESTRINA/PLAINSONG,Giovanni Pierluigi da Palestrina,Palestrina,,Now my tongue,anthem,no,0.85,IMG_4335,
+D-170,PALESTRINA,Giovanni Pierluigi da Palestrina,Palestrina,,Sicut cervus; Deus tu convertens,anthem,yes,0.85,IMG_4335,
+D-171,PALESTRINA,Giovanni Pierluigi da Palestrina,Palestrina,trinity,Benedicta sit Sancta Trinitas (F and E flat),anthem,yes,0.85,IMG_4335,
+D-172,PARRY,Charles Hubert Hastings Parry,Parry,,Hear my words,anthem,yes,0.90,IMG_4336,
+D-173,PARRY,Charles Hubert Hastings Parry,Parry,,My soul there is a country; Long since in Egypt,anthem,yes,0.65,IMG_4336,
+D-174,PARRY,Charles Hubert Hastings Parry,Parry,,Blest pair of sirens (2 parcels),anthem,yes,0.65,IMG_4336,
+D-175,PARRY,Charles Hubert Hastings Parry,Parry,funeral,Crossing the bar,anthem,no,0.60,IMG_4336;IMG_4459,damaged
+D-176,PARRY,Charles Hubert Hastings Parry,Parry,,I was glad,anthem,no,0.95,IMG_4336;IMG_4457,damaged
+D-177,PARRY,Charles Hubert Hastings Parry,Parry,,There is an old belief,anthem,yes,0.95,IMG_4341,
+D-178,PARSONS,Robert Parsons,Parsons,marian,Ave Maria,anthem,yes,0.85,IMG_4336,
+D-179,PHILIPS,Peter Philips,Philips,ascension,Ascendit Deus,anthem,no,0.85,IMG_4336,
+D-180,PITONI,Giuseppe Pitoni,Pitoni,,Cantate Domino,anthem,no,0.80,IMG_4336,
+D-181,PITONI,Giuseppe Pitoni,Pitoni,,Laudate Dominum,anthem,yes,0.95,IMG_4342,Musica Sacra Nr.30 insert
+D-182,POWER,Leonel Power,Power,marian,Beata progenies (ATB?),anthem,no,0.30,IMG_4336,damaged; check
+D-183,POWELL (Rosephanye),Rosephanye Powell,Powell,christmas,The Word was God,anthem,no,0.97,IMG_4345,cover; modern addition
+D-184,POYSER,Robert Poyser,Poyser,saints,Hail bright Cecilia; O come let us sing; Immortal love; We beseech thee,anthem,yes,0.95,IMG_4337;IMG_4460;IMG_4461;IMG_4462;IMG_4463,
+D-185,POYSER,Robert Poyser,Poyser,christmas;epiphany;marian,The Angel Gabriel; Lo Sages from the East; O God my heart is ready; What child is this,carol,yes,0.95,IMG_4337;IMG_4464;IMG_4465;IMG_4466;IMG_4467,
+D-186,PURCELL,Henry Purcell,Purcell,,Rejoice in the Lord,anthem,no,0.90,IMG_4337,
+D-187,PURCELL,Henry Purcell,Purcell,funeral,Thou knowest Lord,anthem,no,0.90,IMG_4337;IMG_4343,
+D-188,PURCELL,Henry Purcell,Purcell,,Praise the Lord O Jerusalem,anthem,yes,0.70,IMG_4337,
+D-189,PURCELL,Henry Purcell,Purcell,,Hear my prayer,anthem,yes,0.50,IMG_4337,check
+D-190,PURCELL,Henry Purcell,Purcell,,Lord how long,anthem,no,0.90,IMG_4337,
+D-191,PURCELL,Henry Purcell,Purcell,,O God Thou art my God,anthem,no,0.90,IMG_4337,
+D-192,PURCELL,Henry Purcell,Purcell,,Jehova quam multi sunt hostes (2 parcels),anthem,mixed,0.85,IMG_4337;IMG_4343,
+D-193,PURCELL,Henry Purcell,Purcell,funeral,Man that is born,anthem,no,0.90,IMG_4337,
+D-194,PURCELL,Henry Purcell,Purcell,,Remember not Lord,anthem,no,0.90,IMG_4337,
+D-195,PURCELL,Henry Purcell,Purcell,,Thy word is a lantern,anthem,no,0.85,IMG_4337;IMG_4338,possible old ref 94
+D-196,RADCLIFFE,Radcliffe,Radcliffe,,O bone Jesu; Fecisti nos / Pacem nobis,anthem,no,0.55,IMG_4337;IMG_4338;IMG_4348,check second title
+D-197,REDFORD,John Redford,Redford,,Rejoice in the Lord alway,anthem,yes,0.92,IMG_4348,
+D-198,RUTTER,John Rutter,Rutter,easter,God be in my head; A Gaelic blessing; The Lord bless you; Christ the Lord is risen; For the beauty of the earth,anthem,no,0.85,IMG_4338,
+D-199,RUTTER,John Rutter,Rutter,,A Clare Benediction,anthem,no,0.98,IMG_4347,cover; St Mark's Anlaby Common stamp
+D-200,SAMPSON,Sampson,Sampson,,O ye who bear Christ's holy name,anthem,yes,0.80,IMG_4346,
+D-201,SANDERS,John Sanders,Sanders,,My beloved spake / spoke,anthem,mixed,0.85,IMG_4337;IMG_4338,check vs Hadley
+D-202,SCARLATTI (A.),Alessandro Scarlatti,Scarlatti,,Exsultate Deo,anthem,no,0.85,IMG_4338,
+D-203,SCHUTZ,Heinrich Schütz,Schütz,,Praise to Thee,anthem,no,0.80,IMG_4338,
+D-204,SYMONS,Symons,Symons,,Sing we merrily (Trebles),anthem,no,0.80,IMG_4338,
+D-205,SANDERS,John Sanders,Sanders,holyweek,The Reproaches,anthem,yes,0.85,IMG_4353,
+D-206,DE SEVERAC,Déodat de Séverac,de Séverac,,Tantum ergo,anthem,yes,0.75,IMG_4353,
+D-207,SAINT-SAENS,Camille Saint-Saëns,Saint-Saëns,marian,Ave Maria,anthem,yes,0.55,IMG_4353,damaged; check
+D-208,SHEPHARD,Richard Shephard,Shephard,,The Secret of Christ,anthem,no,0.90,IMG_4353;IMG_4371,
+D-209,SHEPHARD,Richard Shephard,Shephard,,Three anthems (Jesu dulcis / Prayer for a new Mother / The Birds),anthem,no,0.90,IMG_4353;IMG_4371,
+D-210,SHEPPARD,John Sheppard,Sheppard,,In manus tuas,anthem,yes,0.85,IMG_4353;IMG_4371,
+D-211,STAINER,John Stainer,Stainer,passiontide,Crucifixion (Part I / Part II),major work,yes,0.85,IMG_4353;IMG_4355;IMG_4377,
+D-212,STAINER,John Stainer,Stainer,passiontide,God so loved the world; Crucifixion,anthem,yes,0.70,IMG_4353;IMG_4377,
+D-213,STANFORD,Charles Villiers Stanford,Stanford,allsaints;ascension,Justorum animae; Coelos ascendit; Beati quorum via,anthem,no,0.90,IMG_4355;IMG_4357;IMG_4378,
+D-214,STANFORD,Charles Villiers Stanford,Stanford,,A Song of Peace,anthem,yes,0.85,IMG_4355;IMG_4357;IMG_4360;IMG_4378,
+D-215,STANFORD,Charles Villiers Stanford,Stanford,,A Song of Wisdom,anthem,yes,0.50,IMG_4357;IMG_4360,check
+D-216,STANFORD,Charles Villiers Stanford,Stanford,,Glorious and powerful; The Lord is my shepherd,anthem,no,0.85,IMG_4357;IMG_4378,
+D-217,STANFORD,Charles Villiers Stanford,Stanford,easter,Ye choirs of new Jerusalem,anthem,yes,0.70,IMG_4355;IMG_4357;IMG_4378,
+D-218,SULLIVAN,Arthur Sullivan,Sullivan,,Lead kindly light,anthem,yes,0.85,IMG_4357;IMG_4360;IMG_4379,
+D-219,TALLIS,Thomas Tallis,Tallis,,Salvator mundi,anthem,yes,0.85,IMG_4353;IMG_4354;IMG_4380,
+D-220,TALLIS,Thomas Tallis,Tallis,,Litany a 5,anthem,no,0.80,IMG_4353;IMG_4354;IMG_4380,
+D-221,TALLIS,Thomas Tallis,Tallis,lent;passiontide,Lamentations (ATTBB),anthem,no,0.85,IMG_4353;IMG_4354;IMG_4380,
+D-222,TALLIS,Thomas Tallis,Tallis,,O Lord give Thy Holy Spirit; O nata lux; Te lucis ante terminum,anthem,no,0.90,IMG_4353;IMG_4354;IMG_4380,
+D-223,TALLIS,Thomas Tallis,Tallis,candlemas,O sacrum convivium; Videte miraculum,anthem,yes,0.85,IMG_4353;IMG_4354;IMG_4380,
+D-224,TAVENER / GORECKI,John Tavener,Tavener,christmas;marian,The Lamb; Totus tuus,anthem,yes,0.85,IMG_4353;IMG_4354;IMG_4380,
+D-225,TCHAIKOVSKY,Pyotr Ilyich Tchaikovsky,Tchaikovsky,trinity,Hymn to the Trinity,anthem,yes,0.85,IMG_4353;IMG_4354;IMG_4384,
+D-226,TCHAIKOVSKY,Pyotr Ilyich Tchaikovsky,Tchaikovsky,,Hymn to the Cherubim,anthem,yes,0.85,IMG_4353;IMG_4354;IMG_4384,
+D-227,TOMKINS / TYE,Thomas Tomkins,Tomkins,,When David heard; O come ye servants; Praise ye the Lord,anthem,yes,0.80,IMG_4354;IMG_4377;IMG_4384,
+D-228,TRAVERS,John Travers,Travers,,Ascribe unto the Lord (O worship the Lord),anthem,no,0.90,IMG_4355;IMG_4356;IMG_4377;IMG_4384;IMG_4386,
+D-229,TYE,Christopher Tye,Tye,,Give almes of thy goods,anthem,yes,0.65,IMG_4355;IMG_4356;IMG_4384;IMG_4385,
+D-230,VAUGHAN WILLIAMS,Ralph Vaughan Williams,Vaughan Williams,,O taste and see; Antiphon,anthem,no,0.85,IMG_4354;IMG_4356;IMG_4378;IMG_4396,
+D-231,VICTORIA,Tomás Luis de Victoria,Victoria,christmas,O magnum mysterium,anthem,yes,0.90,IMG_4355;IMG_4356;IMG_4385;IMG_4388,
+D-232,VICTORIA,Tomás Luis de Victoria,Victoria,saints;passiontide,Gaudent in coelis; Jesu dulcis memoria; Domine non sum dignus; O vos omnes,anthem,yes,0.80,IMG_4355;IMG_4356;IMG_4360;IMG_4385,
+D-233,VICTORIA,Tomás Luis de Victoria,Victoria,allsaints,O quam gloriosum,anthem,yes,0.90,IMG_4355;IMG_4356;IMG_4360;IMG_4385,
+D-234,VICTORIA,Tomás Luis de Victoria,Victoria,passiontide;holyweek,Palm Sunday Passion,anthem,yes,0.85,IMG_4355;IMG_4356;IMG_4357;IMG_4360;IMG_4385,
+D-235,VIVALDI,Antonio Vivaldi,Vivaldi,,Gloria,major work,yes,0.85,IMG_4355;IMG_4356;IMG_4357;IMG_4385;IMG_4388,
+D-236,WALKER,Walker,Walker,,I will lift up mine eyes (ATB),anthem,yes,0.90,IMG_4355;IMG_4356;IMG_4357;IMG_4360;IMG_4388,
+D-237,WELDON,John Weldon,Weldon,,In Thee O Lord,anthem,no,0.80,IMG_4357;IMG_4388,
+D-238,WELDON,John Weldon,Weldon,,O praise God (Ps 150),anthem,no,0.80,IMG_4357;IMG_4388,
+D-239,WEELKES,Thomas Weelkes,Weelkes,,Alleluia I heard a voice,anthem,no,0.85,IMG_4357;IMG_4360;IMG_4388,
+D-240,WEELKES,Thomas Weelkes,Weelkes,ascension,All people clap your hands,anthem,no,0.85,IMG_4357;IMG_4388,
+D-241,WEELKES,Thomas Weelkes,Weelkes,,Gloria in excelsis,anthem,no,0.85,IMG_4357;IMG_4388,
+D-242,WEELKES,Thomas Weelkes,Weelkes,advent;holyweek,Hosanna to the Son of David,anthem,no,0.85,IMG_4357;IMG_4388,
+D-243,WISE,Michael Wise,Wise,advent,Prepare ye the way; The ways of Zion,anthem,no,0.85,IMG_4356;IMG_4396,
+D-244,WOOD,Charles Wood,Wood,,Glory and honour; Expectans expectavi,anthem,no,0.90,IMG_4356;IMG_4396,
+D-245,WOOD,Charles Wood,Wood,,O most merciful; Oculi omnium; O Thou the central orb,anthem,no,0.80,IMG_4356;IMG_4360;IMG_4396,
+D-246,WOOD,Charles Wood,Wood,,Great Lord of Lords; Hail gladdening light,anthem,no,0.80,IMG_4356;IMG_4357;IMG_4360;IMG_4396,
+D-247,WOOD,Charles Wood,Wood,easter,This joyful Eastertide; Jesus Christ is risen today,anthem,yes,0.75,IMG_4356;IMG_4360;IMG_4396,
+D-248,RESPONSES BOX,Richard Ayleward,Ayleward,,Ayleward; Ebdon; Dewhurst,responses,yes,0.95,IMG_4349;IMG_4351;IMG_4436;IMG_4437;IMG_4438,
+D-249,RESPONSES BOX,William Byrd,Byrd,,Byrd; Morley; Smith; Tomkins,responses,yes,0.95,IMG_4349;IMG_4436;IMG_4437;IMG_4439,
+D-250,RESPONSES BOX,Orlando Gibbons,Gibbons,,Gibbons and Barnard; Leighton; Neary,responses,yes,0.95,IMG_4349;IMG_4436;IMG_4437;IMG_4440,
+D-251,RESPONSES BOX,John Reading,Reading,,Reading; Shephard; Smith,responses,yes,0.90,IMG_4349;IMG_4436;IMG_4437;IMG_4443,
+D-252,RESPONSES BOX,Plainsong,Plainsong,,Plainsong; Payne?,responses,yes,0.60,IMG_4349;IMG_4436;IMG_4437;IMG_4446,check second name
+D-253,RESPONSES BOX,Bernard Rose,Rose,,Rose,responses,yes,0.95,IMG_4349;IMG_4436;IMG_4437;IMG_4447,
+D-254,RESPONSES BOX,Alan Spedding,Spedding,,Spedding; Tallis (men's voices TT/BB); Stone Lord's Prayer; Farmer Lord's Prayer,responses,yes,0.90,IMG_4349;IMG_4436;IMG_4437;IMG_4448,
+D-255,HYMN DESCANTS,Various,Various,,St Patrick's Breastplate binder + Hymn Descants binder + numbered binders 1-150 (18 binders),hymn,yes,0.90,IMG_4350;IMG_4351;IMG_4352;IMG_4429;IMG_4430;IMG_4431;IMG_4432;IMG_4433,indexed by hymn number
+D-256,ARNOLD,John Henry Arnold,Arnold,,"Fauxbourdons (Simple 3-part Magnificat & Nunc Dimittis, ed. J.H. Arnold)",setting,yes,0.90,IMG_4359;IMG_4399;IMG_4402,
+D-257,ARNOLD,Arnold,Arnold,,in A,setting,no,0.90,IMG_4359;IMG_4399,
+D-258,ATKINS,Ivor Atkins,Atkins,,in G,setting,yes,0.85,IMG_4359;IMG_4399,
+D-259,BAIRSTOW,Edward Bairstow,Bairstow,,in E flat (trebles),setting,no,0.90,IMG_4359;IMG_4399,
+D-260,BLAIR,Hugh Blair,Blair,,in B minor,setting,no,0.90,IMG_4359;IMG_4399,
+D-261,BREWER,Herbert Brewer,Brewer,,in D,setting,yes,0.85,IMG_4359;IMG_4404,
+D-262,BRITTEN,Benjamin Britten,Britten,,Jubilate in C,setting,yes,0.85,IMG_4364;IMG_4367;IMG_4477;IMG_4499,
+D-263,BYRD,William Byrd,Byrd,,Mag & Nunc 2nd Service (1 of 2 and 2 of 2),setting,yes,0.90,IMG_4358;IMG_4407;IMG_4409,
+D-264,DYSON,George Dyson,Dyson,,in F; in D; in C minor,setting,no,0.90,IMG_4358;IMG_4359;IMG_4412;IMG_4413,
+D-265,FARRANT,Richard Farrant,Farrant,,"Evening Service (Mag & Nunc, 4 voices); Greg. Tone; Gibbons cross-refs",setting,yes,0.65,IMG_4358;IMG_4359;IMG_4413;IMG_4415,check
+D-266,GIBBONS,Orlando Gibbons,Gibbons,,Second Service,setting,no,0.85,IMG_4358;IMG_4413,
+D-267,HARWOOD,Basil Harwood,Harwood,,in A flat,setting,no,0.90,IMG_4358;IMG_4413,
+D-268,HOWELLS,Herbert Howells,Howells,,Collegium Regale,setting,no,0.95,IMG_4358;IMG_4419;IMG_4420,
+D-269,HOWELLS,Herbert Howells,Howells,,Gloucester Service,setting,no,0.90,IMG_4358;IMG_4419,
+D-270,HOWELLS,Herbert Howells,Howells,,St Paul's Service (2 boxes),setting,yes,0.90,IMG_4359;IMG_4421,
+D-271,HOWELLS,Herbert Howells,Howells,,Collegium Regale Communion,setting,yes,0.90,IMG_4365;IMG_4480;IMG_4506,
+D-272,IRELAND,John Ireland,Ireland,,in F,setting,yes,0.85,IMG_4359;IMG_4421,
+D-273,IRELAND,John Ireland,Ireland,,in C,setting,yes,0.75,IMG_4365;IMG_4481,
+D-274,IRELAND,John Ireland,Ireland,general,Te Deum Laudamus (2 boxes),canticle,mixed,0.85,IMG_4363;IMG_4364;IMG_4367;IMG_4477;IMG_4478;IMG_4501,
+D-275,JACKSON,Francis Jackson,Jackson,,in G,setting,yes,0.75,IMG_4359;IMG_4421,
+D-276,KELLY,Bryan Kelly,Kelly,,in C,setting,no,0.80,IMG_4359;IMG_4421,
+D-277,LANGLAIS,Jean Langlais,Langlais,,Messe solennelle,setting,yes,0.95,IMG_4365;IMG_4481;IMG_4508,
+D-278,LEIGHTON,Kenneth Leighton,Leighton,,Collegium Magdalenae Oxoniense,setting,yes,0.85,IMG_4359;IMG_4422,
+D-279,LANG,Craig Sellar Lang,Lang,,in A (Mag and Nunc),setting,yes,0.65,IMG_4359;IMG_4421,check name LANG vs LONG
+D-280,LOTTI,Antonio Lotti,Lotti,,Messa a tre voci (ATB),setting,yes,0.85,IMG_4365;IMG_4481;IMG_4509,
+D-281,MORRILL (E.),Morrill,Morrill,,(service setting),setting,yes,0.70,IMG_4358;IMG_4359;IMG_4422,check
+D-282,MOZART,Wolfgang Amadeus Mozart,Mozart,,Missa brevis in C (Spatzenmesse KV220),setting,yes,0.90,IMG_4365;IMG_4366;IMG_4482;IMG_4511;IMG_4513,check K number: cover KV220 / spine KV259
+D-283,NOBLE,Thomas Tertius Noble,Noble,,in A minor,setting,no,0.85,IMG_4358;IMG_4359;IMG_4422,
+D-284,NOBLE,Thomas Tertius Noble,Noble,,Second (Service?),setting,yes,0.40,IMG_4358,check
+D-285,PALESTRINA,Giovanni Pierluigi da Palestrina,Palestrina,,Missa brevis in F,setting,yes,0.90,IMG_4365;IMG_4366;IMG_4482;IMG_4513,
+D-286,PAYNE,Payne,Payne,,(Service); in C,setting,yes,0.40,IMG_4358,check
+D-287,PLAINSONG,Plainsong,Plainsong,,Magnificat Tone VI; Nunc Dimittis Tone IV,setting,yes,0.75,IMG_4359;IMG_4422,
+D-288,RHEINBERGER,Josef Rheinberger,Rheinberger,,Mass in E flat,setting,yes,0.80,IMG_4365;IMG_4366;IMG_4482;IMG_4513;IMG_4515,
+D-289,SEIBER,Mátyás Seiber,Seiber,,Missa brevis,setting,yes,0.95,IMG_4366;IMG_4483;IMG_4518,
+D-290,SPEDDING,Alan Spedding,Spedding,,in B flat,setting,yes,0.80,IMG_4362,
+D-291,SPEDDING,Alan Spedding,Spedding,,Magnificat (1985); possibly in E flat,setting,yes,0.55,IMG_4367;IMG_4472;IMG_4484,check
+D-292,STANFORD,Charles Villiers Stanford,Stanford,,in B flat (+ Te Deum),setting,mixed,0.95,IMG_4362;IMG_4363;IMG_4364;IMG_4367;IMG_4472;IMG_4473;IMG_4478;IMG_4479;IMG_4489;IMG_4490,
+D-293,STANFORD,Charles Villiers Stanford,Stanford,,in C - Mag & Nunc + Te Deum (Op. 115),setting,yes,0.95,IMG_4362;IMG_4364;IMG_4472;IMG_4473;IMG_4478;IMG_4486;IMG_4487;IMG_4502;IMG_4503,
+D-294,STANFORD,Charles Villiers Stanford,Stanford,,in E (+ Reproaches?),setting,yes,0.40,IMG_4364,check
+D-295,STANFORD,Charles Villiers Stanford,Stanford,,Jubilate in B flat,canticle,yes,0.85,IMG_4364;IMG_4478;IMG_4479;IMG_4505,
+D-296,STANFORD,Charles Villiers Stanford,Stanford,,Coronation Gloria in B flat,setting,yes,0.75,IMG_4365;IMG_4366;IMG_4483;IMG_4519,
+D-297,STATHAM,Heathcote Statham,Statham,,in E minor,setting,no,0.90,IMG_4362;IMG_4473,
+D-298,SUMSION,Herbert Sumsion,Sumsion,,in G (Mag & Nunc),setting,yes,0.60,IMG_4362;IMG_4367;IMG_4473,
+D-299,SUMSION,Herbert Sumsion,Sumsion,,in A (+ in C?),setting,yes,0.80,IMG_4362;IMG_4367;IMG_4473,
+D-300,SUMSION,Herbert Sumsion,Sumsion,,in D and G (Treble only),setting,yes,0.85,IMG_4362;IMG_4473,
+D-301,SUMSION,Herbert Sumsion,Sumsion,,in F,setting,yes,0.85,IMG_4366;IMG_4367;IMG_4483;IMG_4519,
+D-302,TALLIS,Thomas Tallis,Tallis,,Short Service (Dorian),setting,yes,0.90,IMG_4363;IMG_4367;IMG_4474,
+D-303,THORNE,David Thorne,Thorne,,Mass of St Thomas,setting,yes,0.90,IMG_4366;IMG_4367;IMG_4483;IMG_4520,
+D-304,TOMKINS,Thomas Tomkins,Tomkins,,Second Service; Fauxbourdons?,setting,yes,0.50,IMG_4363;IMG_4367;IMG_4474,
+D-305,TOMKINS,Thomas Tomkins,Tomkins,,Fifth Service (2 boxes),setting,yes,0.90,IMG_4363;IMG_4367;IMG_4474,
+D-306,WALMISLEY,Thomas Attwood Walmisley,Walmisley,,in D minor,setting,yes,0.85,IMG_4363;IMG_4367;IMG_4474,
+D-307,WEELKES,Thomas Weelkes,Weelkes,,(Service) for 5 voices,setting,yes,0.85,IMG_4363;IMG_4367;IMG_4474,
+D-308,WEELKES / WALMISLEY,Thomas Weelkes,Weelkes,,Weelkes Short Service; Walmisley in D,setting,yes,0.85,IMG_4363;IMG_4367;IMG_4476;IMG_4492;IMG_4493,
+D-309,WESLEY,Samuel Sebastian Wesley,Wesley,,in E (2 boxes),setting,yes,0.90,IMG_4363;IMG_4367;IMG_4474;IMG_4476,
+D-310,WEST,West,West,,in C (ATB),setting,yes,0.85,IMG_4363;IMG_4367;IMG_4476,
+D-311,WOOD,Charles Wood,Wood,,in D,setting,yes,0.80,IMG_4363;IMG_4475,
+D-312,WOOD,Charles Wood,Wood,,in E flat no.1; in E flat no.2,setting,yes,0.70,IMG_4363;IMG_4475,
+D-313,WOOD,Charles Wood,Wood,,in G (ATB),setting,yes,0.90,IMG_4364;IMG_4367;IMG_4477,
+D-314,WESLEY,Samuel Sebastian Wesley,Wesley,,Blessed be the God and Father,anthem,mixed,0.85,IMG_4354;IMG_4389;IMG_4390,two parcels (hw + SS Wesley typed set)
+D-315,WESLEY,Samuel Sebastian Wesley,Wesley,,Thou wilt keep him; Wash me throughly (S.S. Wesley set),anthem,no,0.80,IMG_4354;IMG_4390,
+D-316,WESLEY,Samuel Sebastian Wesley,Wesley,,The Wilderness (2 boxes),anthem,yes,0.85,IMG_4354;IMG_4360;IMG_4390,
+D-317,WESLEY,Samuel Sebastian Wesley,Wesley,,Ascribe unto the Lord (2 boxes),anthem,yes,0.80,IMG_4354;IMG_4390,
+D-318,WESLEY,Samuel Sebastian Wesley,Wesley,,In exitu Israel,anthem,yes,0.80,IMG_4354;IMG_4390,
+D-319,WESLEY,Samuel Sebastian Wesley,Wesley,,The Lord is my shepherd,anthem,yes,0.92,IMG_4354;IMG_4389,
+D-320,MISC BOX,Various,Various,,Misc. Sacred,collection,no,0.55,IMG_4361,
+D-321,HANDEL,George Frideric Handel,Handel,advent;christmas;easter,Messiah (Novello vocal scores ~10 copies),major work,no,0.95,IMG_4361;IMG_4434,
+D-322,COLLECTION,Various,Various,,Anthems - Stainer & Simper,collection,no,0.75,IMG_4358;IMG_4359;IMG_4422,
+D-323,COLLECTION,Various,Various,,Unison / S.A. Evenings,collection,no,0.90,IMG_4320,
+D-324,SCHUBERT?,Schubert,Schubert,,Nunc dimittis? (reddish parcel),anthem,yes,0.20,IMG_4338,check; re-shoot
+D-325,SPEDDING,Alan Spedding,Spedding,,Hail gladdening Light,anthem,yes,0.90,IMG_4372;IMG_4374,manuscript; signed AJS June 2001
+D-326,SPEDDING,Alan Spedding,Spedding,,Introit: Let my prayer come up into Thy presence,anthem,yes,0.75,IMG_4372;IMG_4374,manuscript
+D-327,SPEDDING,Alan Spedding,Spedding,easter,Christ the Lord is risen again,anthem,yes,0.85,IMG_4372;IMG_4374,manuscript
+D-328,SPEDDING,Alan Spedding,Spedding,lent;passiontide,"Drop, drop, slow tears",anthem,yes,0.85,IMG_4372;IMG_4374,manuscript
+D-329,UNKNOWN,Unknown,Unknown,,Sing praise to God Who reigns above,hymn,no,0.40,IMG_4372;IMG_4374,check
+D-330,SCHUBERT,Franz Schubert,Schubert,marian,Ave Maria (arr. Wanda Sobieska),anthem,no,0.95,IMG_4375,
+D-331,SPEDDING,Alan Spedding,Spedding,,Sing to the Lord a new song (Psalm 96),anthem,no,0.95,IMG_4376,Eboracum Choral Series ECS 345
+D-332,STAINER,John Stainer,Stainer,trinity,I saw the Lord,anthem,yes,0.80,IMG_4377,
+D-333,STANFORD,Charles Villiers Stanford,Stanford,,For lo I raise up,anthem,no,0.50,IMG_4378,check; label fragment FOR LO...RAISE UP
+D-334,SUMSION,Herbert Sumsion,Sumsion,,They that go down to the sea,anthem,no,0.85,IMG_4378,
+D-335,SULLIVAN,Arthur Sullivan,Sullivan,,Song of Peace,anthem,yes,0.75,IMG_4379,check vs STANFORD D-214
+D-336,TALLIS,Thomas Tallis,Tallis,pentecost,If ye love me,anthem,no,0.98,IMG_4381,interior page
+D-337,THATCHER,Reginald Thatcher,Thatcher,easter,"Come, ye faithful (Hymn Anthem for Easter)",anthem,no,0.95,IMG_4382,
+D-338,THIMAN,Eric Thiman,Thiman,,Sing Alleluia forth,anthem,yes,0.90,IMG_4383,
+D-339,WATTS,Watts,Watts,saints,Sanctus Johannes,anthem,yes,0.45,IMG_4388,check
+D-340,WHEELER,Wheeler,Wheeler,,We sing to God,anthem,yes,0.75,IMG_4388,
+D-341,WALFORD DAVIES,Henry Walford Davies,Walford Davies,easter,O sons and daughters; God be in my head,anthem,no,0.85,IMG_4388,
+D-342,WARD,Ward,Ward,,O let me tread in the right path,anthem,no,0.85,IMG_4388,
+D-343,WHITLOCK,Percy Whitlock,Whitlock,,"Here, O my Lord, I see Thee face to face",anthem,yes,0.90,IMG_4391,
+D-344,WHITE,Robert White,White,lent,"Christe, qui lux es et dies",anthem,yes,0.90,IMG_4392,
+D-345,VAUGHAN WILLIAMS,Ralph Vaughan Williams,Vaughan Williams,ascension,O clap your hands,anthem,yes,0.90,IMG_4393,
+D-346,VAUGHAN WILLIAMS,Ralph Vaughan Williams,Vaughan Williams,,O how amiable,anthem,yes,0.90,IMG_4394,
+D-347,VAUGHAN WILLIAMS,Ralph Vaughan Williams,Vaughan Williams,,The Old Hundredth,hymn,no,0.90,IMG_4396;IMG_4397,
+D-348,WOOD,Charles Wood,Wood,,"View me, Lord",anthem,yes,0.85,IMG_4398,
+D-349,ASTON,Peter Aston,Aston,,in F,setting,yes,0.75,IMG_4399,
+D-350,BATTEN,Adrian Batten,Batten,,Fourth Evening Service (Mag & Nunc for men's voices),setting,no,0.95,IMG_4399;IMG_4400,
+D-351,AYLEWARD,Richard Ayleward,Ayleward,,Short Evening Service,setting,no,0.95,IMG_4401,
+D-352,BLOW,John Blow,Blow,,Mag & Nunc from the Short Service No. 4 in F,setting,no,0.95,IMG_4403,
+D-353,COLLECTION,Various,Various,,Evenings B binder (Burgon / Dyson Nunc Dimittis settings),collection,yes,0.40,IMG_4404,check
+D-354,BYRD,William Byrd,Byrd,,Evening Service in Five Parts (Mag & Nunc),setting,no,0.95,IMG_4405,
+D-355,BYRD,William Byrd,Byrd,,Fauxbourdons,setting,no,0.90,IMG_4406,
+D-356,BURGON,Geoffrey Burgon,Burgon,,Nunc Dimittis,canticle,no,0.95,IMG_4408,purchased 2019
+D-357,CAUSTUN,Thomas Caustun,Caustun,,Evening Service for Four Voices,setting,no,0.95,IMG_4410,old ref T.C.M. 95
+D-358,DYKES,John Bacchus Dykes,Dykes,,Magnificat and Nunc Dimittis in F,setting,no,0.90,IMG_4411,
+D-359,GRAY,Gray,Gray,,in F minor,setting,yes,0.90,IMG_4413,
+D-360,GIBBONS,Orlando Gibbons,Gibbons,,Mag & Nunc No.6 (Gregorian Tones faux-bourdon),setting,no,0.85,IMG_4416,
+D-361,GIBBONS,Orlando Gibbons,Gibbons,,Short Service (TATB),setting,no,0.90,IMG_4417,
+D-362,HARRIS,William H. Harris,Harris,,in A minor,setting,no,0.95,IMG_4418,
+D-363,MOERAN,Ernest John Moeran,Moeran,,in D,setting,yes,0.75,IMG_4422,shared box with Morley Fauxbourdons
+D-364,MORLEY,Thomas Morley,Morley,,Fauxbourdons,setting,yes,0.70,IMG_4422,shared box with Moeran in D
+D-365,NOBLE,Thomas Tertius Noble,Noble,,Mag & Nunc in B minor (1 of 2),setting,yes,0.93,IMG_4423,check vs D-284
+D-366,POYSER,Robert Poyser,Poyser,,Bridlington Service (Mag & Nunc),setting,no,0.95,IMG_4424,
+D-367,POYSER,Robert Poyser,Poyser,,Magnificat and Nunc Dimittis in C (Boys' Voices),setting,no,0.93,IMG_4425,old ref C7
+D-368,D. PURCELL,Daniel Purcell,Purcell,,Magnificat & Nunc Dimittis in E minor,setting,no,0.95,IMG_4426,
+D-369,H. PURCELL,Henry Purcell,Purcell,,Evening Service in G minor (transposed to A minor),setting,no,0.95,IMG_4427,
+D-370,PARRY,Charles Hubert Hastings Parry,Parry,,"Laudate Dominum (Hymn 427, from Hear my words)",hymn,no,0.85,IMG_4428,hymnal volume page
+D-371,HALLS,Halls,Halls,,Preces and Responses Set Two (upper voices),responses,no,0.92,IMG_4441,RSCM Open thou our lips anthology
+D-372,POYSER,Robert Poyser,Poyser,,Responses in A flat,responses,no,0.95,IMG_4444,
+D-373,POYSER,Robert Poyser,Poyser,,Preces and Responses in G,responses,yes,0.85,IMG_4445,manuscript
+D-374,BACH,Johann Sebastian Bach,Bach,,Et misericordia,anthem,yes,0.90,IMG_4449,
+D-375,FORBES L'ESTRANGE,Joanna Forbes L'Estrange,Forbes L'Estrange,,Sing for the King: The mountains shall bring peace,anthem,no,0.97,IMG_4454;IMG_4455,RSCM 2023 coronation
+D-376,MARTIN,Martin,Martin,,"Hail, gladdening Light",anthem,no,0.90,IMG_4456,ex St Philip's Church Hull
+D-377,PARRY,Charles Hubert Hastings Parry,Parry,,Gaudium Caeleste (Hymn 779),hymn,no,0.90,IMG_4458,hymnal volume page
+D-378,RACHMANINOV,Sergei Rachmaninov,Rachmaninov,marian,Bogoroditse Devo (Op. 37 No. 6),anthem,no,0.95,IMG_4468,
+D-379,RHEINBERGER,Josef Rheinberger,Rheinberger,,Abendlied (Op. 69 No. 3),anthem,no,0.95,IMG_4469,
+D-380,RHEINBERGER,Josef Rheinberger,Rheinberger,advent,Rorate coeli (Op. 176 No. 1),anthem,no,0.95,IMG_4470,
+D-381,RUBBRA,Edmund Rubbra,Rubbra,,Magnificat and Nunc Dimittis in A flat,setting,no,0.95,IMG_4471;IMG_4472,
+D-382,VIADANA,Lodovico Viadana,Viadana,,"Magnificat Tone I (fauxbourdon, 2nd ending)",setting,yes,0.85,IMG_4494,manuscript
+D-383,NANINO,Giovanni Maria Nanino,Nanino,,"Nunc Dimittis Tone II (fauxbourdon, 1st ending)",setting,yes,0.85,IMG_4495,manuscript
+D-384,WISE,Wise,Wise,,in F,setting,yes,0.85,IMG_4476,
+D-385,HOWELLS / SUMSION / TALLIS,Herbert Howells,Howells,,Services for Men's Voices (Howells in E; Sumsion in G; Tallis Responses),collection,no,0.85,IMG_4477;IMG_4498,
+D-386,STANFORD,Charles Villiers Stanford,Stanford,,Magnificat and Nunc Dimittis in A (1 of 2),setting,yes,0.95,IMG_4485;IMG_4488,
+D-387,STANFORD,Charles Villiers Stanford,Stanford,,Magnificat & Nunc Dimittis in G,setting,no,0.97,IMG_4491,
+D-388,STANFORD,Charles Villiers Stanford,Stanford,,Jubilate in C (Op. 115),canticle,yes,0.90,IMG_4478;IMG_4479;IMG_4504,
+D-389,SULLIVAN,Arthur Sullivan,Sullivan,general,Te Deum in B flat,canticle,yes,0.90,IMG_4479;IMG_4505,
+D-390,PARRY,Charles Hubert Hastings Parry,Parry,,Benedictus in D,canticle,yes,0.95,IMG_4479;IMG_4501,
+D-391,DYSON,George Dyson,Dyson,general,Te Deum in C,canticle,yes,0.92,IMG_4500,
+D-392,JACKSON,Francis Jackson,Jackson,,Communion Service in G,setting,yes,0.90,IMG_4506,
+D-393,MATHIAS,William Mathias,Mathias,,Communion Service (Series 3),setting,no,0.90,IMG_4481;IMG_4509,
+D-394,MERBECKE,John Merbecke,Merbecke,,Setting of the Office of Holy Communion,setting,no,0.95,IMG_4510,
+D-395,MOZART,Wolfgang Amadeus Mozart,Mozart,,"Missa Brevis in G, KV140",setting,no,0.95,IMG_4512,
+D-396,RHEINBERGER,Josef Rheinberger,Rheinberger,,Kleiner und leichter Messgesang (Op. 62),setting,no,0.95,IMG_4514,
+D-397,SCHUBERT,Franz Schubert,Schubert,,Mass in G,setting,no,0.95,IMG_4517,
+D-398,SHEPHARD,Richard Shephard,Shephard,,The Addington Service (Holy Communion Series 3),setting,no,0.97,IMG_4516,RSCM No. 121
+D-399,VAUGHAN WILLIAMS,Ralph Vaughan Williams,Vaughan Williams,,Mass in G minor,setting,no,0.97,IMG_4521,
+D-400,WOOD,Charles Wood,Wood,,Short Communion Service in the Phrygian Mode,setting,no,0.95,IMG_4522,
+D-401,WOOD,Charles Wood,Wood,,Magnificat & Nunc Dimittis (Collegium Regale),setting,no,0.95,IMG_4496,
+D-402,WOOD,Charles Wood,Wood,,Mag & Nunc in C minor,setting,yes,0.95,IMG_4497,
+D-403,JONES (Peter),Peter Jones,Jones,,Coventry Gloria,setting,no,0.95,IMG_4507,
+D-404,RSCM,RSCM,RSCM,,Festival Evensong & Awards Ceremony 2014 (York Minster) - Festival Music Book,collection,no,0.95,IMG_4523,
+D-405,RSCM,RSCM,RSCM,,Area Festival 2017 'Journeying' (Hull Minster),collection,no,0.95,IMG_4524,
+D-406,RSCM,RSCM,RSCM,marian,"Choral Vespers of Our Lady (Ampleforth Abbey, 2013)",collection,no,0.95,IMG_4525,
+D-407,RSCM,RSCM,RSCM,,Festival Evensong 2012 (York Minster),collection,no,0.95,IMG_4526,
+D-408,RSCM,RSCM,RSCM,,Festival Service Book Seven - The Journey,collection,no,0.90,IMG_4527,
+D-409,RSCM,RSCM,RSCM,,Area Festival 2018 (Durham Cathedral),collection,yes,0.90,IMG_4528,
+D-410,RSCM,RSCM,RSCM,,Festival Evensong Music 1991 (Beverley Minster),collection,no,0.92,IMG_4529,
