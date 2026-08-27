@@ -812,6 +812,15 @@ export function servicePage(
   music: ServiceMusicWithPiece[],
   typicalSingers: number | null,
   booklet: { id: number; ref: string } | null,
+  /**
+   * Who is on duty, by role — the single piece of person data A7 allows on the
+   * choir side. Names and nothing else: no telephone number, no DBS date, no
+   * indication of who is a backup. A parent looking at a service page should be
+   * able to see who will be at the door, and learn nothing else about them.
+   *
+   * Empty when the safeguarding module is off, which is how it ships.
+   */
+  duty: ReadonlyArray<{ role: string; label: string; names: string[] }>,
   workingCopyMessage?: string
 ): string {
   const states = music
@@ -839,6 +848,29 @@ export function servicePage(
        ${ragSummary}
        ${musicList(music, typicalSingers, service.designation)}
      </div>
+
+     ${
+       duty.some((d) => d.names.length)
+         ? `<div class="card">
+              <h2>Who is on duty</h2>
+              <dl class="duty">
+                ${duty
+                  .filter((d) => d.names.length)
+                  .map(
+                    (d) =>
+                      `<dt>${esc(d.label)}</dt><dd>${d.names.map((n) => esc(n)).join(", ")}</dd>`
+                  )
+                  .join("")}
+              </dl>
+              <style>
+                dl.duty { margin: 0; display: grid; grid-template-columns: auto 1fr;
+                          gap: 0.2rem 0.9rem; }
+                dl.duty dt { font-weight: 700; }
+                dl.duty dd { margin: 0; }
+              </style>
+            </div>`
+         : ""
+     }
 
      <div class="card no-print">
        <h2>Working copy ${betaChip()}</h2>

@@ -14,7 +14,34 @@ import { CHURCH } from "./church.config";
 import { betaChip, categoryLabel, esc, flagPills, page, prettyDate } from "./ui";
 import type { CatalogueStats, ChoirProfileRow, PieceWithHolding, SearchQuery, SearchResult } from "./catalogue";
 import type { AuditRow } from "./audit";
-import { CHOIRS, type PersonRow, type RegisterRow } from "./people";
+import {
+  CHOIRS,
+  SCHOOL_YEARS,
+  schoolYearLabel,
+  type ParentContact,
+  type PersonRow,
+  type RegisterRow,
+} from "./people";
+import { MODULES, moduleForPath, type ModuleState } from "./modules";
+import { DUTY_ROLES, EVENT_TYPES, type DutyCoverage, type DutyRow } from "./duty";
+import type { BatchRow, ProposedPerson } from "./importer";
+import {
+  pounds,
+  RATE_ROLES,
+  type PayRun,
+  type PersonTotals,
+  type Quarter,
+  type RateRow,
+} from "./pay";
+import {
+  permits,
+  requiredRolesFor,
+  ROLES,
+  ROLE_BLURBS,
+  ROLE_LABELS,
+  type Role,
+  type RoleGrant,
+} from "./roles";
 import {
   explainChoirSize,
   singersFor,
@@ -49,60 +76,99 @@ export interface AdminQueueCounts {
 /**
  * The librarian's front page.
  *
- * Six tiles for the things James goes looking for, and above them the queues —
- * the things waiting on him. Queues first because a number waiting is more
- * urgent than a door to walk through, and a tile with nothing behind it should
- * not look the same as one with forty items in it.
+ * Tiles for the things James goes looking for, and above them the queues — the
+ * things waiting on him. Queues first because a number waiting is more urgent
+ * than a door to walk through, and a tile with nothing behind it should not
+ * look the same as one with forty items in it.
+ *
+ * **Every tile is filtered twice**, by the same two rules the gate applies to
+ * the address behind it: the module has to be on, and the reader has to hold a
+ * role that may reach it. A tile the reader could not walk through is not
+ * drawn — an off module is dark rather than locked, and offering a librarian a
+ * door to the register that answers "not for you" is a worse page than not
+ * offering it. `visible()` asks `src/modules.ts` and `src/roles.ts` rather than
+ * repeating their tables, so a rule changed there changes here too.
  */
 export function adminHomePage(
   stats: CatalogueStats,
   queues: AdminQueueCounts,
-  extractionReady: boolean
+  extractionReady: boolean,
+  modules: ModuleState,
+  roles: readonly Role[]
 ): string {
   const unreviewed = stats.pieces - stats.reviewed;
+
+  /** Would the gate let this reader through to this address? */
+  const visible = (href: string): boolean => {
+    const module = moduleForPath(href);
+    if (module && !modules[module]) return false;
+    return permits(roles, requiredRolesFor(href));
+  };
 
   const stat = (n: number | string, label: string) =>
     `<div class="stat"><span class="n">${esc(n)}</span><span class="l">${esc(label)}</span></div>`;
 
   const queue = (href: string, n: number, label: string, blurb: string) =>
-    `<a class="tile${n ? " has-work" : ""}" href="${href}">
-       <span class="n">${n}</span>
-       <span class="t">${esc(label)}</span>
-       <span class="b">${esc(blurb)}</span>
-     </a>`;
+    visible(href)
+      ? `<a class="tile${n ? " has-work" : ""}" href="${href}">
+           <span class="n">${n}</span>
+           <span class="t">${esc(label)}</span>
+           <span class="b">${esc(blurb)}</span>
+         </a>`
+      : "";
 
   const tile = (href: string, label: string, blurb: string, chip = "") =>
-    `<a class="tile" href="${href}">
-       <span class="t">${esc(label)}${chip}</span>
-       <span class="b">${esc(blurb)}</span>
-     </a>`;
+    visible(href)
+      ? `<a class="tile" href="${href}">
+           <span class="t">${esc(label)}${chip}</span>
+           <span class="b">${esc(blurb)}</span>
+         </a>`
+      : "";
+
+  /** A heading with nothing under it is worse than no heading. */
+  const section = (heading: string, tiles: string[]): string => {
+    const drawn = tiles.filter(Boolean);
+    if (!drawn.length) return "";
+    return `<h2>${esc(heading)}</h2><div class="tiles">${drawn.join("")}</div>`;
+  };
 
   return page(
     `Librarian — ${CHURCH.appName}`,
     `<h1>Librarian<span class="sub">${esc(CHURCH.name)} music library</span></h1>
 
-     <h2>Waiting for you</h2>
-     <div class="tiles">
-       ${queue("/admin/review", queues.toReview, "Draft entries", "read off label photographs, unchecked")}
-       ${queue("/admin/services", queues.musicLines, "Music list lines", "matched or waiting to be matched")}
-       ${queue("/admin/scans", queues.pendingScans, "Scans sent in", "photographed by choristers")}
-       ${queue("/admin/feedback", queues.openFeedback, "Feedback", "sent from the widget")}
-       ${queue("/admin/queues", queues.openRepairs, "Repairs", "poor, urgent, or no usable spine")}
-       ${queue("/admin/stocktake", queues.dueRecount, "Due a recount", "five years old, or sung a lot since")}
-     </div>
+     ${section("Waiting for you", [
+       queue("/admin/review", queues.toReview, "Draft entries", "read off label photographs, unchecked"),
+       queue("/admin/services", queues.musicLines, "Music list lines", "matched or waiting to be matched"),
+       queue("/admin/scans", queues.pendingScans, "Scans sent in", "photographed by choristers"),
+       queue("/admin/feedback", queues.openFeedback, "Feedback", "sent from the widget"),
+       queue("/admin/queues", queues.openRepairs, "Repairs", "poor, urgent, or no usable spine"),
+       queue("/admin/stocktake", queues.dueRecount, "Due a recount", "five years old, or sung a lot since"),
+     ])}
 
-     <h2>The library</h2>
-     <div class="tiles">
-       ${tile("/admin/new", "New catalogue item", "parse a scan, or enter it by hand")}
-       ${tile("/admin/search", "Search and bulk edit", "filter, select, change many at once")}
-       ${tile("/admin/reports", "Reports", "what gets sung, condition, coverage")}
-       ${tile("/admin/queues", "What to do next", "scanning and repair, in priority order")}
-       ${tile("/admin/labels", "Print labels", "volunteer sheets, and reprints")}
-       ${tile("/admin/suggestions", "Choosing music", "by season, with copies and scans")}
-       ${tile("/admin/people", "The choir", "people and the register", betaChip())}
-       ${tile("/admin/loans", "Out on loan", "who has what, and since when")}
-       ${tile("/admin/settings", "Settings", "choir password, choir sizes, activity")}
-     </div>
+     ${section("The library", [
+       tile("/admin/new", "New catalogue item", "parse a scan, or enter it by hand"),
+       tile("/admin/search", "Search and bulk edit", "filter, select, change many at once"),
+       tile("/admin/reports", "Reports", "what gets sung, condition, coverage"),
+       tile("/admin/queues", "What to do next", "scanning and repair, in priority order"),
+       tile("/admin/labels", "Print labels", "volunteer sheets, and reprints"),
+       tile("/admin/suggestions", "Choosing music", "by season, with copies and scans"),
+       tile("/admin/loans", "Out on loan", "who has what, and since when"),
+     ])}
+
+     ${section("The choir", [
+       tile("/admin/people", "The choir", "people and the register", betaChip()),
+       tile("/admin/people/import", "Import a workbook", "read the department's register", betaChip()),
+       tile("/admin/people/attendance", "Attendance", "who sang, by month and quarter", betaChip()),
+       tile("/admin/people/pay", "Pay", "a quarter's figures, and the rates", betaChip()),
+       tile("/admin/safeguarding", "Duty rota", "robing, general and dismissal", betaChip()),
+     ])}
+
+     ${section("This app", [
+       tile("/admin/settings", "Settings", "choir password, choir sizes, activity"),
+       tile("/admin/export", "Exports", "take the data out as a spreadsheet", betaChip()),
+       tile("/admin/modules", "Modules", "what this app does at all", betaChip()),
+       tile("/admin/roles", "Roles", "who may do what in here", betaChip()),
+     ])}
 
      <div class="card">
        <h2>Where things stand</h2>
@@ -905,7 +971,7 @@ export function adminLabelsPage(
 // People and the register (beta)
 // ---------------------------------------------------------------------------
 
-export function adminPeoplePage(people: PersonRow[], message?: string): string {
+export function adminPeoplePage(people: PersonRow[], showingLeavers: boolean, message?: string): string {
   const choirOptions = CHOIRS.map((c) => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join("");
   const partOptions = CHURCH.voiceParts
     .map((v) => `<option value="${esc(v.value)}">${esc(v.label)}</option>`)
@@ -936,20 +1002,27 @@ export function adminPeoplePage(people: PersonRow[], message?: string): string {
                (c) => `<div class="card">
                  <h2>${esc(c.label)}</h2>
                  <div class="scroll"><table>
-                   <tr><th>Name</th><th>Voice part</th><th></th></tr>
+                   <tr><th>Name</th><th>School year</th><th>Voice part</th><th></th></tr>
                    ${byChoir
                      .get(c.value)!
                      .map(
-                       (p) => `<tr>
-                         <td>${esc(p.display_name)}</td>
+                       (p) => `<tr${p.left_on ? ' class="gone"' : ""}>
+                         <td><a href="/admin/people/${p.id}">${esc(p.display_name)}</a></td>
+                         <td>${
+                           p.school_year !== null
+                             ? esc(schoolYearLabel(p.school_year))
+                             : '<span class="muted">adult</span>'
+                         }</td>
                          <td>${
                            p.voice_part
                              ? esc(CHURCH.voiceParts.find((v) => v.value === p.voice_part)?.label ?? p.voice_part)
                              : '<span class="muted">not recorded</span>'
                          }</td>
-                         <td><form method="POST" action="/admin/people/${p.id}" style="display:inline">
-                               <button type="submit" name="action" value="leave" class="secondary">Has left</button>
-                             </form></td>
+                         <td>${
+                           p.left_on
+                             ? `<span class="muted small">left ${esc(prettyDate(p.left_on))}</span>`
+                             : ""
+                         }</td>
                        </tr>`
                      )
                      .join("")}
@@ -959,6 +1032,16 @@ export function adminPeoplePage(people: PersonRow[], message?: string): string {
              .join("")
          : `<p class="muted">Nobody on the list yet.</p>`
      }
+
+     <p>
+       <a class="btn secondary" href="/admin/people${showingLeavers ? "" : "?leavers=1"}">
+         ${showingLeavers ? "Hide people who have left" : "Show people who have left"}
+       </a>
+     </p>
+
+     <style>
+       tr.gone td { color: var(--colour-muted); }
+     </style>
 
      <div class="card">
        <h2>Add somebody</h2>
@@ -978,6 +1061,15 @@ export function adminPeoplePage(people: PersonRow[], message?: string): string {
                <option value="">Not recorded</option>${partOptions}
              </select>
              <span class="hint">Optional. Section-level attendance waits on these being filled in.</span>
+           </div>
+           <div class="field">
+             <label for="school_year">School year</label>
+             <select id="school_year" name="school_year">
+               <option value="">Adult</option>
+               ${SCHOOL_YEARS.map((y) => `<option value="${y}">${esc(schoolYearLabel(y))}</option>`).join("")}
+             </select>
+             <span class="hint">Moves up by itself each September. Leave as "Adult" for grown-ups —
+               we hold no dates of birth and no ages.</span>
            </div>
          </div>
          <button type="submit">Add</button>
@@ -1029,7 +1121,7 @@ export function adminRegisterPage(
          ? `<div class="register">
               ${rows
                 .map(
-                  (r) => `<form method="POST" action="/admin/register/${service.id}/${r.id}">
+                  (r) => `<form method="POST" action="/admin/people/register/${service.id}/${r.id}">
                     <button type="submit" class="who">
                       <span class="n">${esc(r.display_name)}</span>
                       ${statusPill(r.status)}
@@ -1054,7 +1146,7 @@ export function adminRegisterPage(
        .register .who:hover { background: var(--colour-accent-tint); }
        .register .who .n { font-weight: 600; }
      </style>`,
-    { admin: true, path: `/admin/register/${service.id}` }
+    { admin: true, path: `/admin/people/register/${service.id}` }
   );
 }
 
@@ -1135,5 +1227,1323 @@ export function adminSuggestionsPage(
          : `<p class="muted">Nothing matched. Try loosening the season or the category.</p>`
      }`,
     { admin: true, path: "/admin/suggestions" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Modules, roles, and the two ways in that are refused (Addendum A)
+// ---------------------------------------------------------------------------
+
+/**
+ * The Modules screen.
+ *
+ * Everything the register brought with it ships off. This is where it gets
+ * turned on, one switch at a time, by music staff — and every flip is audited,
+ * because "who turned the register on?" is a question somebody may one day ask.
+ *
+ * The screen says plainly what a module holds, and marks the ones that hold
+ * children's names, so that switching one on is a decision rather than a
+ * reflex.
+ */
+export function adminModulesPage(state: ModuleState, message?: string): string {
+  const row = (m: (typeof MODULES)[number]) => {
+    const on = state[m.key];
+    return `<tr>
+      <td>
+        <strong>${esc(m.label)}</strong>${m.personal ? ` <span class="chip personal">holds names</span>` : ""}
+        <div class="small muted">${esc(m.blurb)}</div>
+      </td>
+      <td class="num">${on ? `<span class="chip on">On</span>` : `<span class="chip off">Off</span>`}</td>
+      <td>
+        <form method="POST" action="/admin/modules" style="display:inline">
+          <input type="hidden" name="module" value="${esc(m.key)}">
+          <input type="hidden" name="on" value="${on ? "0" : "1"}">
+          <button type="submit" class="${on ? "secondary" : ""}">${on ? "Switch off" : "Switch on"}</button>
+        </form>
+      </td>
+    </tr>`;
+  };
+
+  return page(
+    `Modules — ${CHURCH.appName}`,
+    `<h1>Modules<span class="sub">What this app does at all</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     <div class="notice">
+       <p style="margin:0">A module that is off is <strong>not there</strong>: its screens are gone from the
+          front page and its addresses answer as though they had never existed. Switching one off does not
+          delete anything — the records stay in the database, and come back exactly as they were when it is
+          switched on again.</p>
+     </div>
+
+     <div class="card">
+       <div class="scroll"><table>
+         <tr><th>Module</th><th class="num">State</th><th></th></tr>
+         ${MODULES.map(row).join("")}
+       </table></div>
+     </div>
+
+     <style>
+       .chip { display: inline-block; padding: 0.05rem 0.45rem; border-radius: var(--radius-pill);
+               font-size: 0.75rem; font-weight: 700; }
+       .chip.on { background: var(--colour-accent-tint); color: var(--colour-accent); }
+       .chip.off { background: var(--colour-surface-sunk); color: var(--colour-muted); }
+       .chip.personal { background: var(--colour-surface-sunk); color: var(--colour-muted);
+                        font-weight: 400; }
+     </style>`,
+    { admin: true, path: "/admin/modules" }
+  );
+}
+
+/**
+ * The Roles screen.
+ *
+ * Cloudflare Access says who may reach `/admin`. This says what they may do
+ * once they are here, which is a different question — six people hold a
+ * Librarian policy so the library can be catalogued, and none of that is a
+ * reason to hand them the register.
+ *
+ * The last `music_staff` grant cannot be revoked from here: without one there
+ * is nobody who can grant anybody anything, and this screen is itself music
+ * staff only.
+ */
+export function adminRolesPage(
+  grants: RoleGrant[],
+  musicStaffCount: number,
+  message?: string,
+  error?: string
+): string {
+  const byEmail = new Map<string, Role[]>();
+  for (const g of grants) {
+    const held = byEmail.get(g.email);
+    if (held) held.push(g.role);
+    else byEmail.set(g.email, [g.role]);
+  }
+
+  const roleOptions = ROLES.map((r) => `<option value="${esc(r)}">${esc(ROLE_LABELS[r])}</option>`).join("");
+
+  const person = ([email, held]: [string, Role[]]) => `<tr>
+    <td>${esc(email)}</td>
+    <td>${ROLES.map((r) => {
+      if (!held.includes(r)) return "";
+      const last = r === "music_staff" && musicStaffCount <= 1;
+      return `<form method="POST" action="/admin/roles" style="display:inline-block; margin:0 0.3rem 0.3rem 0">
+                <input type="hidden" name="action" value="revoke">
+                <input type="hidden" name="email" value="${esc(email)}">
+                <input type="hidden" name="role" value="${esc(r)}">
+                <button type="submit" class="secondary" ${last ? "disabled" : ""}
+                  title="${last ? "The last music staff grant cannot be removed" : `Remove ${esc(ROLE_LABELS[r])}`}">
+                  ${esc(ROLE_LABELS[r])} ×
+                </button>
+              </form>`;
+    }).join("")}</td>
+  </tr>`;
+
+  return page(
+    `Roles — ${CHURCH.appName}`,
+    `<h1>Roles<span class="sub">What each administrator may do</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+     ${error ? `<div class="notice error"><p style="margin:0">${esc(error)}</p></div>` : ""}
+
+     <div class="notice">
+       <p style="margin:0">Cloudflare Access decides who reaches this side of the app at all. This decides
+          what they find when they do. Somebody with no role here sees a page telling them to ask you.</p>
+     </div>
+
+     <div class="card">
+       <h2>Who has what</h2>
+       ${
+         byEmail.size
+           ? `<div class="scroll"><table>
+                <tr><th>Email</th><th>Roles — click one to remove it</th></tr>
+                ${[...byEmail.entries()].map(person).join("")}
+              </table></div>`
+           : `<p class="muted">Nobody has a role yet.</p>`
+       }
+     </div>
+
+     <div class="card">
+       <h2>Give somebody a role</h2>
+       <form method="POST" action="/admin/roles">
+         <input type="hidden" name="action" value="grant">
+         <div class="row">
+           <div class="field">
+             <label for="email">Email</label>
+             <input type="email" id="email" name="email" required
+                    placeholder="as it is spelled in Cloudflare Access">
+             <span class="hint">It has to match the address Access signs them in with, exactly.</span>
+           </div>
+           <div class="field">
+             <label for="role">Role</label>
+             <select id="role" name="role">${roleOptions}</select>
+           </div>
+         </div>
+         <button type="submit">Give the role</button>
+       </form>
+     </div>
+
+     <div class="card">
+       <h2>What each role means</h2>
+       <dl>
+         ${ROLES.map(
+           (r) => `<dt><strong>${esc(ROLE_LABELS[r])}</strong></dt><dd class="muted">${esc(ROLE_BLURBS[r])}</dd>`
+         ).join("")}
+       </dl>
+     </div>`,
+    { admin: true, path: "/admin/roles" }
+  );
+}
+
+/**
+ * Signed in, and holding nothing.
+ *
+ * Cloudflare Access let them through, so they are somebody the Minster knows,
+ * and the page treats them that way: no stack trace, no "forbidden", just what
+ * has happened and who fixes it.
+ */
+export function adminNoRolePage(email: string): string {
+  return page(
+    `Nothing set up yet — ${CHURCH.appName}`,
+    `<h1>Nothing set up for you yet</h1>
+     <div class="card">
+       <p>You are signed in as <strong>${esc(email)}</strong>, but nobody has said yet what you should be
+          able to do here.</p>
+       <p>Ask a member of the music staff to give you a role — they can do it from the Roles screen in a
+          few seconds. Tell them the address above, exactly as it is written.</p>
+       <p class="muted small">Nothing has gone wrong, and there is nothing for you to fix at this end.</p>
+     </div>`,
+    { admin: true, path: "/admin" }
+  );
+}
+
+/**
+ * Signed in, holding a role, but not this one.
+ *
+ * Names the role needed rather than the one held: what the reader wants to know
+ * is what to ask for. A module that is switched off never reaches this page —
+ * it answers 404, because a locked door still tells you there is a room.
+ */
+export function adminWrongRolePage(required: readonly Role[]): string {
+  const names = required.map((r) => ROLE_LABELS[r]);
+  const list =
+    names.length === 1
+      ? names[0]!
+      : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]!}`;
+
+  return page(
+    `Not for you — ${CHURCH.appName}`,
+    `<h1>That part is not yours</h1>
+     <div class="card">
+       <p>This screen is for <strong>${esc(list)}</strong>, and you do not have that role.</p>
+       <p>If you think you should, ask a member of the music staff — they can add it from the Roles screen.</p>
+       <p><a class="btn secondary" href="/admin">Back to the front page</a></p>
+     </div>`,
+    { admin: true, path: "/admin" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// One person (Addendum A) — the workbook's Dates sheet, one child at a time
+// ---------------------------------------------------------------------------
+
+/**
+ * Everything the app holds about one person, on one page.
+ *
+ * The awards and the joining date come off the department's workbook. The
+ * school year is here and an age is not, because we are given a school year and
+ * not a date of birth, and an app that cannot compute an age cannot leak one.
+ *
+ * **Parent contacts are not on this page** until somebody asks for them. The
+ * count is shown — knowing a number exists is not the same as reading it — and
+ * revealing them is a form submission that writes an audit line naming the
+ * viewer, the child and the time before the numbers are fetched at all.
+ */
+export function adminPersonPage(
+  person: PersonRow,
+  contactCount: number,
+  revealed: ParentContact[] | null,
+  mayReadContacts: boolean,
+  today: string,
+  message?: string
+): string {
+  const choirOptions = CHOIRS.map(
+    (c) => `<option value="${esc(c.value)}"${c.value === person.choir ? " selected" : ""}>${esc(c.label)}</option>`
+  ).join("");
+
+  const partOptions = CHURCH.voiceParts
+    .map(
+      (v) =>
+        `<option value="${esc(v.value)}"${v.value === person.voice_part ? " selected" : ""}>${esc(v.label)}</option>`
+    )
+    .join("");
+
+  const yearOptions = SCHOOL_YEARS.map(
+    (y) => `<option value="${y}"${person.school_year === y ? " selected" : ""}>${esc(schoolYearLabel(y))}</option>`
+  ).join("");
+
+  const date = (name: string, label: string, value: string | null, hint = "") =>
+    `<div class="field">
+       <label for="${name}">${esc(label)}</label>
+       <input type="date" id="${name}" name="${name}" value="${esc(value ?? "")}">
+       ${hint ? `<span class="hint">${esc(hint)}</span>` : ""}
+     </div>`;
+
+  const dbsExpired = person.dbs_valid_until !== null && person.dbs_valid_until < today;
+
+  return page(
+    `${person.display_name} — ${CHURCH.appName}`,
+    `<h1>${esc(person.display_name)} ${betaChip()}
+       <span class="sub">${esc(CHOIRS.find((c) => c.value === person.choir)?.label ?? person.choir)}${
+         person.school_year !== null ? ` · ${esc(schoolYearLabel(person.school_year))}` : ""
+       }</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+     ${
+       person.left_on
+         ? `<div class="notice">
+              <p style="margin:0"><strong>Left on ${esc(prettyDate(person.left_on))}.</strong>
+                 They are off every register and out of every picker. Their attendance up to that date is
+                 untouched, because it is what last quarter's pay was worked out from.</p>
+            </div>`
+         : ""
+     }
+
+     <div class="card">
+       <h2>Who they are</h2>
+       <form method="POST" action="/admin/people/${person.id}">
+         <input type="hidden" name="action" value="save">
+         <div class="row">
+           <div class="field">
+             <label for="display_name">Name</label>
+             <input type="text" id="display_name" name="display_name"
+                    value="${esc(person.display_name)}" required>
+           </div>
+           <div class="field">
+             <label for="choir">Choir</label>
+             <select id="choir" name="choir">${choirOptions}</select>
+           </div>
+           <div class="field">
+             <label for="voice_part">Voice part</label>
+             <select id="voice_part" name="voice_part">
+               <option value="">Not recorded</option>${partOptions}
+             </select>
+           </div>
+           <div class="field">
+             <label for="school_year">School year</label>
+             <select id="school_year" name="school_year">
+               <option value=""${person.school_year === null ? " selected" : ""}>Adult</option>
+               ${yearOptions}
+             </select>
+             <span class="hint">Moves up by itself on 1 September. We hold this and not a date of
+               birth — the app has no way to work out anybody's age.</span>
+           </div>
+         </div>
+
+         <div class="row">
+           ${date("joined_on", "Joined the choir", person.joined_on)}
+           ${date("surplice_awarded_on", "Surpliced", person.surplice_awarded_on)}
+           ${date("deans_award_on", "Dean's award", person.deans_award_on)}
+           ${date("archbishops_award_on", "Archbishop's award", person.archbishops_award_on)}
+           ${date("gold_award_on", "Gold award", person.gold_award_on)}
+         </div>
+
+         <details>
+           <summary class="muted small">For adults who take safeguarding duties</summary>
+           <div class="row" style="margin-top:0.6rem">
+             ${date(
+               "dbs_valid_until",
+               "DBS valid until",
+               person.dbs_valid_until,
+               "The rota warns when this is in the past, and says nothing when it is blank."
+             )}
+             <div class="field">
+               <label for="gender">Recorded for duty cover</label>
+               <select id="gender" name="gender">
+                 <option value=""${person.gender === null ? " selected" : ""}>Not recorded</option>
+                 <option value="f"${person.gender === "f" ? " selected" : ""}>Female</option>
+                 <option value="m"${person.gender === "m" ? " selected" : ""}>Male</option>
+               </select>
+               <span class="hint">Only so the rota can check cover includes both when the boys and the
+                 girls are both due. Leave blank for children.</span>
+             </div>
+           </div>
+         </details>
+         ${dbsExpired ? `<div class="notice error"><p style="margin:0">Their DBS check ran out on ${esc(prettyDate(person.dbs_valid_until!))}.</p></div>` : ""}
+
+         <button type="submit">Save</button>
+       </form>
+     </div>
+
+     ${adminContactsCard(person, contactCount, revealed, mayReadContacts)}
+
+     <div class="card">
+       <h2>Leaving</h2>
+       ${
+         person.left_on
+           ? `<form method="POST" action="/admin/people/${person.id}">
+                <input type="hidden" name="action" value="returned">
+                <p class="muted">Marked as having left by mistake?</p>
+                <button type="submit" class="secondary">Put them back on the list</button>
+              </form>`
+           : `<form method="POST" action="/admin/people/${person.id}">
+                <input type="hidden" name="action" value="left">
+                <div class="field" style="max-width:14rem">
+                  <label for="left_on">Last day</label>
+                  <input type="date" id="left_on" name="left_on" value="${esc(today)}" required>
+                </div>
+                <button type="submit" class="secondary">Mark as having left</button>
+              </form>`
+       }
+     </div>
+
+     <details class="card">
+       <summary><strong>Removing their record</strong></summary>
+       <p class="muted">Two ways, and they are not the same thing.</p>
+       <form method="POST" action="/admin/people/${person.id}" style="margin-bottom:1rem">
+         <input type="hidden" name="action" value="anonymise">
+         <p><strong>Take the name off.</strong> Their name becomes
+            "Former chorister #${person.id}" and their parents' contact details are deleted. The
+            attendance counts stay, so a past quarter's pay still adds up — but nothing says whose they
+            were. This cannot be undone.</p>
+         <label class="check"><input type="checkbox" name="confirm" value="yes" required>
+           I understand this cannot be undone</label>
+         <button type="submit" class="secondary">Take the name off</button>
+       </form>
+       <form method="POST" action="/admin/people/${person.id}">
+         <input type="hidden" name="action" value="delete">
+         <p><strong>Delete everything.</strong> The person, their attendance, their duties and their
+            parents' contact details, gone. This is what a parent asking for their child's record to be
+            removed is entitled to.</p>
+         <label class="check"><input type="checkbox" name="confirm" value="yes" required>
+           I understand this cannot be undone</label>
+         <button type="submit" class="confirm">Delete everything</button>
+       </form>
+     </details>
+
+     <p><a class="btn secondary" href="/admin/people">Back to the choir</a></p>
+
+     <style>
+       .check { display: block; margin: 0.4rem 0 0.6rem; font-size: 0.9rem; }
+       .check input { margin-right: 0.4rem; }
+     </style>`,
+    { admin: true, path: "/admin/people" }
+  );
+}
+
+/**
+ * The parent-contact card.
+ *
+ * Three states, and the difference between them is the whole point. Without
+ * the role: a sentence saying the details exist and who may read them. With
+ * the role but before asking: a count and a button. After asking: the numbers,
+ * and a line saying the look has been written down — so that nobody is under
+ * the impression it was private.
+ */
+function adminContactsCard(
+  person: PersonRow,
+  contactCount: number,
+  revealed: ParentContact[] | null,
+  mayRead: boolean
+): string {
+  if (!mayRead) {
+    return `<div class="card">
+      <h2>Parents' contact details</h2>
+      <p class="muted">${
+        contactCount
+          ? `${contactCount} recorded. They can be read by music staff and by whoever is on safeguarding duty, and every look is written down.`
+          : "None recorded."
+      }</p>
+    </div>`;
+  }
+
+  const list = revealed
+    ? `<div class="scroll"><table>
+         <tr><th>Who</th><th>Name</th><th>Telephone</th><th></th></tr>
+         ${revealed
+           .map(
+             (contact) => `<tr>
+               <td>${esc(contact.label ?? "—")}</td>
+               <td>${esc(contact.name ?? "—")}</td>
+               <td><a href="tel:${esc((contact.phone ?? "").replace(/\s+/g, ""))}">${esc(contact.phone ?? "—")}</a></td>
+               <td><form method="POST" action="/admin/people/contact/${person.id}" style="display:inline">
+                     <input type="hidden" name="action" value="delete">
+                     <input type="hidden" name="contact_id" value="${contact.id}">
+                     <button type="submit" class="secondary">Remove</button>
+                   </form></td>
+             </tr>`
+           )
+           .join("")}
+       </table></div>
+       <p class="small muted">This look has been recorded against your name in the activity log.</p>`
+    : `<p class="muted">${
+        contactCount
+          ? `${contactCount} recorded. They are not shown until you ask for them.`
+          : "None recorded yet."
+      }</p>
+       ${
+         contactCount
+           ? `<form method="POST" action="/admin/people/contact/${person.id}">
+                <input type="hidden" name="action" value="reveal">
+                <button type="submit">Show the contact details</button>
+                <span class="hint">Asking writes a line in the activity log naming you, this child and
+                  the time. That is deliberate.</span>
+              </form>`
+           : ""
+       }`;
+
+  return `<div class="card">
+    <h2>Parents' contact details</h2>
+    <div class="notice">
+      <p style="margin:0">The most sensitive thing this app holds. Never in a list, never in an export
+         except the separate contacts export, and never shown without it being written down.</p>
+    </div>
+    ${list}
+    <details style="margin-top:0.8rem">
+      <summary class="muted small">Add a contact</summary>
+      <form method="POST" action="/admin/people/contact/${person.id}" style="margin-top:0.6rem">
+        <input type="hidden" name="action" value="add">
+        <div class="row">
+          <div class="field">
+            <label for="label">Who they are</label>
+            <input type="text" id="label" name="label" placeholder="Parent 1, Grandmother">
+          </div>
+          <div class="field">
+            <label for="name">Their name</label>
+            <input type="text" id="name" name="name">
+          </div>
+          <div class="field">
+            <label for="phone">Telephone</label>
+            <input type="tel" id="phone" name="phone" required>
+          </div>
+        </div>
+        <button type="submit">Add</button>
+      </form>
+    </details>
+  </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// The safeguarding rota (Addendum A, A5)
+// ---------------------------------------------------------------------------
+
+export interface DutyEvent {
+  service: {
+    id: number;
+    service_date: string;
+    service_time: string | null;
+    title: string;
+    designation: string | null;
+    event_type: string | null;
+  };
+  duties: DutyRow[];
+  coverage: DutyCoverage;
+  /** Expected under-16 headcount, or null when nobody knows. */
+  childrenExpected: number | null;
+}
+
+/**
+ * What is coming, and whether anybody is on it.
+ *
+ * Red first is deliberate. This is read on a Wednesday evening by somebody
+ * deciding whether they have to ring round, and the events that need ringing
+ * round about are the only ones that matter — so they come first, whatever
+ * order the calendar puts them in.
+ */
+export function adminSafeguardingPage(
+  events: DutyEvent[],
+  childrenPerAdult: number | null,
+  message?: string
+): string {
+  const rank = { red: 0, amber: 1, green: 2 } as const;
+  const sorted = [...events].sort(
+    (a, b) =>
+      rank[a.coverage.rag] - rank[b.coverage.rag] ||
+      a.service.service_date.localeCompare(b.service.service_date)
+  );
+
+  const needing = events.filter((e) => e.coverage.rag !== "green").length;
+
+  const card = (event: DutyEvent) => {
+    const primary = event.duties.filter((d) => !d.is_backup);
+    const backups = event.duties.filter((d) => d.is_backup);
+
+    const forRole = (role: string, list: DutyRow[]) =>
+      list
+        .filter((d) => d.role === role)
+        .map((d) => esc(d.display_name))
+        .join(", ");
+
+    return `<div class="card duty-card ${esc(event.coverage.rag)}">
+      <h2>
+        <a href="/admin/safeguarding/${event.service.id}">${esc(event.service.title)}</a>
+        <span class="pill ${esc(event.coverage.rag)}">${
+          event.coverage.rag === "green" ? "Covered" : event.coverage.rag === "amber" ? "Check" : "Not covered"
+        }</span>
+      </h2>
+      <p class="muted small">${esc(prettyDate(event.service.service_date))}${
+        event.service.service_time ? ` at ${esc(event.service.service_time)}` : ""
+      }${event.service.designation ? ` · ${esc(event.service.designation)}` : ""}${
+        event.childrenExpected !== null ? ` · about ${event.childrenExpected} children` : ""
+      }</p>
+
+      <div class="scroll"><table>
+        ${DUTY_ROLES.map((role) => {
+          const who = forRole(role.value, primary);
+          const backup = forRole(role.value, backups);
+          return `<tr>
+            <td><strong>${esc(role.label)}</strong><div class="small muted">${esc(role.blurb)}</div></td>
+            <td>${who || '<span class="muted">nobody</span>'}${
+              backup ? `<div class="small muted">backup: ${backup}</div>` : ""
+            }</td>
+          </tr>`;
+        }).join("")}
+      </table></div>
+
+      ${
+        event.coverage.issues.length
+          ? `<ul class="issues">${event.coverage.issues
+              .map((i) => `<li class="${esc(i.severity)}">${esc(i.message)}</li>`)
+              .join("")}</ul>`
+          : ""
+      }
+    </div>`;
+  };
+
+  return page(
+    `Duty rota — ${CHURCH.appName}`,
+    `<h1>Duty rota ${betaChip()}<span class="sub">${
+      needing ? `${needing} of the next ${events.length} need attention` : "everything coming up is covered"
+    }</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     <p><a class="btn" href="/admin/safeguarding/today">Today's duty</a></p>
+
+     ${sorted.length ? sorted.map(card).join("") : `<p class="muted">Nothing coming up.</p>`}
+
+     <div class="card">
+       <h2>Add an event</h2>
+       <p class="muted">Practices, weddings, concerts and tours are not on the service app's music list
+          and never will be — it publishes what is being sung, not the department's diary. Put them in
+          here and they carry a rota and a register like anything else.</p>
+       <form method="POST" action="/admin/safeguarding/events">
+         <div class="row">
+           <div class="field">
+             <label for="title">What it is</label>
+             <input type="text" id="title" name="title" required placeholder="Boys practice">
+           </div>
+           <div class="field">
+             <label for="date">Date</label>
+             <input type="date" id="date" name="date" required>
+           </div>
+           <div class="field">
+             <label for="time">Time</label>
+             <input type="time" id="time" name="time">
+           </div>
+           <div class="field">
+             <label for="event_type">Kind</label>
+             <select id="event_type" name="event_type">
+               ${EVENT_TYPES.map(
+                 (t) => `<option value="${esc(t.value)}"${t.value === "other" ? " selected" : ""}>${esc(t.label)}</option>`
+               ).join("")}
+             </select>
+           </div>
+           <div class="field">
+             <label for="designation">Who is singing</label>
+             <input type="text" id="designation" name="designation" placeholder="Boys">
+             <span class="hint">Spelled the way the music list spells it — that is what decides whose
+               names are on the register.</span>
+           </div>
+         </div>
+         <button type="submit">Add the event</button>
+       </form>
+     </div>
+
+     <div class="card">
+       <h2>How many children to an adult</h2>
+       <form method="POST" action="/admin/safeguarding/ratio">
+         <div class="field" style="max-width:10rem">
+           <label for="children_per_adult">Children per adult on duty</label>
+           <input type="number" id="children_per_adult" name="children_per_adult" min="1" max="50"
+                  value="${childrenPerAdult ?? ""}" placeholder="not set">
+         </div>
+         <p class="muted small">Left blank, the ratio is not checked at all. This app does not ship a
+            figure: what is acceptable is the Minster's safeguarding policy to state, not something
+            software should decide. Set it and every event above is checked against it.</p>
+         <button type="submit">Save</button>
+       </form>
+     </div>
+
+     <style>
+       .duty-card.red { border-left: 4px solid var(--colour-pill-red-ink); }
+       .duty-card.amber { border-left: 4px solid var(--colour-pill-amber-ink); }
+       .duty-card h2 { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+       .issues { margin: 0.6rem 0 0; padding-left: 1.1rem; font-size: 0.9rem; }
+       .issues li.red { color: var(--colour-pill-red-ink); }
+       .issues li.amber { color: var(--colour-pill-amber-ink); }
+     </style>`,
+    { admin: true, path: "/admin/safeguarding" }
+  );
+}
+
+/** One event: who is on, who could be, and what is still missing. */
+export function adminDutyEventPage(
+  event: DutyEvent,
+  candidates: PersonRow[],
+  message?: string
+): string {
+  const options = candidates
+    .map((p) => `<option value="${p.id}">${esc(p.display_name)}</option>`)
+    .join("");
+
+  const assigned = (role: string, backup: boolean) =>
+    event.duties
+      .filter((d) => d.role === role && Boolean(d.is_backup) === backup)
+      .map(
+        (d) => `<li>
+          ${esc(d.display_name)}
+          ${
+            d.dbs_valid_until === null
+              ? ' <span class="pill grey">no DBS date</span>'
+              : ""
+          }
+          <form method="POST" action="/admin/safeguarding/${event.service.id}" style="display:inline">
+            <input type="hidden" name="action" value="remove">
+            <input type="hidden" name="duty_id" value="${d.id}">
+            <button type="submit" class="secondary small-btn">Take off</button>
+          </form>
+        </li>`
+      )
+      .join("");
+
+  return page(
+    `${event.service.title} — duty — ${CHURCH.appName}`,
+    `<h1>${esc(event.service.title)} ${betaChip()}
+       <span class="sub">${esc(prettyDate(event.service.service_date))}${
+         event.service.service_time ? ` at ${esc(event.service.service_time)}` : ""
+       }</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     ${
+       event.coverage.issues.length
+         ? `<div class="notice ${event.coverage.rag === "red" ? "error" : ""}">
+              <ul class="issues" style="margin:0">${event.coverage.issues
+                .map((i) => `<li class="${esc(i.severity)}">${esc(i.message)}</li>`)
+                .join("")}</ul>
+            </div>`
+         : `<div class="notice ok"><p style="margin:0">Covered.</p></div>`
+     }
+
+     ${DUTY_ROLES.map(
+       (role) => `<div class="card">
+         <h2>${esc(role.label)}</h2>
+         <p class="muted small">${esc(role.blurb)}</p>
+         <ul class="duty-list">${assigned(role.value, false) || '<li class="muted">Nobody on duty.</li>'}</ul>
+         ${
+           assigned(role.value, true)
+             ? `<p class="small muted" style="margin-bottom:0.2rem">Backup</p>
+                <ul class="duty-list">${assigned(role.value, true)}</ul>`
+             : ""
+         }
+         <form method="POST" action="/admin/safeguarding/${event.service.id}">
+           <input type="hidden" name="action" value="assign">
+           <input type="hidden" name="role" value="${esc(role.value)}">
+           <div class="row">
+             <div class="field">
+               <label for="person-${esc(role.value)}">Put somebody on</label>
+               <select id="person-${esc(role.value)}" name="person_id">${options}</select>
+             </div>
+             <div class="field">
+               <label for="backup-${esc(role.value)}">As</label>
+               <select id="backup-${esc(role.value)}" name="is_backup">
+                 <option value="0">On duty</option>
+                 <option value="1">Backup</option>
+               </select>
+             </div>
+           </div>
+           <button type="submit" ${candidates.length ? "" : "disabled"}>Add</button>
+           ${
+             candidates.length
+               ? ""
+               : `<span class="hint">Nobody on the choir list is recorded as an adult yet — anybody
+                    with no school year counts as one.</span>`
+           }
+         </form>
+       </div>`
+     ).join("")}
+
+     <p><a class="btn secondary" href="/admin/safeguarding">Back to the rota</a></p>
+
+     <style>
+       .duty-list { list-style: none; margin: 0 0 0.6rem; padding: 0; }
+       .duty-list li { padding: 0.25rem 0; }
+       .small-btn { font-size: 0.8rem; padding: 0.15rem 0.5rem; }
+     </style>`,
+    { admin: true, path: "/admin/safeguarding" }
+  );
+}
+
+/**
+ * Today, on a phone, in a doorway.
+ *
+ * One question at the top — what am I on? — then the way straight to the
+ * register, then the tick. Everything else is a link. This is the screen used
+ * one-handed at twenty past eight with the other hand holding a door open, and
+ * the only thing it must do well is be readable at arm's length.
+ */
+export function adminDutyTodayPage(
+  events: DutyEvent[],
+  me: string,
+  registerable: boolean,
+  message?: string
+): string {
+  const mine = (event: DutyEvent) =>
+    event.duties.filter((d) => d.display_name.toLowerCase() === me.toLowerCase());
+
+  const card = (event: DutyEvent) => {
+    const dismissal = event.duties.filter((d) => d.role === "dismissal" && !d.is_backup);
+    const collected = dismissal.find((d) => d.all_collected_at !== null);
+
+    return `<div class="card">
+      <h2>${esc(event.service.title)}</h2>
+      <p class="muted small">${
+        event.service.service_time ? `${esc(event.service.service_time)} · ` : ""
+      }${esc(event.service.designation ?? "")}</p>
+
+      <div class="scroll"><table>
+        ${DUTY_ROLES.map((role) => {
+          const who = event.duties
+            .filter((d) => d.role === role.value && !d.is_backup)
+            .map((d) => esc(d.display_name))
+            .join(", ");
+          return `<tr><td><strong>${esc(role.label)}</strong></td>
+                      <td>${who || '<span class="muted">nobody</span>'}</td></tr>`;
+        }).join("")}
+      </table></div>
+
+      ${
+        registerable
+          ? `<p><a class="btn" href="/admin/people/register/${event.service.id}">Take the register</a></p>`
+          : ""
+      }
+
+      ${
+        collected
+          ? `<div class="notice ok">
+               <p style="margin:0"><strong>Every child under eighteen was collected.</strong>
+                  Ticked by ${esc(collected.all_collected_by ?? "somebody on duty")} at
+                  ${esc((collected.all_collected_at ?? "").slice(11, 16))}.</p>
+             </div>`
+          : dismissal.length
+            ? `<form method="POST" action="/admin/safeguarding/collected">
+                 <input type="hidden" name="duty_id" value="${dismissal[0]!.id}">
+                 <p class="muted small">Tick this once the last child has gone. It is recorded against
+                    your name and the time, and it cannot be un-ticked.</p>
+                 <button type="submit" class="big">Every child under 18 has been collected</button>
+               </form>`
+            : `<p class="muted small">Nobody is on dismissal, so there is nothing to tick.</p>`
+      }
+    </div>`;
+  };
+
+  return page(
+    `Today's duty — ${CHURCH.appName}`,
+    `<h1>Today ${betaChip()}<span class="sub">${
+      events.length ? `${events.length} ${events.length === 1 ? "event" : "events"}` : "nothing on"
+    }</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     ${
+       events.some((e) => mine(e).length)
+         ? `<div class="notice">
+              <p style="margin:0"><strong>You are on duty.</strong> ${events
+                .flatMap((e) => mine(e).map((d) => esc(`${d.role} at ${e.service.title}`)))
+                .join("; ")}.</p>
+            </div>`
+         : ""
+     }
+
+     ${events.length ? events.map(card).join("") : `<p class="muted">Nothing on today.</p>`}
+
+     <p><a class="btn secondary" href="/admin/safeguarding">The whole rota</a></p>
+
+     <style>
+       button.big { font-size: 1.05rem; padding: 0.75rem 1.1rem; width: 100%; }
+     </style>`,
+    { admin: true, path: "/admin/safeguarding" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Attendance, rates and pay (Addendum A, A4)
+// ---------------------------------------------------------------------------
+
+/**
+ * The workbook's shape: per person, per month, and a percentage.
+ *
+ * "Possible" is how many events that person's choir was actually due at, so
+ * the boys are not marked down for missing an Evensong the girls sang. A
+ * percentage of null shows as a dash rather than 0%, because 0% reads as "never
+ * turned up" and the truth is "was never asked".
+ */
+export function adminAttendancePage(
+  quarter: Quarter,
+  quarters: Quarter[],
+  totals: PersonTotals[],
+  months: string[]
+): string {
+  const byChoir = new Map<string, PersonTotals[]>();
+  for (const t of totals) {
+    const list = byChoir.get(t.choir);
+    if (list) list.push(t);
+    else byChoir.set(t.choir, [t]);
+  }
+
+  const monthLabel = (month: string) =>
+    new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
+
+  return page(
+    `Attendance — ${CHURCH.appName}`,
+    `<h1>Attendance ${betaChip()}<span class="sub">${esc(quarter.label)}</span></h1>
+
+     <form method="GET" action="/admin/people/attendance" class="card">
+       <div class="field" style="max-width:16rem">
+         <label for="quarter">Quarter</label>
+         <select id="quarter" name="quarter" onchange="this.form.submit()">
+           ${quarters
+             .map(
+               (q) =>
+                 `<option value="${esc(q.ref)}"${q.ref === quarter.ref ? " selected" : ""}>${esc(q.label)}</option>`
+             )
+             .join("")}
+         </select>
+       </div>
+       <noscript><button type="submit">Show</button></noscript>
+     </form>
+
+     ${
+       totals.length
+         ? CHOIRS.filter((c) => byChoir.has(c.value))
+             .map(
+               (c) => `<div class="card">
+                 <h2>${esc(c.label)}</h2>
+                 <div class="scroll"><table>
+                   <tr>
+                     <th>Name</th>
+                     ${months.map((m) => `<th class="num">${esc(monthLabel(m))}</th>`).join("")}
+                     <th class="num">Quarter</th>
+                     <th class="num">%</th>
+                   </tr>
+                   ${byChoir
+                     .get(c.value)!
+                     .map(
+                       (t) => `<tr>
+                         <td><a href="/admin/people/${t.person_id}">${esc(t.display_name)}</a></td>
+                         ${t.months
+                           .map(
+                             (m) =>
+                               `<td class="num">${m.possible ? `${m.present}/${m.possible}` : '<span class="muted">—</span>'}</td>`
+                           )
+                           .join("")}
+                         <td class="num">${t.possible ? `${t.present}/${t.possible}` : '<span class="muted">—</span>'}</td>
+                         <td class="num">${
+                           t.percent === null ? '<span class="muted">—</span>' : `${t.percent}%`
+                         }</td>
+                       </tr>`
+                     )
+                     .join("")}
+                 </table></div>
+               </div>`
+             )
+             .join("")
+         : `<p class="muted">Nothing recorded in this quarter.</p>`
+     }
+
+     <p>
+       <a class="btn secondary" href="/admin/people/pay?quarter=${esc(quarter.ref)}">Work out the pay</a>
+       <a class="btn secondary" href="/admin/people/attendance.csv?quarter=${esc(quarter.ref)}">Export this</a>
+     </p>`,
+    { admin: true, path: "/admin/people" }
+  );
+}
+
+/**
+ * The pay run, on screen before it is a file.
+ *
+ * Shown first because a spreadsheet that appears in the downloads folder is a
+ * spreadsheet nobody checked. The per-person breakdown is here, the total is
+ * here, and anything that could not be priced is called out in red — a service
+ * sung before a rate was set has no rate, and treating that as nought would
+ * short-change somebody without anybody noticing.
+ */
+export function adminPayPage(
+  run: PayRun,
+  quarters: Quarter[],
+  rates: RateRow[],
+  message?: string
+): string {
+  const rateLine = (role: (typeof RATE_ROLES)[number]) => {
+    const current = rates.filter((r) => r.role === role.value);
+    return `<tr>
+      <td><strong>${esc(role.label)}</strong><div class="small muted">${esc(role.blurb)}</div></td>
+      <td>${
+        current.length
+          ? current
+              .map(
+                (r) =>
+                  `<div>${esc(pounds(r.amount_pence))} <span class="muted small">from ${esc(
+                    prettyDate(r.effective_from)
+                  )}</span>
+                   <form method="POST" action="/admin/people/rates" style="display:inline">
+                     <input type="hidden" name="action" value="delete">
+                     <input type="hidden" name="id" value="${r.id}">
+                     <button type="submit" class="secondary small-btn">Remove</button>
+                   </form></div>`
+              )
+              .join("")
+          : '<span class="muted">no rate set</span>'
+      }</td>
+    </tr>`;
+  };
+
+  return page(
+    `Pay — ${CHURCH.appName}`,
+    `<h1>Pay ${betaChip()}<span class="sub">${esc(run.quarter.label)}</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     <form method="GET" action="/admin/people/pay" class="card">
+       <div class="field" style="max-width:16rem">
+         <label for="quarter">Quarter</label>
+         <select id="quarter" name="quarter" onchange="this.form.submit()">
+           ${quarters
+             .map(
+               (q) =>
+                 `<option value="${esc(q.ref)}"${q.ref === run.quarter.ref ? " selected" : ""}>${esc(q.label)}</option>`
+             )
+             .join("")}
+         </select>
+       </div>
+       <noscript><button type="submit">Show</button></noscript>
+     </form>
+
+     ${
+       run.unrated
+         ? `<div class="notice error">
+              <p style="margin:0"><strong>${run.unrated} ${
+                run.unrated === 1 ? "attendance has" : "attendances have"
+              } no rate.</strong> They were sung on days no rate was in force, so they are counted below
+                 and priced at nothing. Set a rate with an earlier start date and this figure changes.</p>
+            </div>`
+         : ""
+     }
+
+     <div class="card">
+       <h2>What each person is owed</h2>
+       ${
+         run.lines.length
+           ? `<div class="scroll"><table>
+                <tr><th>Name</th><th>Choir</th><th class="num">Services</th><th class="num">Weddings</th>
+                    <th class="num">Not priced</th><th class="num">Due</th></tr>
+                ${run.lines
+                  .map(
+                    (l) => `<tr>
+                      <td>${esc(l.display_name)}</td>
+                      <td>${esc(CHOIRS.find((c) => c.value === l.choir)?.label ?? l.choir)}</td>
+                      <td class="num">${l.services}</td>
+                      <td class="num">${l.weddings}</td>
+                      <td class="num">${l.unrated || ""}</td>
+                      <td class="num">${esc(pounds(l.pence))}</td>
+                    </tr>`
+                  )
+                  .join("")}
+                <tr><td colspan="5"><strong>Total</strong></td>
+                    <td class="num"><strong>${esc(pounds(run.totalPence))}</strong></td></tr>
+              </table></div>
+              <p><a class="btn" href="/admin/people/pay.csv?quarter=${esc(run.quarter.ref)}">Download this as a spreadsheet</a></p>
+              <p class="muted small">A CSV, which opens in Excel and in Numbers. Downloading it is
+                 recorded in the activity log with a fingerprint of the file, so a printed pay run can
+                 always be matched back to the moment it was made.</p>`
+           : `<p class="muted">Nobody was marked present in this quarter.</p>`
+       }
+     </div>
+
+     <div class="card">
+       <h2>Rates</h2>
+       <p class="muted">A rate is a row with a date, not a figure that gets edited over: last quarter's
+          pay still works out at last quarter's rate, and a quarter that straddles a change comes out
+          right on its own. Nothing is set to start with — the figures are yours.</p>
+       <div class="scroll"><table>${RATE_ROLES.map(rateLine).join("")}</table></div>
+
+       <form method="POST" action="/admin/people/rates">
+         <input type="hidden" name="action" value="add">
+         <div class="row">
+           <div class="field">
+             <label for="role">What for</label>
+             <select id="role" name="role">
+               ${RATE_ROLES.map((r) => `<option value="${esc(r.value)}">${esc(r.label)}</option>`).join("")}
+             </select>
+           </div>
+           <div class="field">
+             <label for="amount">Amount</label>
+             <input type="text" id="amount" name="amount" placeholder="4.50" required inputmode="decimal">
+             <span class="hint">In pounds. Held as whole pence, so nothing rounds.</span>
+           </div>
+           <div class="field">
+             <label for="effective_from">In force from</label>
+             <input type="date" id="effective_from" name="effective_from" required>
+           </div>
+         </div>
+         <button type="submit">Set the rate</button>
+       </form>
+     </div>
+
+     <style>
+       .small-btn { font-size: 0.8rem; padding: 0.15rem 0.5rem; }
+     </style>`,
+    { admin: true, path: "/admin/people" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Exports (Addendum A, A6)
+// ---------------------------------------------------------------------------
+
+export interface ExportOption {
+  href: string;
+  label: string;
+  blurb: string;
+  /** True for the one export that carries parents' telephone numbers. */
+  contacts?: boolean;
+}
+
+/**
+ * Everything that can be taken out of the app, in one place.
+ *
+ * The list is filtered by the same two rules as the front page — the module
+ * has to be on, and the reader has to hold a role that may reach it — so a
+ * librarian sees the catalogue exports and nothing about a person.
+ *
+ * The contacts export is set apart deliberately, in its own card and its own
+ * colour, and it is the only export in the app that carries a telephone
+ * number. Every other person export leaves them out entirely, which is what
+ * makes this one worth marking out.
+ */
+export function adminExportsPage(
+  options: ExportOption[],
+  contactsExport: ExportOption | null,
+  message?: string
+): string {
+  const row = (o: ExportOption) => `<tr>
+    <td><strong>${esc(o.label)}</strong><div class="small muted">${esc(o.blurb)}</div></td>
+    <td><a class="btn secondary" href="${o.href}">Download</a></td>
+  </tr>`;
+
+  return page(
+    `Exports — ${CHURCH.appName}`,
+    `<h1>Exports ${betaChip()}<span class="sub">Taking the data out</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     <div class="notice">
+       <p style="margin:0">All of these are CSV, which opens in Excel and in Numbers. Every download is
+          recorded in the activity log. A file on a laptop has none of the protections this app has —
+          keep it where you would keep a printed register, and delete it when you are done with it.</p>
+     </div>
+
+     <div class="card">
+       <h2>What you can take out</h2>
+       ${
+         options.length
+           ? `<div class="scroll"><table>${options.map(row).join("")}</table></div>`
+           : `<p class="muted">Nothing to export — the modules that would have something in them are
+                switched off.</p>`
+       }
+     </div>
+
+     ${
+       contactsExport
+         ? `<div class="card contacts">
+              <h2>Parents' contact details</h2>
+              <p><strong>This is the only export in this app that contains a telephone number.</strong>
+                 Every other one leaves them out, on purpose. Downloading it is recorded against your
+                 name with a fingerprint of the file.</p>
+              <p class="muted small">A spreadsheet of children's parents' telephone numbers is the
+                 single most sensitive thing this app can produce. Take it only when you have a reason
+                 to, keep it off anything shared, and delete it afterwards.</p>
+              <p><a class="btn" href="${contactsExport.href}">Download the contacts</a></p>
+            </div>`
+         : ""
+     }
+
+     <style>
+       .card.contacts { border-left: 4px solid var(--colour-pill-red-ink); }
+     </style>`,
+    { admin: true, path: "/admin/export" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The workbook importer (Addendum A, A7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Upload a workbook, and what has been uploaded before.
+ *
+ * The screen says what will and will not happen in the plainest terms
+ * available, because the fear this has to answer is "am I about to overwrite
+ * the choir list?" — and the answer is no, nothing at all is written until the
+ * next screen.
+ */
+export function adminImportWorkbookPage(
+  batches: BatchRow[],
+  message?: string,
+  error?: string
+): string {
+  return page(
+    `Import a workbook — ${CHURCH.appName}`,
+    `<h1>Import a workbook ${betaChip()}<span class="sub">Reading the department's register</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+     ${error ? `<div class="notice error"><p style="margin:0">${esc(error)}</p></div>` : ""}
+
+     <div class="notice">
+       <p style="margin:0"><strong>Nothing is added to the choir until you say so.</strong> The file is
+          read, and what it found is shown to you on the next screen, row by row, with anything it could
+          not make sense of marked. You then tick what to keep. Until you do, nothing has changed.</p>
+     </div>
+
+     <div class="card">
+       <h2>The file</h2>
+       <form method="POST" action="/admin/people/import" enctype="multipart/form-data">
+         <div class="field">
+           <label for="workbook">The workbook</label>
+           <input type="file" id="workbook" name="workbook" accept=".xlsx" required>
+           <span class="hint">An Excel .xlsx file. A tab named after a choir — "Girls", "Boys",
+             "Consort", "JC" — is read as that group; the reader looks for a column headed Name, and
+             then for School year, Joined, Surplice, Dean's, Archbishop's, Gold, and anything with
+             "phone" in the heading.</span>
+         </div>
+         <button type="submit">Read it</button>
+       </form>
+       <p class="muted small"><strong>This is an early version.</strong> It is built around the shape
+          the register was described as having, not around the real file — expect to look carefully at
+          what it makes of the first one, and to tell ${esc(CHURCH.contact.maintainer.shortName)} what
+          it got wrong.</p>
+     </div>
+
+     ${
+       batches.length
+         ? `<div class="card">
+              <h2>Uploads so far</h2>
+              <div class="scroll"><table>
+                <tr><th>File</th><th>When</th><th>Who</th><th>State</th><th></th></tr>
+                ${batches
+                  .map(
+                    (b) => `<tr>
+                      <td>${esc(b.filename ?? "—")}</td>
+                      <td>${esc(prettyDate(b.uploaded_at.slice(0, 10)))}</td>
+                      <td class="small">${esc(b.uploaded_by ?? "—")}</td>
+                      <td>${
+                        b.status === "pending"
+                          ? '<span class="pill amber">waiting for you</span>'
+                          : b.status === "applied"
+                            ? '<span class="pill green">added</span>'
+                            : '<span class="pill grey">discarded</span>'
+                      }</td>
+                      <td>${
+                        b.status === "pending"
+                          ? `<a class="btn secondary" href="/admin/people/import/${b.id}">Look at it</a>`
+                          : ""
+                      }</td>
+                    </tr>`
+                  )
+                  .join("")}
+              </table></div>
+            </div>`
+         : ""
+     }
+
+     <p><a class="btn secondary" href="/admin/people">Back to the choir</a></p>`,
+    { admin: true, path: "/admin/people" }
+  );
+}
+
+/**
+ * What the workbook was found to contain, before anything is written.
+ *
+ * Rows with a problem come first and are ticked off by default, because the
+ * ones needing a decision are the only ones worth anybody's attention and a
+ * page of four hundred clean rows buries them. Everything clean is ticked on.
+ */
+export function adminImportReviewPage(
+  batch: BatchRow,
+  rows: Array<{ id: number; sheet: string | null; rowNumber: number | null; issue: string | null; person: ProposedPerson }>,
+  message?: string
+): string {
+  const withIssues = rows.filter((r) => r.issue);
+  const clean = rows.filter((r) => !r.issue);
+
+  const row = (r: (typeof rows)[number]) => `<tr class="${r.issue ? "flagged" : ""}">
+    <td><input type="checkbox" name="accept" value="${r.id}" ${r.issue ? "" : "checked"}></td>
+    <td>${esc(r.person.displayName)}</td>
+    <td>${esc(CHOIRS.find((c) => c.value === r.person.choir)?.label ?? "—")}</td>
+    <td>${esc(schoolYearLabel(r.person.schoolYear))}</td>
+    <td class="small">${esc(r.person.joinedOn ?? "")}</td>
+    <td class="small">${r.person.contacts.length ? `${r.person.contacts.length} contact${r.person.contacts.length === 1 ? "" : "s"}` : ""}</td>
+    <td class="small muted">${esc(r.sheet ?? "")}${r.rowNumber ? ` row ${r.rowNumber}` : ""}</td>
+    <td class="small">${r.issue ? `<span class="pill amber">${esc(r.issue)}</span>` : ""}</td>
+  </tr>`;
+
+  const table = (list: typeof rows) => `<div class="scroll"><table>
+    <tr><th></th><th>Name</th><th>Choir</th><th>School year</th><th>Joined</th><th>Contacts</th>
+        <th>From</th><th>Problem</th></tr>
+    ${list.map(row).join("")}
+  </table></div>`;
+
+  return page(
+    `${batch.filename ?? "Workbook"} — ${CHURCH.appName}`,
+    `<h1>What the workbook says ${betaChip()}
+       <span class="sub">${rows.length} ${rows.length === 1 ? "row" : "rows"} read from ${esc(
+         batch.filename ?? "the file"
+       )}</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     <div class="notice">
+       <p style="margin:0"><strong>Nothing has been added yet.</strong> Tick the rows to keep and press
+          the button at the bottom. The numbers in the "Contacts" column are added alongside the person
+          they belong to. Anything left unticked is not added, and <strong>this upload is finished
+          either way</strong> — if you want the rest, put the file right and read it again.</p>
+     </div>
+
+     <form method="POST" action="/admin/people/import/${batch.id}">
+       ${
+         withIssues.length
+           ? `<div class="card">
+                <h2>${withIssues.length} ${withIssues.length === 1 ? "row needs" : "rows need"} a look</h2>
+                <p class="muted">These are unticked. Tick one to add it as it stands — you can put the
+                   details right afterwards on the person's own page.</p>
+                ${table(withIssues)}
+              </div>`
+           : ""
+       }
+
+       ${
+         clean.length
+           ? `<div class="card">
+                <h2>${clean.length} ${clean.length === 1 ? "row" : "rows"} read cleanly</h2>
+                ${table(clean)}
+              </div>`
+           : `<p class="muted">Nothing in the file read cleanly.</p>`
+       }
+
+       <div class="card">
+         <button type="submit" name="action" value="apply" class="confirm">Add the ticked rows</button>
+         <button type="submit" name="action" value="discard" class="secondary">Throw this upload away</button>
+         <p class="muted small">Throwing it away deletes what was read, names and all. The activity log
+            keeps a line saying you did it, and nothing else.</p>
+       </div>
+     </form>
+
+     <style>
+       tr.flagged td { background: var(--colour-pill-amber-bg); }
+       td .pill { white-space: normal; }
+     </style>`,
+    { admin: true, path: "/admin/people" }
   );
 }

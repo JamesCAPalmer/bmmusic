@@ -28,8 +28,20 @@ routes = [
 # Estate rule: this reads bmserviceapp's OUTPUT. bmserviceapp's own cron is the
 # only parser of the Minster's music-list document in the estate, and nothing
 # here fetches or parses that document.
+#
+# Three schedules, told apart in `scheduled()` by their expression:
+#
+#   "30 * * * *"  the hourly feed read, above.
+#   "15 2 * * *"  the nightly backup of every table to R2, and the prune of
+#                 anything past 35 days. Small hours, and not on the hour, so
+#                 it does not land with the feed read.
+#   "0 3 1 9 *"   1 September: everybody moves up a school year.
+#
+# Times are UTC. The September job is deliberately in the small hours of the
+# 1st: nobody is looking at a register then, and by the time anybody is, the
+# year groups are already right.
 [triggers]
-crons = ["30 * * * *"]
+crons = ["30 * * * *", "15 2 * * *", "0 3 1 9 *"]
 
 # The committed draft index is bundled with the Worker as text, so the admin
 # import action reads it straight from the deployment rather than needing an

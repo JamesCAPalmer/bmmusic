@@ -183,3 +183,35 @@ export function explainChoirSize(designation: string | null | undefined): string
   }
   return "a choir we do not have numbers for";
 }
+
+/**
+ * How many children a designation means — the safeguarding count.
+ *
+ * `singersFor` counts everyone who needs a copy. The duty rota needs a
+ * different number: how many people under sixteen are going to be there, which
+ * is the children's choirs and nobody else. An adult on duty is supervision;
+ * an adult singing is not a child.
+ *
+ * Same two rules as above, for the same reasons. A designation naming a
+ * visiting choir returns null, because their children are children too and
+ * nobody here knows how many they are bringing — a confident low number on a
+ * safeguarding screen is worse than no number at all. And "upper voices" is
+ * read as the three children's choirs, which is the *high* reading of an
+ * ambiguous phrase: here that means more supervision, not less.
+ */
+export function childrenFor(designation: string | null | undefined): number | null {
+  const size = choirSizeFor(designation);
+  // Unknown for the copies count is unknown here too: the leftover is a choir
+  // we cannot size, and it may be a coachload of children.
+  if (size.singers === null) return null;
+
+  let children = 0;
+  for (const phrase of size.recognised) {
+    if (phrase === "full choir" || phrase === "bglm" || phrase === "upper voices") {
+      children += boys + girls + consort;
+    } else if (phrase === "boys") children += boys;
+    else if (phrase === "girls") children += girls;
+    else if (phrase === "consort") children += consort;
+  }
+  return children;
+}

@@ -90,3 +90,34 @@ export function parseCsvObjects(text: string): Record<string, string>[] {
     return obj;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Writing
+// ---------------------------------------------------------------------------
+
+/**
+ * One CSV cell, quoted when it has to be.
+ *
+ * A leading `=`, `+`, `-` or `@` is prefixed with an apostrophe. Excel reads
+ * such a cell as a formula, and a name or a note that begins with one is a
+ * formula-injection hole in any file somebody else opens. The apostrophe is
+ * invisible in the cell and makes it text.
+ */
+function cell(value: unknown): string {
+  const text = value === null || value === undefined ? "" : String(value);
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
+/**
+ * Rows to CSV text, with a byte-order mark.
+ *
+ * The BOM is there because Excel on Windows reads a UTF-8 CSV as Windows-1252
+ * without one, and the first chorister with an accent in their name comes out
+ * mangled. CRLF for the same reason: it is what Excel writes and what every
+ * other reader copes with.
+ */
+export function toCsv(header: readonly string[], rows: readonly (readonly unknown[])[]): string {
+  const lines = [header.map(cell).join(","), ...rows.map((row) => row.map(cell).join(","))];
+  return `﻿${lines.join("\r\n")}\r\n`;
+}
