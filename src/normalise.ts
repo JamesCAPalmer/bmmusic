@@ -57,7 +57,7 @@ export function canonicalTitle(raw: string): string {
 /**
  * Split a joined title into its parts.
  *
- * The draft index joins the titles on one parcel with ";" — 65 of its 324 rows
+ * The draft index joins the titles on one parcel with ";" — 69 of its 410 rows
  * are multi-title. The joined string stays the piece's title verbatim, because
  * that is what is written on the parcel; the parts become aliases so that a
  * music list naming only one of them still finds it.
