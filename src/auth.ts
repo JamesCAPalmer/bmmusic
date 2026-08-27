@@ -158,8 +158,19 @@ function readCookie(c: Ctx, name: string): string | undefined {
 
 // --- middleware ---
 
-/** Paths reachable without a session. `/robots.txt` is public on purpose. */
+/**
+ * Paths reachable without a session.
+ *
+ * `/robots.txt` is public on purpose, and so is `/asset/*` — the sign-in page
+ * needs the Minster logo and the type faces before anybody has signed in. A
+ * logo and a font reveal nothing about the library; every route that touches
+ * the catalogue is still behind the gate.
+ */
 const PUBLIC_PATHS = new Set(["/login", "/logout", "/robots.txt"]);
+
+function isPublicPath(path: string): boolean {
+  return PUBLIC_PATHS.has(path) || path.startsWith("/asset/");
+}
 
 /**
  * Is this request allowed through the admin gate?
@@ -204,7 +215,7 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
     return next();
   }
 
-  if (PUBLIC_PATHS.has(path)) return next();
+  if (isPublicPath(path)) return next();
 
   // The current generation comes from the database, cached per isolate for a
   // minute (see src/password.ts) so this is not a D1 round trip per page load.

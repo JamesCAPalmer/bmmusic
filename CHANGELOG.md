@@ -9,6 +9,55 @@ diff.
 
 ## Session 2 — Build 2
 
+### The estate look
+
+The app now looks like the rest of the estate, because it uses the
+estate's actual design language rather than an approximation of it.
+
+**Where this came from.** The other estate repositories could not be
+read from this session — the GitHub tooling is scoped to this repo and
+`add_repo` needs an approval a non-interactive session cannot give. But
+bmserviceapp is *deployed*, and a deployed app carries its own design
+language: its stylesheet, its type, its logo. So the palette below was
+read off the live hub rather than guessed at, and `test/theme.test.ts`
+pins the values so a well-meaning tweak cannot quietly make the two apps
+different colours.
+
+**The palette is the estate's, token for token** — `#c83734` red,
+`#C8A24B` gold, `#FBF8F3` paper, `#2C2C2C` ink, `#1A6FB5` focus, and the
+matching dark values. Three visible consequences: corners are nearly
+square (the estate sets one radius, `2px`, and uses it everywhere); red
+carries identity while gold marks what wants a second glance, where a
+single claret used to do both; and **there is now a dark theme**, which
+the estate had and this app did not.
+
+**The estate's type**, Cormorant Garamond over Open Sans, and **the
+Minster logo** with its crest — light and dark variants, swapped in CSS
+exactly as the hub does it.
+
+All of it is **served by this Worker**, not a CDN. `CLAUDE.md` rules CDN
+assets out and the reason is in the same sentence: a phone in a cold
+song school with one bar of signal. A webfont from `fonts.gstatic.com`
+is a DNS lookup, a handshake and a round trip to somebody else's server
+before text renders in the right face. Same-origin bytes behind a
+one-year immutable cache cost one download per device, ever. 143 KB of
+assets, taking the bundle to 480 KB gzipped against a 3 MB ceiling.
+`/asset/*` is the only unauthenticated path, because the sign-in page
+needs the logo before there is a session — a logo and a type face reveal
+nothing about the library.
+
+**A season rule** under the masthead, 2px in the colour of the church
+season, using the hub's own liturgical colours and `src/churchyear.ts`
+to decide which. Pleasingly, the hub computes Easter with the same
+offsets this app already did.
+
+Two layout fixes found by actually looking at the rendered pages rather
+than trusting the markup: the sign-in page had no crest at all, which is
+the one page where somebody most needs to know where they have landed;
+and a Eucharist's four hymns took four full rows apiece, pushing the
+anthem off the bottom of a phone. Hymns now read as one line —
+"HYMNS 46 · 73 · 533 · 235" — which is how a chorister reads them.
+
 ### Choir sizes — the RAG stops being grey
 
 Real numbers arrived: the children's from Rachel Dent (12 consort, 19

@@ -12,7 +12,17 @@ A single Cloudflare Worker (Hono, server-rendered, no client framework) at
 
 **There are no public pages.** The choir side is behind a shared password,
 `/admin` is behind Cloudflare Access, every response carries noindex headers,
-and `robots.txt` disallows everything.
+and `robots.txt` disallows everything. The one unauthenticated path is
+`/asset/*` — the Minster logo and the two type faces, which the sign-in page
+needs before there is a session and which reveal nothing about the library.
+
+## How it looks
+
+The palette, the type (Cormorant Garamond over Open Sans), the Minster logo and
+the liturgical season rule are the estate's, matching
+[bmserviceapp](https://bmserviceapp.james-palmer.com). Everything is served by
+this Worker rather than a CDN — see `src/assets.ts` for why — and there is a
+dark theme that follows the phone's own setting unless somebody overrides it.
 
 ## What is here
 
@@ -71,6 +81,8 @@ src/labelsheet.ts      drawing the two label stocks
 src/people.ts          the choir and the register (personal data — see below)
 src/password.ts        the self-service choir password
 src/ui-admin.ts        the librarian's screens
+src/assets.ts          the estate's logo, icons and type faces, served locally
+assets/                those files — bundled, never fetched from a CDN
 migrations/            the D1 schema
 data/seed/             the committed draft index
 docs/PIPELINE.md       how music gets in, and the label-reading prompt

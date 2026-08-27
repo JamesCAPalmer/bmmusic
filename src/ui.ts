@@ -16,7 +16,14 @@
  */
 
 import { CHURCH } from "./church.config";
-import { THEME_CSS } from "./theme";
+import {
+  FONT_CSS,
+  SEASON_COLOURS,
+  SEASON_COLOUR_DEFAULT,
+  THEME,
+  THEME_CSS,
+  THEME_DARK,
+} from "./theme";
 import type {
   AliasRow,
   CatalogueStats,
@@ -36,6 +43,7 @@ import { slotLabel, type IngestSummary, type ServiceMusicWithPiece, type Service
 import { isMatchable, type Slot } from "./matcher";
 import { copiesRag, ragLabel, ragPill, worstRag } from "./rag";
 import { allBinders, type DescantResult } from "./descants";
+import { seasonsInPlay } from "./churchyear";
 import type { FeedbackRow, ScanSubmissionRow } from "./submissions";
 
 // ---------------------------------------------------------------------------
@@ -116,31 +124,73 @@ export function flagPills(reviewFlag: string | null): string {
 const STYLES = `
   :root { font-size: var(--type-root-size); }
   * { box-sizing: border-box; }
-  body { font-family: var(--type-family-base); max-width: var(--type-measure);
-         margin: 0 auto; padding: 1.25rem 1rem 4rem; color: var(--colour-ink);
-         line-height: var(--type-line-height); background: var(--colour-canvas); }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: var(--type-family-base); color: var(--colour-ink);
+         line-height: var(--type-line-height); background: var(--colour-canvas);
+         -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  main { display: block; max-width: var(--type-measure); margin: 0 auto;
+         padding: 1.25rem 1.5rem 4rem; }
+  main:focus { outline: none; }
   a { color: var(--colour-accent); }
-  h1 { font-family: var(--type-family-display); font-size: var(--type-h1); margin: 0.5rem 0; font-weight: 700; }
-  h2 { font-size: var(--type-h2); }
+
+  /* The estate's focus ring: one blue that is nobody else's colour, so a
+     keyboard user always knows where they are. */
+  :focus-visible { outline: 3px solid var(--colour-focus); outline-offset: 2px;
+                   border-radius: var(--radius-sm); }
+
+  /* Skip link — off-screen until focused, then the first thing you reach. */
+  .skip { position: absolute; left: -999px; top: 0; background: var(--colour-surface);
+          color: var(--colour-ink); padding: 0.6rem 1rem; border: 2px solid var(--colour-focus);
+          z-index: 50; }
+  .skip:focus { left: 0.5rem; top: 0.5rem; }
+
+  h1 { font-family: var(--type-family-display); font-size: var(--type-h1); margin: 0.5rem 0 0.45rem;
+       font-weight: 600; line-height: 1.08; letter-spacing: 0.005em; }
+  h2 { font-family: var(--type-family-display); font-size: var(--type-h2); font-weight: 600;
+       letter-spacing: 0.005em; }
   h1 .sub { font-family: var(--type-family-base); font-size: 1rem; font-weight: 400; color: var(--colour-muted); display: block; }
   .muted { color: var(--colour-muted); }
   .small { font-size: 0.9rem; }
-  .navbar { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem 1rem;
-            flex-wrap: wrap; background: var(--colour-surface); border: 1px solid var(--colour-border-subtle);
-            border-radius: var(--radius-xl); padding: 0.55rem 0.9rem; margin-bottom: 1.25rem;
-            box-shadow: var(--shadow-card); }
-  .navbar .brand { display: flex; align-items: baseline; gap: 0.5rem; text-decoration: none;
-                   color: var(--colour-ink); font-weight: 700; font-size: 1.1rem;
-                   font-family: var(--type-family-display); }
-  .navbar .brand .where { font-family: var(--type-family-base); font-size: 0.8rem; font-weight: 400;
-                          color: var(--colour-subtle); }
-  .nav-actions { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; font-size: 0.92rem; }
-  .nav-actions a { display: inline-flex; align-items: center; padding: 0.35rem 0.7rem;
-                   border-radius: var(--radius-md); border: 1px solid var(--colour-border);
-                   background: var(--colour-surface); text-decoration: none; }
-  .nav-actions a:hover { background: var(--colour-accent-tint); }
-  .nav-actions a.current { background: var(--colour-accent); color: var(--colour-on-accent);
-                           border-color: var(--colour-accent); }
+
+  /* --- masthead, matching bmserviceapp ------------------------------------ */
+  .mast { background: var(--colour-surface); border-bottom: 3px solid var(--colour-accent); }
+  .mast-in { display: flex; align-items: center; gap: 0.5rem 0.9rem; flex-wrap: wrap;
+             max-width: var(--type-measure); margin: 0 auto; padding: 0.9rem 1.5rem 1rem; }
+  .mast-sp { flex: 1 1 auto; }
+  .mark { display: flex; align-items: center; gap: 0.7rem; text-decoration: none;
+          color: var(--colour-ink); min-height: 24px; }
+  .logo { display: block; height: 38px; width: auto; max-width: 100%; }
+  .logo-dark { display: none; }
+  html[data-theme="dark"] .logo-light { display: none; }
+  html[data-theme="dark"] .logo-dark { display: block; }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) .logo-light { display: none; }
+    html:not([data-theme="light"]) .logo-dark { display: block; }
+  }
+  .mark .where { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em;
+                 text-transform: uppercase; color: var(--colour-subtle); }
+  @media (max-width: 30rem) { .mark .where { display: none; } }
+
+  /* The season rule: 2px in the colour of the church season. */
+  .season-rule { height: 2px; }
+
+  /* The sign-in page has no masthead, so the crest sits above the heading. */
+  .login-mark { margin: 0.5rem 0 1.2rem; }
+  .login-mark .logo { height: 46px; }
+
+  /* The estate's small control button. */
+  .ctl { appearance: none; border: 1px solid var(--colour-border); background: var(--colour-surface);
+         color: var(--colour-muted); font-family: var(--type-family-base); font-size: 0.78rem;
+         font-weight: 600; letter-spacing: 0.02em; padding: 0.42rem 0.7rem;
+         border-radius: var(--radius-sm); cursor: pointer; line-height: 1; min-height: 32px; }
+  .ctl:hover { border-color: var(--colour-accent); color: var(--colour-accent); background: var(--colour-surface); }
+
+  .nav-actions { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; font-size: 0.86rem; }
+  .nav-actions a { display: inline-flex; align-items: center; padding: 0.35rem 0.65rem;
+                   border-radius: var(--radius-sm); border: 1px solid transparent;
+                   text-decoration: none; color: var(--colour-muted); }
+  .nav-actions a:hover { border-color: var(--colour-border); color: var(--colour-accent); }
+  .nav-actions a.current { color: var(--colour-accent); border-color: var(--colour-accent); font-weight: 600; }
   .card { background: var(--colour-surface); border: 1px solid var(--colour-border);
           border-radius: var(--radius-xl); padding: 1.1rem 1.3rem; margin: 1rem 0; }
   .card h2:first-child, .card h3:first-child { margin-top: 0; }
@@ -215,7 +265,9 @@ const STYLES = `
   .portal .choice input { width: auto; margin-top: 0.25rem; flex: none; }
   .portal .choice .g { display: block; font-size: 0.88rem; color: var(--colour-muted); }
   .portal .choice strong { font-weight: 700; }
-  @media print { .navbar, .no-print { display: none !important; } body { background: #fff; } }
+  @media print { .mast, .season-rule, .no-print { display: none !important; }
+    body { background: #fff; color: var(--colour-print-ink); }
+    main { padding-top: 0; max-width: none; } }
 
   /* A beta chip says "this is new and may misbehave" without a paragraph of
      apology. Amber rather than red: it works, it is just not settled. */
@@ -285,6 +337,12 @@ export function page(title: string, bodyHtml: string, opts: PageOptions = {}): s
   // The login page has no widget: somebody who cannot get in has nothing to
   // report but that, and there is no session to attach it to anyway.
   const feedback = chrome ? feedbackWidget(opts.path ?? "") : "";
+
+  // The season rule — a 2px line in the colour of the church season, the same
+  // colour bmserviceapp paints on the same day. Cheap, and it quietly tells
+  // somebody where in the year they are.
+  const season = seasonRule();
+
   return `<!doctype html>
 <html lang="en-GB">
 <head>
@@ -292,16 +350,88 @@ export function page(title: string, bodyHtml: string, opts: PageOptions = {}): s
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow, noarchive, noimageindex">
   <meta name="referrer" content="same-origin">
+  <meta name="theme-color" content="${esc(THEME.colour.surface)}" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="${esc(THEME_DARK.canvas)}" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="/asset/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/asset/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/asset/icon-192.png">
   <title>${esc(title)}</title>
-  <style>${THEME_CSS}${STYLES}</style>
+  <style>${FONT_CSS}${THEME_CSS}${STYLES}</style>
+  <script>${THEME_SCRIPT}</script>
 </head>
 <body>
+<a class="skip" href="#main">Skip to the content</a>
 ${navbar}
+${season}
+<main id="main" tabindex="-1">
 ${bodyHtml}
+</main>
 ${feedback}
 </body>
 </html>`;
 }
+
+/**
+ * A 2px rule in the colour of the season.
+ *
+ * Sits directly under the masthead, matching bmserviceapp. Where several
+ * seasons overlap — Passiontide sits inside Lent — the first in church-year
+ * order wins, which is the one a person would name.
+ */
+function seasonRule(): string {
+  const [season] = seasonsInPlay(new Date(), 0);
+  const colour = season ? (SEASON_COLOURS[season] ?? SEASON_COLOUR_DEFAULT) : SEASON_COLOUR_DEFAULT;
+  return `<div class="season-rule" style="background:${esc(colour)}" aria-hidden="true"></div>`;
+}
+
+/**
+ * Choose the colour theme.
+ *
+ * Runs before the body renders so a dark-mode phone never gets a white flash.
+ * With nothing stored it does nothing at all and the `prefers-color-scheme`
+ * rule in the stylesheet decides — which is the right default, because the
+ * phone has already been told what its owner wants.
+ *
+ * Wrapped in try/catch: Safari in private browsing throws on `localStorage`,
+ * and a theme preference is not worth a blank page.
+ */
+const THEME_SCRIPT = String.raw`
+(function () {
+  try {
+    var saved = localStorage.getItem('bmmusic-theme');
+    if (saved === 'dark' || saved === 'light') {
+      document.documentElement.setAttribute('data-theme', saved);
+    }
+  } catch (e) { /* no storage; the media query decides */ }
+})();
+`;
+
+/** The toggle's behaviour, loaded once per page alongside the nav. */
+const THEME_TOGGLE_SCRIPT = String.raw`
+(function () {
+  var btn = document.getElementById('theme-toggle');
+  if (!btn) return;
+
+  function current() {
+    var set = document.documentElement.getAttribute('data-theme');
+    if (set) return set;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  function label() {
+    var dark = current() === 'dark';
+    btn.textContent = dark ? 'Light' : 'Dark';
+    btn.setAttribute('aria-label', dark ? 'Switch to the light theme' : 'Switch to the dark theme');
+  }
+  label();
+
+  btn.addEventListener('click', function () {
+    var next = current() === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('bmmusic-theme', next); } catch (e) { /* not stored */ }
+    label();
+  });
+})();
+`;
 
 /**
  * The feedback widget, on every page, choir side and admin.
@@ -391,34 +521,58 @@ const FEEDBACK_SCRIPT = String.raw`
 })();
 `;
 
+/**
+ * The masthead.
+ *
+ * The estate's shape: the Minster logo on the left as the link home, the
+ * controls on the right, and a 3px red rule under the whole thing. Two logo
+ * files — the light one is red on white, the dark one is pale on near-black —
+ * with CSS choosing between them, exactly as bmserviceapp does.
+ *
+ * The logo is a link to the app's own home rather than to the Minster website:
+ * somebody tapping a crest in the top-left expects to go to the front of the
+ * thing they are in.
+ */
 function navFor(opts: PageOptions): string {
   const item = (href: string, label: string, key: string) =>
     `<a href="${href}"${opts.nav === key ? ' class="current"' : ""}>${esc(label)}</a>`;
 
-  if (opts.admin) {
-    return `<header class="navbar no-print">
-      <a href="/admin" class="brand">${esc(CHURCH.appName)} <span class="where">Librarian</span></a>
-      <nav class="nav-actions">
-        <a href="/admin/review">Review queue</a>
-        <a href="/admin/services">Music lists</a>
-        <a href="/admin/scans">Scans</a>
-        <a href="/admin/labels">Labels</a>
-        <a href="/admin/feedback">Feedback</a>
-        <a href="/admin/intake">Photo intake</a>
-        <a href="/admin/import">Import</a>
-        <a href="/">Choir view</a>
+  const home = opts.admin ? "/admin" : "/";
+  const where = opts.admin ? "Librarian" : CHURCH.library.location;
+
+  const mark = `<a class="mark" href="${home}" aria-label="${esc(CHURCH.appName)} — ${esc(CHURCH.name)}">
+      <img class="logo logo-light" src="/asset/minster-logo-light.png" alt="${esc(CHURCH.name)}" width="281" height="88">
+      <img class="logo logo-dark" src="/asset/minster-logo-dark.png" alt="" aria-hidden="true" width="281" height="88">
+      <span class="where">${esc(where)}</span>
+    </a>`;
+
+  const themeToggle = `<button type="button" class="ctl" id="theme-toggle">Dark</button>`;
+
+  const links = opts.admin
+    ? `<a href="/admin/review">Review queue</a>
+       <a href="/admin/services">Music lists</a>
+       <a href="/admin/scans">Scans</a>
+       <a href="/admin/labels">Labels</a>
+       <a href="/admin/feedback">Feedback</a>
+       <a href="/admin/intake">Photo intake</a>
+       <a href="/admin/import">Import</a>
+       <a href="/">Choir view</a>`
+    : `${item("/", "Home", "home")}
+       ${item("/music", "Browse", "browse")}
+       ${item("/portal", "Count a parcel", "portal")}
+       <a href="/logout">Sign out</a>`;
+
+  return `<header class="mast no-print">
+    <div class="mast-in">
+      ${mark}
+      <span class="mast-sp"></span>
+      <nav class="nav-actions" aria-label="${opts.admin ? "Librarian" : "Choir"}">
+        ${links}
+        ${themeToggle}
       </nav>
-    </header>`;
-  }
-  return `<header class="navbar no-print">
-    <a href="/" class="brand">${esc(CHURCH.appName)} <span class="where">${esc(CHURCH.library.location)}</span></a>
-    <nav class="nav-actions">
-      ${item("/", "Home", "home")}
-      ${item("/music", "Browse", "browse")}
-      ${item("/portal", "Count a parcel", "portal")}
-      <a href="/logout">Sign out</a>
-    </nav>
-  </header>`;
+    </div>
+  </header>
+  <script>${THEME_TOGGLE_SCRIPT}</script>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -429,9 +583,17 @@ export function loginPage(failed = false): string {
   const error = failed
     ? `<div class="notice error">That password was not recognised. Please try again — it changes each term.</div>`
     : "";
+  // The sign-in page is the first thing anybody sees, so it carries the crest
+  // even though it has no navigation to hang a masthead on. Somebody who has
+  // followed a link from a music list should recognise where they have landed
+  // before they are asked for a password.
   return page(
     `Sign in — ${CHURCH.appName}`,
-    `<h1>${esc(CHURCH.appName)}<span class="sub">${esc(CHURCH.name)} — for the choir</span></h1>
+    `<p class="login-mark">
+       <img class="logo logo-light" src="/asset/minster-logo-light.png" alt="${esc(CHURCH.name)}" width="281" height="88">
+       <img class="logo logo-dark" src="/asset/minster-logo-dark.png" alt="" aria-hidden="true" width="281" height="88">
+     </p>
+     <h1>${esc(CHURCH.appName)}<span class="sub">${esc(CHURCH.name)} — for the choir</span></h1>
      <p class="muted">A catalogue of the music in the ${esc(CHURCH.library.location.toLowerCase())}: what we have,
         how many copies, and what state they are in.</p>
      ${error}
@@ -555,6 +717,42 @@ export function homePage(
 }
 
 /**
+ * Fold a service's hymns onto one line.
+ *
+ * A Eucharist has four or five hymns, and one full row each pushed the anthem
+ * off the bottom of a phone screen — four rows saying "HYMN" and a number is
+ * a list of numbers pretending to be a list of pieces. They are numbers in the
+ * hymn book, they are never matched to a parcel, and a chorister reads them as
+ * a group. So they render as one row: "HYMNS 46 · 73 · 533 · 235".
+ *
+ * Nothing else is collapsed. Two anthems are two pieces.
+ */
+function collapseHymns(music: ServiceMusicWithPiece[]): ServiceMusicWithPiece[] {
+  const hymns = music.filter((l) => l.slot === "hymn");
+  if (hymns.length < 2) return music;
+
+  const first = hymns[0]!;
+  const merged: ServiceMusicWithPiece = {
+    ...first,
+    raw_text: hymns.map((h) => h.raw_text).join(" · "),
+  };
+
+  const out: ServiceMusicWithPiece[] = [];
+  let placed = false;
+  for (const line of music) {
+    if (line.slot !== "hymn") {
+      out.push(line);
+      continue;
+    }
+    if (!placed) {
+      out.push(merged);
+      placed = true;
+    }
+  }
+  return out;
+}
+
+/**
  * One service's music list, with the copies RAG against each matched piece.
  *
  * Every line shows what the music list actually said, whether or not we matched
@@ -569,7 +767,7 @@ function musicList(
   if (!music.length) return `<p class="muted">No music has been published for this service yet.</p>`;
 
   return `<ul class="music">
-      ${music
+      ${collapseHymns(music)
         .map((line) => {
           const matched = line.piece_id
             ? `<a href="/piece/${line.piece_id}">${esc(line.piece_title ?? "in the library")}</a>${
@@ -594,7 +792,7 @@ function musicList(
             : "";
 
           return `<li>
-              <span class="slot">${esc(slotLabel(line.slot))}</span>
+              <span class="slot">${esc(line.slot === "hymn" && line.raw_text.includes(" · ") ? "Hymns" : slotLabel(line.slot))}</span>
               <span>
                 <span class="said">${esc(line.raw_text)}</span>
                 ${matched || ragPill_ ? `<div class="matched">${matched} ${ragPill_}</div>` : ""}
