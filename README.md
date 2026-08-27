@@ -31,10 +31,15 @@ dark theme that follows the phone's own setting unless somebody overrides it.
 | **Choir** | A home screen showing the next service with its music list and copies RAG; browse and search by composer, title, category and voicing; a piece page with copy counts, season, where the parcel lives, when we last sang it, and its reference scans. A descant finder. |
 | **Volunteers** | A phone-shaped portal for counting a parcel: totals, condition, voicing, notes. |
 | **Librarian** (`/admin`) | The review queue for draft entries, the music-list match queue, the crowd-scan approval queue, feedback, accession numbering, an item editor, photo intake, and the draft-index importer. |
+| **Music staff** (`/admin`) | The choir list and each person's record, the register, attendance totals and the quarterly pay run, the safeguarding duty rota, exports, and the workbook importer. **Every one of these is a module that ships switched off.** |
 
 Services and their music lists arrive from bmserviceapp's feed on an hourly
 cron. bmmusic never fetches or parses the Minster's music-list document itself
 — see `docs/FEED.md`, and the data boundary at the end of this file.
+
+Three schedules run, told apart in `scheduled()` by their cron expression:
+the feed read at half past every hour, the backup at 02:15, and the school-year
+rollover at 03:00 on 1 September. All UTC; all declared in `wrangler.toml`.
 
 ### Beta features
 
@@ -47,8 +52,89 @@ page carries on working.
 - **Scan this with your phone** — a chorister photographs a copy; it is invisible
   to everybody else until an admin approves it.
 
-**Beta on the admin side:** people and the register — names only, admin-only,
-and nothing choir-side reads either table.
+**Beta on the admin side:** everything the register brought with it — the
+choir list, attendance, pay, the duty rota, exports and the workbook importer.
+All of it is behind a module switch that ships **off**; see below.
+
+## Modules and roles
+
+Two separate questions, answered separately.
+
+**Modules** decide what this app does at all. Eight of them, switched from
+`/admin/modules` by music staff and audited. The library and the services ship
+on; **everything that holds a person's name ships off** and stays off until
+somebody deliberately turns it on. A switched-off module's routes answer **404,
+not 403** — a 403 says "there is something here and you may not have it", which
+is a fact about the choir worth not publishing. Dark means dark, and the front
+page draws no tile for a door that is not there.
+
+**Roles** decide who may do what once Cloudflare Access has let them in. Access
+answers "may this person reach `/admin`"; that is not the same question as "may
+this person see a child's telephone number", and six people hold a Librarian
+policy so the library can be catalogued.
+
+| Role | What it reaches |
+| --- | --- |
+| **Librarian** | The catalogue, labels, scans, repairs, loans, reports, and the service music lists. No person data at all. |
+| **Music staff** | Everything about people — the choir, the register, pay, awards, robes — and the app's own settings, modules, roles and exports. |
+| **Safeguarding** | The duty rota, the on-the-day duty view, and one door inside `/admin/people`: a single child's parent contact, revealed deliberately and audited. |
+
+Grants are managed at `/admin/roles`, audited, and the last `music_staff` grant
+cannot be revoked — without one, nobody can grant anybody anything and the
+Roles screen is itself music-staff-only. An authenticated admin holding no role
+gets a page telling them who to ask.
+
+The whole thing is one middleware over `/admin`, not a check inside each
+handler, so a route added next month is gated by existing. A path the role
+table has never heard of needs `music_staff` — the narrowest grant there is —
+so forgetting to add a rule is a visible mistake rather than a silent hole.
+
+## Privacy rules
+
+These apply everywhere in the app, and `test/gate.test.ts` enforces several of
+them mechanically rather than by good intentions.
+
+- **No person data on the choir side**, with exactly one exception: the names
+  of whoever is on duty, on a service page. Names only — no telephone number,
+  no DBS date, not even which of them is a backup — and nothing at all while
+  the safeguarding module is off.
+- **No person data in logs, analytics, feedback rows, error pages or URLs.**
+  IDs only in paths. The audit log records that a child's record was edited and
+  by whom, never the child's name or what the values were.
+- **A school year, never an age and never a date of birth.** We are given one
+  and not the other, so the app has no way to work out anybody's age and
+  therefore no way to leak one.
+- **Parent contacts are the hard gate.** They live in their own table so that
+  every ordinary `SELECT` from `person` — every list, every picker, every
+  export — is safe by construction. There is no GET that returns one: reading a
+  number is a POST, because a bookmarkable URL showing a child's parent's
+  telephone number is exactly what must not exist. The read writes its audit
+  line *before* it fetches anything, so a look that cannot be recorded does not
+  happen. One export in the whole app carries a number, and it is music staff
+  only and separately audited with a fingerprint of the file.
+- **Leavers** get a `left_on` date rather than a deletion: off every register
+  and out of every picker, while their attendance stays exactly as it was,
+  because that is what last quarter's pay was worked out from. Three ways out
+  of a record exist and they are not the same thing — leaving (reversible),
+  anonymising (the counts survive, the name does not), and deleting, which is a
+  real delete and is what a parent asking for their child's record to be
+  removed is entitled to.
+- **Nothing about a real person is invented.** No people are seeded, ever. The
+  department's workbook arrives through the importer at
+  `/admin/people/import`, which reads it, shows it to a person, and writes
+  nothing until they say so.
+- **The nightly backup holds all of this**, which is why it goes to the
+  Minster-side EU bucket with no public access, why nothing about its contents
+  is logged beyond counts, and why there is no route in the app that reads one.
+  See [`docs/RESTORE.md`](./docs/RESTORE.md).
+
+## Backups
+
+Two layers. D1 Time Travel gives thirty days of point-in-time restore and needs
+nothing set up. On top of that, a nightly cron dumps every table to R2 as JSONL
+under `backups/YYYY-MM-DD/` with a manifest of row counts, and deletes anything
+past thirty-five days. Restoring is documented, and deliberately manual, in
+[`docs/RESTORE.md`](./docs/RESTORE.md).
 
 Not yet built: the OCR bulk-update pipeline for returned volunteer sheets, the
 reference-scan campaigns, listen links (H2, waiting on the YouTube backfill),
@@ -232,6 +318,19 @@ npx wrangler d1 migrations apply minster-data --remote
 
 `--remote` matters — without it you migrate the local copy and the deployed app
 sees an empty database.
+
+Migration `0003` rebuilds the `person` table, because SQLite cannot alter the
+CHECK constraint on `choir` and the junior choir needed a fifth value. **It
+carries the register across by hand**, out to a scratch table and back, because
+dropping `person` fires an implicit `DELETE FROM` and `attendance` cascades
+from it — and neither `PRAGMA foreign_keys=OFF` nor
+`PRAGMA legacy_alter_table=ON` prevents that inside the transaction wrangler
+applies a migration in. Both were measured; both lost every attendance row. It
+is safe as written, and `test/migrations.test.ts` refuses any future migration
+that drops a table without putting the dependent rows back.
+
+Migration `0003` also grants `james@everinghampark.co.uk` all three in-app
+roles. Without a first `music_staff` nobody can grant anybody anything.
 
 ## 6. Cloudflare Access on /admin
 

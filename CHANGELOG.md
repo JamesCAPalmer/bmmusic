@@ -7,6 +7,164 @@ diff.
 
 ---
 
+## Session 3 — Build 2 Addendum A: the register
+
+The music department's real register arrived: per-group attendance
+driving quarterly chorister pay, per-service safeguarding duties, wedding
+lists at a separate rate, school years, award dates and parent telephone
+numbers. This is the architecture that absorbs it — as switchable
+modules, with children's data treated as a class apart throughout.
+
+### Modules and roles
+
+**Everything that holds a person's name ships switched off.** Eight
+modules; the library and the services are on because they are what this
+app already was, and the six that touch a person are dark until somebody
+turns them on from `/admin/modules`. A switched-off module answers **404,
+not 403**: a 403 says "there is something here and you may not have it",
+which is a fact about the choir worth not publishing.
+
+**Three in-app roles on top of Cloudflare Access**, because Access answers
+"may this person reach `/admin`" and that is not the same question as
+"may this person see a child's telephone number" — six people hold a
+Librarian policy so the library can be catalogued by whoever is in the
+song school that afternoon. Librarian gets the catalogue and the music
+lists; music staff gets everything about people and the app's own
+settings; safeguarding gets the rota and one door inside `/admin/people`.
+
+Both are enforced by **one middleware over `/admin`**, not a check inside
+each handler, so a route added next month is gated by existing rather
+than by somebody remembering. `requiredRolesFor` **fails closed**: a path
+the table has never heard of needs `music_staff`, the narrowest grant
+there is, so forgetting to add a rule is a visible mistake rather than a
+silent hole.
+
+**The register moved** from `/admin/register/*` to
+`/admin/people/register/*`. Every route that renders a child's name now
+sits under `/admin/people*` or `/admin/safeguarding*` and nowhere else,
+which is what will let a second and tighter Access application be scoped
+to those two prefixes without any of it moving again.
+
+### The person model, and the hard gate
+
+`person` gained a school year, joining and award dates, a DBS expiry for
+adults who take duties, a gender recorded for duty cover only, and a
+leaving date — and each person got a screen.
+
+**A school year and never a date of birth.** We are given one and not the
+other, so the app has no means of working out anybody's age and therefore
+no way to leak one.
+
+**Parent contacts are the hard gate.** They live in their own table so
+every ordinary `SELECT` from `person` — every list, picker and export — is
+safe by construction rather than by remembering. There is no GET that
+returns one: reading a number is a POST, because a bookmarkable URL
+showing a child's parent's telephone number is exactly what must not
+exist. The read writes its audit line **before** it fetches anything, so a
+look that cannot be recorded does not happen.
+
+**Three ways out of a record, and they are not the same thing.** Leaving
+sets a date and is reversible; the person drops off every register while
+their attendance stays exactly as it was, because that is what last
+quarter's pay was worked out from. Anonymising keeps the counts and takes
+the name. Deleting is a real delete, which is what a parent asking for
+their child's record to be removed is entitled to.
+
+### Attendance, rates and pay
+
+**Money is pence and never pounds** — no floating point touches a figure
+anybody is handed. **A rate is a row with a date**, and the rate is looked
+up per service rather than per quarter, so a quarter straddling a rate
+change comes out right without anybody having to notice that it did. **A
+missing rate is null, not zero**: pricing a service sung before any rate
+was set at nought would short-change somebody silently, so those are
+counted and called out in red.
+
+"Possible" is how many events that person's choir was due at, so the boys
+are not marked down for missing an Evensong the girls sang, and somebody
+due at nothing gets a dash rather than 0% — 0% reads as "never turned up"
+when the truth is "was never asked".
+
+Nothing is seeded. Inventing a rate would produce a plausible-looking pay
+run that is wrong.
+
+### The safeguarding rota
+
+Three duties per event with backups, and a coverage check that says what
+is missing rather than making somebody read a grid. **A backup is not
+cover** — a rota with a name on every line and nobody on the door is the
+failure that rule exists for. An expired DBS is red and names whose it
+is; a *missing* one is amber, because not knowing is not the same as
+knowing, and treating them alike trains people to ignore the red ones.
+
+**The app ships no adult-to-child ratio.** What is acceptable is the
+Minster's safeguarding policy to state, not something software should
+decide, so the check is silent until somebody sets a figure and the
+screen says so.
+
+The collection tick cannot be un-ticked: "they had all gone, and then they
+had not" is not a state the record should be able to hold.
+
+Choir side gets duty-holders' names on the service page — names only, not
+even which of them is a backup — and nothing at all with the module off.
+It is the single exception in the privacy rules and there is exactly one
+function that produces it.
+
+### Backups
+
+Every table to R2 nightly as JSONL with a manifest and thirty-five days of
+retention, alongside D1 Time Travel's thirty. Retention deletes on a
+parsed date and nothing else, because the bucket also holds every scan in
+the library. Nothing about the contents is logged beyond counts, and
+**there is no route that reads a backup** — an endpoint streaming the
+whole database out is precisely what the rest of this repository is
+arranged to prevent. `docs/RESTORE.md` is the instructions for the person
+with the terminal.
+
+### The workbook importer
+
+`src/xlsx.ts` reads .xlsx without a dependency — an .xlsx is a ZIP of XML
+and both halves are in the platform already. It keeps blank cells in their
+columns and blank rows in their numbering, because Excel writes nothing
+for either and a reader that appends as it goes puts the telephone number
+in the Joined column for exactly the rows where something was left blank.
+
+The importer is a stub and says so on the screen, but the pipeline is not
+provisional: **nothing reaches `person` until a person has looked at it.**
+Rows with a problem come first and unticked. A row whose sheet did not say
+which choir it was for is never written — the wrong choir is worse than a
+missing name. A discarded upload is deleted outright, names and all.
+
+### Two gate bugs, both fixed with a rule
+
+`/admin/people/pay.csv` matched `/admin/people` rather than
+`/admin/people/pay`, so the screen would go dark with its module while the
+download of the same figures kept working; the prefix boundary now counts
+`.` as well as `/`, in both tables. And `/admin/people/:id` was declared
+above `/admin/people/pay` and swallowed it — Hono matches in declaration
+order — so the pay screen answered 404 with nothing failing and nothing in
+a log to say why.
+
+Both now have tests that would have caught them: every declared route must
+resolve the same with a file extension as without, and no literal route
+may be declared beneath a parameter that would match it.
+
+### What the tests hold
+
+`test/gate.test.ts` reads the routes out of `src/index.ts` and holds them
+to the rules — every route about a person under one of the two prefixes
+and behind a module that ships off, music staff able to reach everything,
+a librarian able to reach no person and no setting, and an unknown path
+refused. `test/backup.test.ts` requires every table in the schema to be
+either backed up or explicitly excluded with a reason, so "left out on
+purpose" and "forgotten" stop looking identical. And
+`test/migrations.test.ts` no longer bans `DROP TABLE` outright but permits
+it only as one of the two halves of a rebuild — a stricter rule than the
+blanket one it replaces, and one that also refuses a migration dropping
+`person` without putting the register back.
+
+---
+
 ## Session 2 — Build 2
 
 ### The estate look
