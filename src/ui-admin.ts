@@ -14,7 +14,14 @@ import { CHURCH } from "./church.config";
 import { betaChip, categoryLabel, esc, flagPills, page, prettyDate } from "./ui";
 import type { CatalogueStats, ChoirProfileRow, PieceWithHolding, SearchQuery, SearchResult } from "./catalogue";
 import type { AuditRow } from "./audit";
-import { CHOIRS, type PersonRow, type RegisterRow } from "./people";
+import {
+  CHOIRS,
+  SCHOOL_YEARS,
+  schoolYearLabel,
+  type ParentContact,
+  type PersonRow,
+  type RegisterRow,
+} from "./people";
 import { MODULES, moduleForPath, type ModuleState } from "./modules";
 import {
   permits,
@@ -947,7 +954,7 @@ export function adminLabelsPage(
 // People and the register (beta)
 // ---------------------------------------------------------------------------
 
-export function adminPeoplePage(people: PersonRow[], message?: string): string {
+export function adminPeoplePage(people: PersonRow[], showingLeavers: boolean, message?: string): string {
   const choirOptions = CHOIRS.map((c) => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join("");
   const partOptions = CHURCH.voiceParts
     .map((v) => `<option value="${esc(v.value)}">${esc(v.label)}</option>`)
@@ -978,20 +985,27 @@ export function adminPeoplePage(people: PersonRow[], message?: string): string {
                (c) => `<div class="card">
                  <h2>${esc(c.label)}</h2>
                  <div class="scroll"><table>
-                   <tr><th>Name</th><th>Voice part</th><th></th></tr>
+                   <tr><th>Name</th><th>School year</th><th>Voice part</th><th></th></tr>
                    ${byChoir
                      .get(c.value)!
                      .map(
-                       (p) => `<tr>
-                         <td>${esc(p.display_name)}</td>
+                       (p) => `<tr${p.left_on ? ' class="gone"' : ""}>
+                         <td><a href="/admin/people/${p.id}">${esc(p.display_name)}</a></td>
+                         <td>${
+                           p.school_year !== null
+                             ? esc(schoolYearLabel(p.school_year))
+                             : '<span class="muted">adult</span>'
+                         }</td>
                          <td>${
                            p.voice_part
                              ? esc(CHURCH.voiceParts.find((v) => v.value === p.voice_part)?.label ?? p.voice_part)
                              : '<span class="muted">not recorded</span>'
                          }</td>
-                         <td><form method="POST" action="/admin/people/${p.id}" style="display:inline">
-                               <button type="submit" name="action" value="leave" class="secondary">Has left</button>
-                             </form></td>
+                         <td>${
+                           p.left_on
+                             ? `<span class="muted small">left ${esc(prettyDate(p.left_on))}</span>`
+                             : ""
+                         }</td>
                        </tr>`
                      )
                      .join("")}
@@ -1001,6 +1015,16 @@ export function adminPeoplePage(people: PersonRow[], message?: string): string {
              .join("")
          : `<p class="muted">Nobody on the list yet.</p>`
      }
+
+     <p>
+       <a class="btn secondary" href="/admin/people${showingLeavers ? "" : "?leavers=1"}">
+         ${showingLeavers ? "Hide people who have left" : "Show people who have left"}
+       </a>
+     </p>
+
+     <style>
+       tr.gone td { color: var(--colour-muted); }
+     </style>
 
      <div class="card">
        <h2>Add somebody</h2>
@@ -1020,6 +1044,15 @@ export function adminPeoplePage(people: PersonRow[], message?: string): string {
                <option value="">Not recorded</option>${partOptions}
              </select>
              <span class="hint">Optional. Section-level attendance waits on these being filled in.</span>
+           </div>
+           <div class="field">
+             <label for="school_year">School year</label>
+             <select id="school_year" name="school_year">
+               <option value="">Adult</option>
+               ${SCHOOL_YEARS.map((y) => `<option value="${y}">${esc(schoolYearLabel(y))}</option>`).join("")}
+             </select>
+             <span class="hint">Moves up by itself each September. Leave as "Adult" for grown-ups —
+               we hold no dates of birth and no ages.</span>
            </div>
          </div>
          <button type="submit">Add</button>
@@ -1390,4 +1423,283 @@ export function adminWrongRolePage(required: readonly Role[]): string {
      </div>`,
     { admin: true, path: "/admin" }
   );
+}
+
+// ---------------------------------------------------------------------------
+// One person (Addendum A) — the workbook's Dates sheet, one child at a time
+// ---------------------------------------------------------------------------
+
+/**
+ * Everything the app holds about one person, on one page.
+ *
+ * The awards and the joining date come off the department's workbook. The
+ * school year is here and an age is not, because we are given a school year and
+ * not a date of birth, and an app that cannot compute an age cannot leak one.
+ *
+ * **Parent contacts are not on this page** until somebody asks for them. The
+ * count is shown — knowing a number exists is not the same as reading it — and
+ * revealing them is a form submission that writes an audit line naming the
+ * viewer, the child and the time before the numbers are fetched at all.
+ */
+export function adminPersonPage(
+  person: PersonRow,
+  contactCount: number,
+  revealed: ParentContact[] | null,
+  mayReadContacts: boolean,
+  today: string,
+  message?: string
+): string {
+  const choirOptions = CHOIRS.map(
+    (c) => `<option value="${esc(c.value)}"${c.value === person.choir ? " selected" : ""}>${esc(c.label)}</option>`
+  ).join("");
+
+  const partOptions = CHURCH.voiceParts
+    .map(
+      (v) =>
+        `<option value="${esc(v.value)}"${v.value === person.voice_part ? " selected" : ""}>${esc(v.label)}</option>`
+    )
+    .join("");
+
+  const yearOptions = SCHOOL_YEARS.map(
+    (y) => `<option value="${y}"${person.school_year === y ? " selected" : ""}>${esc(schoolYearLabel(y))}</option>`
+  ).join("");
+
+  const date = (name: string, label: string, value: string | null, hint = "") =>
+    `<div class="field">
+       <label for="${name}">${esc(label)}</label>
+       <input type="date" id="${name}" name="${name}" value="${esc(value ?? "")}">
+       ${hint ? `<span class="hint">${esc(hint)}</span>` : ""}
+     </div>`;
+
+  const dbsExpired = person.dbs_valid_until !== null && person.dbs_valid_until < today;
+
+  return page(
+    `${person.display_name} — ${CHURCH.appName}`,
+    `<h1>${esc(person.display_name)} ${betaChip()}
+       <span class="sub">${esc(CHOIRS.find((c) => c.value === person.choir)?.label ?? person.choir)}${
+         person.school_year !== null ? ` · ${esc(schoolYearLabel(person.school_year))}` : ""
+       }</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+     ${
+       person.left_on
+         ? `<div class="notice">
+              <p style="margin:0"><strong>Left on ${esc(prettyDate(person.left_on))}.</strong>
+                 They are off every register and out of every picker. Their attendance up to that date is
+                 untouched, because it is what last quarter's pay was worked out from.</p>
+            </div>`
+         : ""
+     }
+
+     <div class="card">
+       <h2>Who they are</h2>
+       <form method="POST" action="/admin/people/${person.id}">
+         <input type="hidden" name="action" value="save">
+         <div class="row">
+           <div class="field">
+             <label for="display_name">Name</label>
+             <input type="text" id="display_name" name="display_name"
+                    value="${esc(person.display_name)}" required>
+           </div>
+           <div class="field">
+             <label for="choir">Choir</label>
+             <select id="choir" name="choir">${choirOptions}</select>
+           </div>
+           <div class="field">
+             <label for="voice_part">Voice part</label>
+             <select id="voice_part" name="voice_part">
+               <option value="">Not recorded</option>${partOptions}
+             </select>
+           </div>
+           <div class="field">
+             <label for="school_year">School year</label>
+             <select id="school_year" name="school_year">
+               <option value=""${person.school_year === null ? " selected" : ""}>Adult</option>
+               ${yearOptions}
+             </select>
+             <span class="hint">Moves up by itself on 1 September. We hold this and not a date of
+               birth — the app has no way to work out anybody's age.</span>
+           </div>
+         </div>
+
+         <div class="row">
+           ${date("joined_on", "Joined the choir", person.joined_on)}
+           ${date("surplice_awarded_on", "Surpliced", person.surplice_awarded_on)}
+           ${date("deans_award_on", "Dean's award", person.deans_award_on)}
+           ${date("archbishops_award_on", "Archbishop's award", person.archbishops_award_on)}
+           ${date("gold_award_on", "Gold award", person.gold_award_on)}
+         </div>
+
+         <details>
+           <summary class="muted small">For adults who take safeguarding duties</summary>
+           <div class="row" style="margin-top:0.6rem">
+             ${date(
+               "dbs_valid_until",
+               "DBS valid until",
+               person.dbs_valid_until,
+               "The rota warns when this is in the past, and says nothing when it is blank."
+             )}
+             <div class="field">
+               <label for="gender">Recorded for duty cover</label>
+               <select id="gender" name="gender">
+                 <option value=""${person.gender === null ? " selected" : ""}>Not recorded</option>
+                 <option value="f"${person.gender === "f" ? " selected" : ""}>Female</option>
+                 <option value="m"${person.gender === "m" ? " selected" : ""}>Male</option>
+               </select>
+               <span class="hint">Only so the rota can check cover includes both when the boys and the
+                 girls are both due. Leave blank for children.</span>
+             </div>
+           </div>
+         </details>
+         ${dbsExpired ? `<div class="notice error"><p style="margin:0">Their DBS check ran out on ${esc(prettyDate(person.dbs_valid_until!))}.</p></div>` : ""}
+
+         <button type="submit">Save</button>
+       </form>
+     </div>
+
+     ${adminContactsCard(person, contactCount, revealed, mayReadContacts)}
+
+     <div class="card">
+       <h2>Leaving</h2>
+       ${
+         person.left_on
+           ? `<form method="POST" action="/admin/people/${person.id}">
+                <input type="hidden" name="action" value="returned">
+                <p class="muted">Marked as having left by mistake?</p>
+                <button type="submit" class="secondary">Put them back on the list</button>
+              </form>`
+           : `<form method="POST" action="/admin/people/${person.id}">
+                <input type="hidden" name="action" value="left">
+                <div class="field" style="max-width:14rem">
+                  <label for="left_on">Last day</label>
+                  <input type="date" id="left_on" name="left_on" value="${esc(today)}" required>
+                </div>
+                <button type="submit" class="secondary">Mark as having left</button>
+              </form>`
+       }
+     </div>
+
+     <details class="card">
+       <summary><strong>Removing their record</strong></summary>
+       <p class="muted">Two ways, and they are not the same thing.</p>
+       <form method="POST" action="/admin/people/${person.id}" style="margin-bottom:1rem">
+         <input type="hidden" name="action" value="anonymise">
+         <p><strong>Take the name off.</strong> Their name becomes
+            "Former chorister #${person.id}" and their parents' contact details are deleted. The
+            attendance counts stay, so a past quarter's pay still adds up — but nothing says whose they
+            were. This cannot be undone.</p>
+         <label class="check"><input type="checkbox" name="confirm" value="yes" required>
+           I understand this cannot be undone</label>
+         <button type="submit" class="secondary">Take the name off</button>
+       </form>
+       <form method="POST" action="/admin/people/${person.id}">
+         <input type="hidden" name="action" value="delete">
+         <p><strong>Delete everything.</strong> The person, their attendance, their duties and their
+            parents' contact details, gone. This is what a parent asking for their child's record to be
+            removed is entitled to.</p>
+         <label class="check"><input type="checkbox" name="confirm" value="yes" required>
+           I understand this cannot be undone</label>
+         <button type="submit" class="confirm">Delete everything</button>
+       </form>
+     </details>
+
+     <p><a class="btn secondary" href="/admin/people">Back to the choir</a></p>
+
+     <style>
+       .check { display: block; margin: 0.4rem 0 0.6rem; font-size: 0.9rem; }
+       .check input { margin-right: 0.4rem; }
+     </style>`,
+    { admin: true, path: "/admin/people" }
+  );
+}
+
+/**
+ * The parent-contact card.
+ *
+ * Three states, and the difference between them is the whole point. Without
+ * the role: a sentence saying the details exist and who may read them. With
+ * the role but before asking: a count and a button. After asking: the numbers,
+ * and a line saying the look has been written down — so that nobody is under
+ * the impression it was private.
+ */
+function adminContactsCard(
+  person: PersonRow,
+  contactCount: number,
+  revealed: ParentContact[] | null,
+  mayRead: boolean
+): string {
+  if (!mayRead) {
+    return `<div class="card">
+      <h2>Parents' contact details</h2>
+      <p class="muted">${
+        contactCount
+          ? `${contactCount} recorded. They can be read by music staff and by whoever is on safeguarding duty, and every look is written down.`
+          : "None recorded."
+      }</p>
+    </div>`;
+  }
+
+  const list = revealed
+    ? `<div class="scroll"><table>
+         <tr><th>Who</th><th>Name</th><th>Telephone</th><th></th></tr>
+         ${revealed
+           .map(
+             (contact) => `<tr>
+               <td>${esc(contact.label ?? "—")}</td>
+               <td>${esc(contact.name ?? "—")}</td>
+               <td><a href="tel:${esc((contact.phone ?? "").replace(/\s+/g, ""))}">${esc(contact.phone ?? "—")}</a></td>
+               <td><form method="POST" action="/admin/people/contact/${person.id}" style="display:inline">
+                     <input type="hidden" name="action" value="delete">
+                     <input type="hidden" name="contact_id" value="${contact.id}">
+                     <button type="submit" class="secondary">Remove</button>
+                   </form></td>
+             </tr>`
+           )
+           .join("")}
+       </table></div>
+       <p class="small muted">This look has been recorded against your name in the activity log.</p>`
+    : `<p class="muted">${
+        contactCount
+          ? `${contactCount} recorded. They are not shown until you ask for them.`
+          : "None recorded yet."
+      }</p>
+       ${
+         contactCount
+           ? `<form method="POST" action="/admin/people/contact/${person.id}">
+                <input type="hidden" name="action" value="reveal">
+                <button type="submit">Show the contact details</button>
+                <span class="hint">Asking writes a line in the activity log naming you, this child and
+                  the time. That is deliberate.</span>
+              </form>`
+           : ""
+       }`;
+
+  return `<div class="card">
+    <h2>Parents' contact details</h2>
+    <div class="notice">
+      <p style="margin:0">The most sensitive thing this app holds. Never in a list, never in an export
+         except the separate contacts export, and never shown without it being written down.</p>
+    </div>
+    ${list}
+    <details style="margin-top:0.8rem">
+      <summary class="muted small">Add a contact</summary>
+      <form method="POST" action="/admin/people/contact/${person.id}" style="margin-top:0.6rem">
+        <input type="hidden" name="action" value="add">
+        <div class="row">
+          <div class="field">
+            <label for="label">Who they are</label>
+            <input type="text" id="label" name="label" placeholder="Parent 1, Grandmother">
+          </div>
+          <div class="field">
+            <label for="name">Their name</label>
+            <input type="text" id="name" name="name">
+          </div>
+          <div class="field">
+            <label for="phone">Telephone</label>
+            <input type="tel" id="phone" name="phone" required>
+          </div>
+        </div>
+        <button type="submit">Add</button>
+      </form>
+    </details>
+  </div>`;
 }

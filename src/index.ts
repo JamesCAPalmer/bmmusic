@@ -92,17 +92,25 @@ import { serveAsset } from "./assets";
 import { buildAverySheet, buildVolunteerSheets } from "./labelsheet";
 import { copiesRag, ragLabel, ragPill } from "./rag";
 import {
+  addContact,
   addPerson,
+  anonymisePerson,
   clearAttendance,
+  contactCountFor,
+  deleteContact,
   deletePerson,
+  getPerson,
   isChoir,
   isVoicePart,
   listPeople,
   markAttendance,
+  markLeft,
+  markReturned as markReturnedToChoir,
   nextStatus,
   registerFor,
   registerTally,
-  setPersonActive,
+  revealContacts,
+  updatePerson,
 } from "./people";
 import { isModuleKey, moduleForPath, readModuleState, setModule } from "./modules";
 import {
@@ -145,6 +153,7 @@ import {
   adminModulesPage,
   adminNoRolePage,
   adminPeoplePage,
+  adminPersonPage,
   adminRegisterPage,
   adminRolesPage,
   adminWrongRolePage,
@@ -1115,8 +1124,11 @@ app.get("/q/:accession", async (c) => {
 // ---------------------------------------------------------------------------
 
 app.get("/admin/people", async (c) => {
-  const message = new URL(c.req.url).searchParams.get("done") ?? undefined;
-  return c.html(adminPeoplePage(await listPeople(c.env.DB), message || undefined));
+  const params = new URL(c.req.url).searchParams;
+  const leavers = params.get("leavers") === "1";
+  return c.html(
+    adminPeoplePage(await listPeople(c.env.DB, leavers), leavers, params.get("done") ?? undefined)
+  );
 });
 
 app.post("/admin/people", async (c) => {
@@ -1132,6 +1144,7 @@ app.post("/admin/people", async (c) => {
     displayName,
     choir,
     voicePart: voicePart && isVoicePart(voicePart) ? voicePart : null,
+    schoolYear: schoolYearParam(str(body.school_year)),
   });
 
   // Deliberately not naming the person in the audit log: that log is read by
@@ -1140,20 +1153,161 @@ app.post("/admin/people", async (c) => {
   return c.redirect(`/admin/people?done=${encodeURIComponent("Added.")}`, 302);
 });
 
+/**
+ * A school year off a form, or null for an adult.
+ *
+ * Anything outside Reception to Year 13 is null rather than an error: the only
+ * way to send one is to edit the form by hand, and a silently blank school year
+ * is a smaller harm than a 400 on a screen somebody is trying to fill in.
+ */
+function schoolYearParam(raw: string): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= 13 ? n : null;
+}
+
+/** A "YYYY-MM-DD" off a date field, or null. Never a partially-typed date. */
+function dateParam(raw: string): string | null {
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+}
+
+app.get("/admin/people/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const person = await getPerson(c.env.DB, id);
+  if (!person) return c.html(notFoundPage(), 404);
+
+  return c.html(
+    adminPersonPage(
+      person,
+      await contactCountFor(c.env.DB, id),
+      // Contacts are never rendered on a plain page load — only the POST that
+      // asks for them, and writes down that it did, ever returns any.
+      null,
+      permits(c.get("roles"), requiredRolesFor("/admin/people/contact")),
+      today(),
+      new URL(c.req.url).searchParams.get("done") ?? undefined
+    )
+  );
+});
+
 app.post("/admin/people/:id", async (c) => {
   const id = numericParam(c.req.param("id"));
   if (id === null) return c.html(notFoundPage(), 404);
 
   const body = await c.req.parseBody();
-  if (str(body.action) === "delete") {
+  const action = str(body.action);
+
+  // Both destructive actions ask for a tick first, and neither happens without
+  // it. A mis-click on a child's record is not a recoverable mistake.
+  const confirmed = str(body.confirm) === "yes";
+
+  if (action === "delete") {
+    if (!confirmed) return c.redirect(`/admin/people/${id}`, 302);
     await deletePerson(c.env.DB, id);
     await logAdminAction(c, "person.delete", "person", id, "removed entirely, with their attendance");
     return c.redirect(`/admin/people?done=${encodeURIComponent("Removed.")}`, 302);
   }
 
-  await setPersonActive(c.env.DB, id, false);
-  await logAdminAction(c, "person.leave", "person", id, "marked as having left");
-  return c.redirect(`/admin/people?done=${encodeURIComponent("Marked as having left.")}`, 302);
+  if (action === "anonymise") {
+    if (!confirmed) return c.redirect(`/admin/people/${id}`, 302);
+    await anonymisePerson(c.env.DB, id);
+    await logAdminAction(c, "person.anonymise", "person", id, "name removed, attendance counts kept");
+    return c.redirect(
+      `/admin/people/${id}?done=${encodeURIComponent("The name has been taken off.")}`,
+      302
+    );
+  }
+
+  if (action === "left") {
+    const on = dateParam(str(body.left_on)) ?? today();
+    await markLeft(c.env.DB, id, on);
+    await logAdminAction(c, "person.leave", "person", id, `marked as having left on ${on}`);
+    return c.redirect(
+      `/admin/people/${id}?done=${encodeURIComponent("Marked as having left.")}`,
+      302
+    );
+  }
+
+  if (action === "returned") {
+    await markReturnedToChoir(c.env.DB, id);
+    await logAdminAction(c, "person.return", "person", id, "put back on the list");
+    return c.redirect(`/admin/people/${id}?done=${encodeURIComponent("Back on the list.")}`, 302);
+  }
+
+  const displayName = str(body.display_name);
+  if (!displayName) return c.html(errorPage("A name is needed."), 400);
+  const choir = str(body.choir);
+  if (!isChoir(choir)) return c.html(errorPage("Choose which choir they sing in."), 400);
+  const voicePart = str(body.voice_part);
+  const gender = str(body.gender);
+
+  await updatePerson(c.env.DB, id, {
+    displayName,
+    choir,
+    voicePart: voicePart && isVoicePart(voicePart) ? voicePart : null,
+    schoolYear: schoolYearParam(str(body.school_year)),
+    joinedOn: dateParam(str(body.joined_on)),
+    surpliceAwardedOn: dateParam(str(body.surplice_awarded_on)),
+    deansAwardOn: dateParam(str(body.deans_award_on)),
+    archbishopsAwardOn: dateParam(str(body.archbishops_award_on)),
+    goldAwardOn: dateParam(str(body.gold_award_on)),
+    dbsValidUntil: dateParam(str(body.dbs_valid_until)),
+    gender: gender === "m" || gender === "f" ? gender : null,
+  });
+
+  // The detail says what changed about whom by id, never by name, and never
+  // what the values were.
+  await logAdminAction(c, "person.edit", "person", id, "details changed");
+  return c.redirect(`/admin/people/${id}?done=${encodeURIComponent("Saved.")}`, 302);
+});
+
+/**
+ * Parents' contact details — the hard gate.
+ *
+ * Reachable by music staff and by whoever is on safeguarding duty (see the
+ * role table in `src/roles.ts`), and by nobody else. There is no GET: reading
+ * a number is a POST, because `revealContacts` writes the audit line before it
+ * fetches anything, and a bookmarkable URL that shows a child's parent's
+ * telephone number is exactly what must not exist.
+ */
+app.post("/admin/people/contact/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const person = await getPerson(c.env.DB, id);
+  if (!person) return c.html(notFoundPage(), 404);
+
+  const body = await c.req.parseBody();
+  const action = str(body.action);
+
+  if (action === "add") {
+    const phone = str(body.phone);
+    if (!phone) return c.html(errorPage("A telephone number is needed."), 400);
+    await addContact(c.env.DB, id, {
+      label: str(body.label) || null,
+      name: str(body.name) || null,
+      phone,
+    });
+    // The number itself never reaches the audit log, only that one was added.
+    await logAdminAction(c, "contact.add", "person", id, "a parent contact was added");
+    return c.redirect(`/admin/people/${id}?done=${encodeURIComponent("Contact added.")}`, 302);
+  }
+
+  if (action === "delete") {
+    const contactId = numericParam(str(body.contact_id));
+    if (contactId === null) return c.html(notFoundPage(), 404);
+    await deleteContact(c.env.DB, contactId);
+    await logAdminAction(c, "contact.delete", "person", id, "a parent contact was removed");
+    return c.redirect(`/admin/people/${id}?done=${encodeURIComponent("Contact removed.")}`, 302);
+  }
+
+  // The reveal. `revealContacts` audits first and reads second.
+  const revealed = await revealContacts(c.env.DB, id, adminIdentity(c));
+  return c.html(
+    adminPersonPage(person, revealed.length, revealed, true, today())
+  );
 });
 
 /**

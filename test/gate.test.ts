@@ -156,10 +156,24 @@ describe("roles", () => {
       "/admin/people/4",
       "/admin/people/register/12",
       "/admin/people/register/12/7",
+      "/admin/people/contact/4",
       "/admin/safeguarding",
       "/admin/safeguarding/today",
     ]) {
       expect(permits(["librarian"], requiredRolesFor(path)), `a librarian can reach ${path}`).toBe(false);
+    }
+  });
+
+  // The one door inside /admin/people that safeguarding may open: somebody on
+  // dismissal duty with an uncollected child needs the parent's number, and
+  // sending them to find music staff first is the wrong answer. It is still
+  // one door — not the choir list, not the register, not a person's record.
+  it("gives safeguarding the parent contacts and nothing else under /admin/people", () => {
+    expect(permits(["safeguarding"], requiredRolesFor("/admin/people/contact/4"))).toBe(true);
+    for (const path of ["/admin/people", "/admin/people/4", "/admin/people/register/12"]) {
+      expect(permits(["safeguarding"], requiredRolesFor(path)), `safeguarding can reach ${path}`).toBe(
+        false
+      );
     }
   });
 

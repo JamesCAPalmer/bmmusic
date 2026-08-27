@@ -65,6 +65,12 @@ const ROLE_PREFIXES: ReadonlyArray<readonly [string, readonly Role[]]> = [
   ["/admin/people", STAFF],
   ["/admin/safeguarding", ROTA],
 
+  // The one place inside `/admin/people` that safeguarding may reach. Somebody
+  // on dismissal duty at half past eight on a Thursday with a child nobody has
+  // collected needs the parent's number, and sending them to find music staff
+  // first is the wrong answer. Every look writes an audit line naming them.
+  ["/admin/people/contact", ROTA],
+
   // The app's own administration.
   ["/admin/settings", STAFF],
   ["/admin/modules", STAFF],
