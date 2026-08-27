@@ -38,9 +38,11 @@ import {
   getPieceByAccession,
   getPieceDetail,
   mergePieces,
+  recentlyAdded,
   recordCount,
   reviewQueue,
   searchPieces,
+  typicalSingersFor,
   updatePiece,
   type PieceEdit,
   type SearchQuery,
@@ -49,32 +51,64 @@ import { importSeed, seedChoirProfiles, type ImportSummary } from "./seed";
 import { fetchFeedMonth, monthsToFetch, readFeedMonth } from "./feed";
 import {
   confirmMatch,
+  getService,
   ingestMonth,
   matchCandidates,
   rejectMatch,
+  serviceMusic,
+  sungAt,
   unmatchedLines,
+  upcomingServices,
   type IngestSummary,
 } from "./services";
+import {
+  allFeedback,
+  approveScan,
+  approvedScansForService,
+  getBooklet,
+  getScanSubmission,
+  latestBooklet,
+  pendingScans,
+  recordBooklet,
+  recordFeedback,
+  rejectScan,
+  resolveFeedback,
+  submitScans,
+} from "./submissions";
+import {
+  buildWorkingCopy,
+  contentHash,
+  workingCopyKey,
+  workingCopyRef,
+  WorkingCopyError,
+} from "./workingcopy";
+import { findDescant } from "./descants";
 import { extractionAvailable, extractLabel } from "./extract";
 import { NotConfiguredError, toContentBlock } from "./anthropic";
 import {
   adminAccessionPage,
   adminEditPage,
+  adminFeedbackPage,
   adminFeedResultPage,
   adminHomePage,
   adminMatchQueuePage,
+  adminScanQueuePage,
   adminImportPage,
   adminIntakeDonePage,
   adminIntakePage,
   adminReviewPage,
   browsePage,
+  descantPage,
   errorPage,
+  homePage,
   itemPage,
   loginPage,
   notFoundPage,
   portalCountPage,
   portalDonePage,
   portalPage,
+  servicePage,
+  type HomeService,
 } from "./ui";
 import SEED_CSV from "../data/seed/bm-music-draft-index.csv";
 
@@ -131,7 +165,39 @@ app.get("/logout", (c) => {
 
 const PAGE_SIZE = 50;
 
+/** Today, in the "YYYY-MM-DD" form the service table stores and sorts on. */
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Home (15A): the next service with its music, then what is coming, then what
+ * is new.
+ *
+ * All four reads go out together — this is the page a chorister opens on the
+ * bus with one bar of signal, and four round trips in sequence would be felt.
+ */
 app.get("/", async (c) => {
+  const from = today();
+  const [services, recent] = await Promise.all([
+    upcomingServices(c.env.DB, from, 8),
+    recentlyAdded(c.env.DB, 8),
+  ]);
+
+  const [nextService, ...later] = services;
+  let next: HomeService | null = null;
+  if (nextService) {
+    const [music, typicalSingers] = await Promise.all([
+      serviceMusic(c.env.DB, nextService.id),
+      typicalSingersFor(c.env.DB, nextService.designation),
+    ]);
+    next = { service: nextService, music, typicalSingers };
+  }
+
+  return c.html(homePage(next, later, recent));
+});
+
+app.get("/music", async (c) => {
   const query = readSearchQuery(c.req.url);
   const [result, counts] = await Promise.all([
     searchPieces(c.env.DB, query),
@@ -140,12 +206,111 @@ app.get("/", async (c) => {
   return c.html(browsePage(query, result, counts));
 });
 
+/** The descant finder (H4): a hymn number in, a binder out. */
+app.get("/descants", (c) => {
+  const hymn = new URL(c.req.url).searchParams.get("hymn")?.trim() ?? "";
+  return c.html(descantPage(hymn, hymn ? findDescant(hymn) : null));
+});
+
+app.get("/service/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const service = await getService(c.env.DB, id);
+  if (!service) return c.html(notFoundPage(), 404);
+
+  const [music, typicalSingers, booklet] = await Promise.all([
+    serviceMusic(c.env.DB, id),
+    typicalSingersFor(c.env.DB, service.designation),
+    latestBooklet(c.env.DB, id),
+  ]);
+
+  const message = new URL(c.req.url).searchParams.get("wc") ?? undefined;
+  return c.html(servicePage(service, music, typicalSingers, booklet, message || undefined));
+});
+
 app.get("/piece/:id", async (c) => {
   const id = numericParam(c.req.param("id"));
   if (id === null) return c.html(notFoundPage(), 404);
   const detail = await getPieceDetail(c.env.DB, id);
   if (!detail) return c.html(notFoundPage(), 404);
-  return c.html(itemPage(detail));
+
+  const sung = await sungAt(c.env.DB, id);
+  const params = new URL(c.req.url).searchParams;
+  const scanMessage = params.has("scanned")
+    ? { ok: true, text: "Thank you — those have gone to be checked. Nobody else sees them until then." }
+    : params.has("scanfail")
+      ? { ok: false, text: params.get("scanfail") ?? "Those photos could not be sent." }
+      : undefined;
+
+  return c.html(itemPage(detail, sung, scanMessage));
+});
+
+/**
+ * A chorister's phone scan (18A, beta).
+ *
+ * Lands as a *pending* submission and an R2 object, visible to nobody until an
+ * admin approves it. Fails soft: a photo that will not upload produces a
+ * sentence on the piece page, never an error screen.
+ */
+app.post("/piece/:id/scan", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const piece = await getPiece(c.env.DB, id);
+  if (!piece) return c.html(notFoundPage(), 404);
+
+  if (!c.env.SCANS) {
+    return c.redirect(`/piece/${id}?scanfail=${encodeURIComponent("Photos cannot be sent just now.")}`, 302);
+  }
+
+  const body = await c.req.parseBody({ all: true });
+  const raw = body.scan;
+  const uploads = (Array.isArray(raw) ? raw : [raw]).filter((f): f is File => f instanceof File && f.size > 0);
+
+  if (!uploads.length) {
+    return c.redirect(`/piece/${id}?scanfail=${encodeURIComponent("No photos were attached.")}`, 302);
+  }
+
+  try {
+    const saved = await submitScans(c.env.DB, c.env.SCANS, id, uploads, str(body.submitted_label) || null);
+    if (!saved) {
+      return c.redirect(
+        `/piece/${id}?scanfail=${encodeURIComponent("Those files were not photos we can take.")}`,
+        302
+      );
+    }
+  } catch (e) {
+    console.error("scan submission failed", e);
+    return c.redirect(
+      `/piece/${id}?scanfail=${encodeURIComponent("Those photos could not be sent. Please try again.")}`,
+      302
+    );
+  }
+
+  return c.redirect(`/piece/${id}?scanned=1`, 302);
+});
+
+/** The feedback widget's endpoint. On every page, choir side and admin. */
+app.post("/api/feedback", async (c) => {
+  const body = await c.req.parseBody();
+
+  // The honeypot. A person never sees this field; a bot fills it in. Answer 204
+  // rather than an error, so a bot learns nothing from the difference.
+  if (str(body.company)) return c.body(null, 204);
+
+  const message = str(body.message);
+  if (!message) return c.json({ error: "Please say what it is about." }, 400);
+
+  await recordFeedback(c.env.DB, {
+    page: str(body.page) || null,
+    category: str(body.category) || null,
+    // Bounded: this is free text from a browser and goes into a shared database.
+    message: message.slice(0, 4000),
+    ua: (c.req.header("User-Agent") ?? "").slice(0, 300) || null,
+  });
+
+  return c.json({ ok: true });
 });
 
 function readSearchQuery(url: string): SearchQuery {
@@ -225,6 +390,87 @@ app.post("/portal/count/:id", async (c) => {
 
   return c.html(portalDonePage(piece, outcome));
 });
+
+/**
+ * Make (or reuse) a working copy for a service (17A, **beta**).
+ *
+ * Beta means it fails soft: every failure below sends the chorister back to the
+ * service page with one sentence telling them what to do instead. None of them
+ * shows an error screen, and none of them leaves a half-built PDF anywhere.
+ *
+ * The cache is content-addressed on exactly which scans went in, so tapping the
+ * button twice costs one PDF while a newly approved scan still rebuilds.
+ */
+app.get("/service/:id/working-copy", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const service = await getService(c.env.DB, id);
+  if (!service) return c.html(notFoundPage(), 404);
+
+  const back = (why: string) => c.redirect(`/service/${id}?wc=${encodeURIComponent(why)}`, 302);
+
+  if (!c.env.SCANS) return back("Working copies are not available just now.");
+
+  const sources = await approvedScansForService(c.env.DB, id);
+  if (!sources.length) {
+    return back("None of the music for this service has been scanned yet, so there is nothing to join up.");
+  }
+
+  try {
+    const hash = await contentHash(sources);
+    const key = workingCopyKey(id, hash);
+    const ref = workingCopyRef(id, hash);
+
+    // Already built for exactly this set of scans: serve it and do no work.
+    const cached = await c.env.SCANS.get(key);
+    if (cached) return pdfResponse(cached.body, `${ref}.pdf`);
+
+    const built = await buildWorkingCopy(c.env.SCANS, id, service.title, service.service_date, sources);
+    await c.env.SCANS.put(key, built.bytes, { httpMetadata: { contentType: "application/pdf" } });
+    await recordBooklet(c.env.DB, {
+      ref,
+      serviceId: id,
+      title: `${service.title} — ${service.service_date}`,
+      r2Key: key,
+      kind: "working",
+      contentHash: hash,
+      pages: built.pages,
+      bytes: built.bytes.byteLength,
+    });
+
+    return pdfResponse(built.bytes, `${ref}.pdf`);
+  } catch (e) {
+    if (e instanceof WorkingCopyError) return back(e.message);
+    console.error("working copy failed", e);
+    return back("The working copy could not be made just now. The scans are all still there to read one by one.");
+  }
+});
+
+/** Stream a produced booklet, behind the same gate as everything else. */
+app.get("/booklet/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+  if (!c.env.SCANS) return c.html(errorPage("Booklets are not available just now."), 503);
+
+  const row = await getBooklet(c.env.DB, id);
+  if (!row) return c.html(notFoundPage(), 404);
+
+  const object = await c.env.SCANS.get(row.r2_key);
+  if (!object) return c.html(notFoundPage(), 404);
+
+  return pdfResponse(object.body, `${row.ref}.pdf`);
+});
+
+/** A PDF, inline, private-cached — never in a shared cache. */
+function pdfResponse(body: ReadableStream | Uint8Array | null, filename: string): Response {
+  const headers = new Headers({
+    "content-type": "application/pdf",
+    "content-disposition": `inline; filename="${filename}"`,
+    "cache-control": "private, max-age=300",
+  });
+  return new Response(body as BodyInit, { headers });
+}
 
 // ---------------------------------------------------------------------------
 // Scans (R2)
@@ -553,6 +799,74 @@ app.post("/admin/services/line/:id", async (c) => {
   }
   await logAdminAction(c, "match.confirm", "service_music", id, `matched to piece ${pieceId}`);
   return c.redirect("/admin/services", 302);
+});
+
+// ---------------------------------------------------------------------------
+// Admin — feedback and crowd scans
+// ---------------------------------------------------------------------------
+
+app.get("/admin/feedback", async (c) => {
+  return c.html(adminFeedbackPage(await allFeedback(c.env.DB)));
+});
+
+app.post("/admin/feedback/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+  await resolveFeedback(c.env.DB, id, adminIdentity(c));
+  await logAdminAction(c, "feedback.resolve", "feedback", id, null);
+  return c.redirect("/admin/feedback", 302);
+});
+
+app.get("/admin/scans", async (c) => {
+  return c.html(adminScanQueuePage(await pendingScans(c.env.DB)));
+});
+
+/**
+ * Look at a pending scan before deciding on it.
+ *
+ * A separate route from `/file/:id` because a pending submission deliberately
+ * has no `file` row — that is what "not approved" means — and this one is
+ * admin-gated rather than choir-gated.
+ */
+app.get("/admin/scans/:id/preview", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+  if (!c.env.SCANS) return c.html(errorPage("Scans are not available just now."), 503);
+
+  const row = await getScanSubmission(c.env.DB, id);
+  if (!row) return c.html(notFoundPage(), 404);
+
+  const object = await c.env.SCANS.get(row.r2_key);
+  if (!object) return c.html(notFoundPage(), 404);
+
+  return new Response(object.body, {
+    headers: {
+      "content-type": row.content_type ?? "application/octet-stream",
+      "cache-control": "private, max-age=60",
+    },
+  });
+});
+
+app.post("/admin/scans/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const body = await c.req.parseBody();
+  const who = adminIdentity(c);
+
+  try {
+    if (str(body.action) === "approve") {
+      await approveScan(c.env.DB, id, who);
+      await logAdminAction(c, "scan.approve", "scan_submission", id, null);
+    } else {
+      await rejectScan(c.env.DB, id, who);
+      await logAdminAction(c, "scan.reject", "scan_submission", id, null);
+    }
+  } catch (e) {
+    return c.html(errorPage(e instanceof Error ? e.message : "That could not be saved."), 400);
+  }
+
+  return c.redirect("/admin/scans", 302);
 });
 
 /** Search the catalogue from the match queue, for correcting a line by hand. */

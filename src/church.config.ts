@@ -133,6 +133,33 @@ export interface ChurchConfig {
     /** Highest shelf number within a door. */
     maxShelf: number;
   };
+  /** How the copies RAG (16A) decides between green, amber and red. */
+  copiesRag: {
+    /**
+     * Proportion of the choir that must have a usable copy before a shortfall
+     * counts as amber rather than red.
+     *
+     * Amber means "a couple of people share", which is a normal Tuesday. Set
+     * too low and red never fires; too high and the screen cries wolf on half
+     * the library.
+     */
+    amberProportion: number;
+  };
+  /**
+   * The hymn descant binders (H4).
+   *
+   * The descants are not catalogued piece by piece — they live in a run of ring
+   * binders indexed by hymn number, recorded in the draft index as one row
+   * (D-255). Finding one is arithmetic on a shelf, not a catalogue search.
+   */
+  descants: {
+    /** Hymns per numbered binder: 10 gives "1–10", "11–20", … */
+    rangeSize: number;
+    /** Highest hymn number the numbered binders cover. */
+    highestNumbered: number;
+    /** Binders with a name rather than a range on the spine. */
+    namedBinders: string[];
+  };
   /** Prefix and width of an accession number: "BM-" + 4 digits → "BM-0001". */
   accession: {
     prefix: string;
@@ -238,6 +265,15 @@ export const CHURCH: ChurchConfig = {
   storage: {
     doors: ["A", "B", "C", "D", "E", "F", "G", "H"],
     maxShelf: 12,
+  },
+  copiesRag: {
+    // Four in five with a copy is sharing; below that is a problem.
+    amberProportion: 0.8,
+  },
+  descants: {
+    rangeSize: 10,
+    highestNumbered: 150,
+    namedBinders: ["St Patrick's Breastplate", "Hymn Descants"],
   },
   accession: {
     prefix: "BM-",

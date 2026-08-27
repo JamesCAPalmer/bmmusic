@@ -53,6 +53,59 @@ that SQLite would accept each `ALTER TABLE ADD COLUMN` (no UNIQUE, no
 PRIMARY KEY, a default behind any NOT NULL), which otherwise fails at
 migrate time against the live database rather than in CI.
 
+### Milestone 2 — the choir side
+
+**Home (15A)** leads with the next service and its music list already
+open, because somebody opening this on the bus is nearly always asking
+"what's on tonight and have I looked at the anthem?". Then the rest of
+the term, then a "recently added" rail, with search one tap away
+throughout. Browse moves from `/` to `/music`.
+
+**The copies RAG (16A)**, in `src/rag.ts`. Usable copies against the
+designation's `typical_singers`, and **grey when either is unknown** —
+which is every service on the day this ships, because Robert has not
+given us the numbers yet. Making unknown look like green would fill the
+screen with reassuring ticks that mean nothing, and the first time it
+mattered would be the morning somebody found nine copies for twenty
+singers.
+
+**The piece page** gains the composer written out (the parcel label
+shouts a surname; "STANFORD" is not what anybody calls him), season
+chips, door-and-shelf, and when we last sang it — from **confirmed**
+matches only, never the matcher's own guesses.
+
+**The feedback widget** on every page, choir and admin: floating button,
+slide-up panel, page carried in a hidden field, honeypot named
+`company`. No name field and no email field — this is a choir-side app
+used by children, and James needs to know a page is broken, not who
+noticed. The honeypot answers 204, so a bot learns nothing from the
+difference.
+
+**The descant finder (H4)**, `src/descants.ts`. One thing to flag:
+hymn numbers in the live feed run from 9 to 565, but the descant binders
+only cover 1–150, so it declines for about two-thirds of real hymns. The
+range is config, so correcting it is a one-line edit once somebody has
+looked at the shelf.
+
+Two beta features, both failing soft:
+
+- **Working copies (17A)** — a service's approved reference scans joined
+  into one watermarked PDF (H12 footer on every page), cached in R2 on a
+  hash of exactly which scans went in, so tapping twice costs one PDF
+  while a newly approved scan still rebuilds. pdf-lib is behind a
+  dynamic import: the upload is the same either way, but module
+  evaluation is deferred off the pages people actually use.
+- **Scan this with your phone (18A)** — lands as a *pending* submission
+  under `pending/` in R2, invisible until an admin approves it. That
+  gate is the feature: these are photographs of somebody's marked-up
+  copy.
+
+Verified against a local D1 with the real seed and four real months of
+the feed: 15 services and 87 music lines ingested, the RAG going green
+at 26 copies for 20 singers and amber at 17, the honeypot dropping spam
+while a real message reached the admin list, and the working copy
+failing to a sentence rather than an error screen.
+
 ### Milestone 4 — service feed and matcher
 
 Taken before milestones 2 and 3 because both depend on services existing:
