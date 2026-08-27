@@ -25,7 +25,7 @@
 
 import { CHURCH } from "./church.config";
 import { parseCsvObjects } from "./csv";
-import { canonicalComposer, canonicalTitle, splitTitles } from "./normalise";
+import { canonicalComposer, canonicalTitle, readSeasons, splitTitles } from "./normalise";
 
 /** Below this, the draft row says so itself and a human should look. */
 const LOW_CONFIDENCE = 0.8;
@@ -39,6 +39,12 @@ export class SeedError extends Error {}
 export interface SeedRow {
   ref: string;
   composer: string;
+  /** v2: the composer written out ("Gregorio Allegri"). Empty in a v1 cut. */
+  composer_full: string;
+  /** v2: surname alone, for filing order and the label. Empty in a v1 cut. */
+  surname: string;
+  /** v2: semicolon-joined season tags. Empty in a v1 cut, and for most rows. */
+  season: string;
   titles: string;
   category: string;
   handwritten: string;
@@ -52,6 +58,12 @@ export interface DraftPiece {
   legacyRef: string;
   composer: string;
   composerCanonical: string;
+  /** The composer written out, where the index gave one. */
+  composerFull: string | null;
+  /** Surname alone, where the index gave one. Proper case, not capitals. */
+  surname: string | null;
+  /** Recognised season tags, ";"-joined in church-year order. */
+  season: string | null;
   /** The joined title, verbatim as printed on the parcel. */
   title: string;
   category: string;
@@ -156,6 +168,11 @@ export function parseSeedCsv(text: string): SeedRow[] {
   return objects.map((o) => ({
     ref: o.ref ?? "",
     composer: o.composer ?? "",
+    // v2 columns. A v1 cut has none of these; empty is the right reading of
+    // "the file did not say", and the piece keeps a NULL rather than a guess.
+    composer_full: o.composer_full ?? "",
+    surname: o.surname ?? "",
+    season: o.season ?? "",
     titles: o.titles ?? "",
     category: o.category ?? "",
     handwritten: o.handwritten ?? "",
@@ -183,6 +200,15 @@ export function toDraftPiece(row: SeedRow): DraftPiece {
     reasons.push(`label note: ${flag}`);
   }
   if (decision.inferred && decision.reason) reasons.push(decision.reason);
+
+  // A season tag outside the vocabulary is somebody's shorthand, and throwing
+  // it away would lose the only note anybody made about when this is sung. It
+  // goes in front of a human instead, with the word they actually wrote.
+  const seasons = readSeasons(row.season);
+  for (const tag of seasons.unknown) {
+    reasons.push(`season "${tag}" is not one of the tags we use`);
+  }
+
   if (!titlesRaw) reasons.push("no title read from the label");
   if (!row.composer.trim()) reasons.push("no composer read from the label");
   // A trailing "?" is the cataloguer saying they could not read it.
@@ -205,6 +231,9 @@ export function toDraftPiece(row: SeedRow): DraftPiece {
     legacyRef: row.ref.trim(),
     composer: row.composer.trim() || "Unknown",
     composerCanonical: canonicalComposer(row.composer) || "unknown",
+    composerFull: row.composer_full.trim() || null,
+    surname: row.surname.trim() || null,
+    season: seasons.tags.length ? seasons.tags.join(";") : null,
     title: titlesRaw || "(no title read)",
     category: decision.code,
     notes: noteParts.length ? noteParts.join("; ") : null,
@@ -231,6 +260,9 @@ export interface ExistingPiece {
   legacy_ref: string;
   composer: string;
   composer_canonical: string;
+  composer_full: string | null;
+  surname: string | null;
+  season: string | null;
   title: string;
   category: string;
   notes: string | null;
@@ -292,6 +324,9 @@ function matches(current: ExistingPiece, draft: DraftPiece): boolean {
   return (
     current.composer === draft.composer &&
     current.composer_canonical === draft.composerCanonical &&
+    (current.composer_full ?? null) === draft.composerFull &&
+    (current.surname ?? null) === draft.surname &&
+    (current.season ?? null) === draft.season &&
     current.title === draft.title &&
     current.category === draft.category &&
     (current.notes ?? null) === draft.notes &&
@@ -326,7 +361,8 @@ export async function importSeed(db: D1Database, csvText: string): Promise<Impor
 
   const existing = await db
     .prepare(
-      `SELECT id, legacy_ref, composer, composer_canonical, title, category, notes, review_flag, reviewed_at
+      `SELECT id, legacy_ref, composer, composer_canonical, composer_full, surname, season,
+              title, category, notes, review_flag, reviewed_at
          FROM piece WHERE legacy_ref IS NOT NULL`
     )
     .all<ExistingPiece>();
@@ -334,13 +370,15 @@ export async function importSeed(db: D1Database, csvText: string): Promise<Impor
   const plan = planImport(drafts, existing.results ?? []);
 
   const insertPiece = db.prepare(
-    `INSERT INTO piece (composer, composer_canonical, title, category, legacy_ref, notes, review_flag)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO piece (composer, composer_canonical, composer_full, surname, season,
+                        title, category, legacy_ref, notes, review_flag)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (legacy_ref) DO NOTHING`
   );
   const updatePiece = db.prepare(
     `UPDATE piece
-        SET composer = ?, composer_canonical = ?, title = ?, category = ?, notes = ?, review_flag = ?,
+        SET composer = ?, composer_canonical = ?, composer_full = ?, surname = ?, season = ?,
+            title = ?, category = ?, notes = ?, review_flag = ?,
             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
       WHERE id = ? AND reviewed_at IS NULL`
   );
@@ -348,12 +386,34 @@ export async function importSeed(db: D1Database, csvText: string): Promise<Impor
   const statements: D1PreparedStatement[] = [];
   for (const d of plan.insert) {
     statements.push(
-      insertPiece.bind(d.composer, d.composerCanonical, d.title, d.category, d.legacyRef, d.notes, d.reviewFlag)
+      insertPiece.bind(
+        d.composer,
+        d.composerCanonical,
+        d.composerFull,
+        d.surname,
+        d.season,
+        d.title,
+        d.category,
+        d.legacyRef,
+        d.notes,
+        d.reviewFlag
+      )
     );
   }
   for (const { id, draft: d } of plan.update) {
     statements.push(
-      updatePiece.bind(d.composer, d.composerCanonical, d.title, d.category, d.notes, d.reviewFlag, id)
+      updatePiece.bind(
+        d.composer,
+        d.composerCanonical,
+        d.composerFull,
+        d.surname,
+        d.season,
+        d.title,
+        d.category,
+        d.notes,
+        d.reviewFlag,
+        id
+      )
     );
   }
   await runBatched(db, statements);

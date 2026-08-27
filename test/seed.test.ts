@@ -18,9 +18,19 @@ import {
   SeedError,
   type DraftPiece,
   type ExistingPiece,
+  type SeedRow,
 } from "../src/seed";
 import { parseCsv, parseCsvObjects, CsvError } from "../src/csv";
-import { canonicalComposer, canonicalTitle, formatAccession, parseAccession, splitTitles } from "../src/normalise";
+import {
+  canonicalComposer,
+  canonicalTitle,
+  formatAccession,
+  formatSeasons,
+  parseAccession,
+  readSeasons,
+  splitTitles,
+} from "../src/normalise";
+import { CHURCH } from "../src/church.config";
 
 const SEED_PATH = join(import.meta.dirname, "..", "data", "seed", "bm-music-draft-index.csv");
 const SEED_CSV = readFileSync(SEED_PATH, "utf8");
@@ -98,6 +108,48 @@ describe("normalising names", () => {
 
 // ---------------------------------------------------------------------------
 
+describe("reading season tags", () => {
+  it("takes the tags in the vocabulary", () => {
+    expect(readSeasons("lent;passiontide").tags).toEqual(["lent", "passiontide"]);
+  });
+
+  // The stored order is the church year, so two rows tagged the same way always
+  // render the same way whatever order somebody typed them in.
+  it("puts them in church-year order rather than the order they were typed", () => {
+    expect(readSeasons("easter;advent;lent").tags).toEqual(["advent", "lent", "easter"]);
+  });
+
+  it("folds case, spacing and commas", () => {
+    expect(readSeasons("Advent, HOLY WEEK ; easter").tags).toEqual(["advent", "holyweek", "easter"]);
+  });
+
+  it("takes what half the choir actually calls it", () => {
+    expect(readSeasons("Whitsun").tags).toEqual(["pentecost"]);
+    expect(readSeasons("All Souls").tags).toEqual(["allsaints"]);
+  });
+
+  it("deduplicates a tag given twice", () => {
+    expect(readSeasons("lent;Lent;LENT").tags).toEqual(["lent"]);
+  });
+
+  // The property the importer's review flag depends on: an unrecognised tag is
+  // handed back verbatim rather than dropped or coerced into something near it.
+  it("hands back an unrecognised tag rather than dropping it", () => {
+    const reading = readSeasons("advent;Michaelmas");
+    expect(reading.tags).toEqual(["advent"]);
+    expect(reading.unknown).toEqual(["Michaelmas"]);
+  });
+
+  it("reads nothing out of nothing", () => {
+    expect(readSeasons("").tags).toEqual([]);
+    expect(readSeasons(null).tags).toEqual([]);
+    expect(formatSeasons("")).toBeNull();
+    expect(formatSeasons("lent")).toBe("lent");
+  });
+});
+
+// ---------------------------------------------------------------------------
+
 describe("mapping the draft categories", () => {
   it("maps the three that map straight across, without flagging them", () => {
     expect(mapCategory("anthem", "Ave verum")).toMatchObject({ code: "A", inferred: false });
@@ -140,9 +192,12 @@ describe("mapping the draft categories", () => {
 // ---------------------------------------------------------------------------
 
 describe("turning a draft row into a piece", () => {
-  const row = {
+  const row: SeedRow = {
     ref: "D-032",
     composer: "BOYCE",
+    composer_full: "William Boyce",
+    surname: "Boyce",
+    season: "",
     titles: "All the ends of the world; O where shall wisdom; O turn away (Trebles)",
     category: "anthem",
     handwritten: "yes",
@@ -184,6 +239,30 @@ describe("turning a draft row into a piece", () => {
     expect(toDraftPiece({ ...row, composer: "MAWBY?" }).reviewFlag).toContain("composer uncertain");
   });
 
+  it("carries the v2 columns across", () => {
+    const piece = toDraftPiece({ ...row, season: "lent;passiontide" });
+    expect(piece.composerFull).toBe("William Boyce");
+    expect(piece.surname).toBe("Boyce");
+    expect(piece.season).toBe("lent;passiontide");
+  });
+
+  // A v1 cut of the index has none of these columns. The row must still import,
+  // with nulls rather than empty strings, so "the file did not say" and "the
+  // file said nothing" read the same in the database.
+  it("takes a v1 row with no composer_full, surname or season", () => {
+    const piece = toDraftPiece({ ...row, composer_full: "", surname: "", season: "" });
+    expect(piece.composerFull).toBeNull();
+    expect(piece.surname).toBeNull();
+    expect(piece.season).toBeNull();
+    expect(piece.reviewFlag).toBeNull();
+  });
+
+  it("flags a season tag outside the vocabulary, naming the word that was written", () => {
+    const piece = toDraftPiece({ ...row, season: "advent;Michaelmas" });
+    expect(piece.season).toBe("advent");
+    expect(piece.reviewFlag).toContain("Michaelmas");
+  });
+
   it("records the label photograph, so the row can be checked against it", () => {
     expect(toDraftPiece(row).notes).toContain("IMG_4300");
     expect(toDraftPiece(row).notes).toContain("handwritten");
@@ -201,10 +280,13 @@ describe("turning a draft row into a piece", () => {
 // ---------------------------------------------------------------------------
 
 describe("planning an import", () => {
-  const draft = (ref: string, title = "Ave verum"): DraftPiece =>
+  const draft = (ref: string, title = "Ave verum", season = ""): DraftPiece =>
     toDraftPiece({
       ref,
       composer: "BYRD",
+      composer_full: "William Byrd",
+      surname: "Byrd",
+      season,
       titles: title,
       category: "anthem",
       handwritten: "no",
@@ -218,6 +300,9 @@ describe("planning an import", () => {
     legacy_ref: d.legacyRef,
     composer: d.composer,
     composer_canonical: d.composerCanonical,
+    composer_full: d.composerFull,
+    surname: d.surname,
+    season: d.season,
     title: d.title,
     category: d.category,
     notes: d.notes,
@@ -238,6 +323,16 @@ describe("planning an import", () => {
     expect(plan.unchanged).toHaveLength(2);
     expect(plan.insert).toHaveLength(0);
     expect(plan.update).toHaveLength(0);
+  });
+
+  // Without this the columns would import once and then never update, because
+  // the planner would call a row with a corrected season "unchanged".
+  it("notices a season the new cut corrects", () => {
+    const before = draft("D-001", "Ave verum", "lent");
+    const after = draft("D-001", "Ave verum", "lent;passiontide");
+    const plan = planImport([after], [existingFrom(7, before)]);
+    expect(plan.update).toEqual([{ id: 7, draft: after }]);
+    expect(plan.unchanged).toHaveLength(0);
   });
 
   it("refreshes a draft row when the new cut corrects it", () => {
@@ -315,6 +410,9 @@ describe("the real committed draft index", () => {
       legacy_ref: d.legacyRef,
       composer: d.composer,
       composer_canonical: d.composerCanonical,
+      composer_full: d.composerFull,
+      surname: d.surname,
+      season: d.season,
       title: d.title,
       category: d.category,
       notes: d.notes,
@@ -327,6 +425,54 @@ describe("the real committed draft index", () => {
     expect(second.update).toHaveLength(0);
     expect(second.rejected).toEqual([]);
     expect(second.unchanged).toHaveLength(SEED_ROWS);
+  });
+
+  it("reads a composer_full and a surname for every row of the v2 cut", () => {
+    for (const d of drafts) {
+      expect(d.composerFull, `${d.legacyRef} has no composer_full`).toBeTruthy();
+      expect(d.surname, `${d.legacyRef} has no surname`).toBeTruthy();
+    }
+  });
+
+  // Surname is what the label prints and what the catalogue files under. It
+  // stays in proper case in the data; showing it in capitals is the theme's
+  // decision (H10's label design), and baking capitals into the database would
+  // take that choice away from the theme for good.
+  //
+  // The exception is a genuine acronym, which is all-caps in proper case too.
+  // Listing them rather than loosening the rule keeps the check meaningful:
+  // a new all-caps surname fails until somebody has decided which it is.
+  const ACRONYM_SURNAMES = new Set(["RSCM"]);
+
+  it("keeps the surname in proper case, not the label's capitals", () => {
+    const shouting = drafts.filter(
+      (d) => d.surname && d.surname === d.surname.toUpperCase() && !ACRONYM_SURNAMES.has(d.surname)
+    );
+    expect(shouting.map((d) => `${d.legacyRef}: ${d.surname}`)).toEqual([]);
+  });
+
+  // The point of the surname column: it is not just the shouted label again.
+  it("differs from the shouted label on the great majority of rows", () => {
+    const same = drafts.filter((d) => d.surname === d.composer);
+    expect(same.length).toBeLessThan(drafts.length / 10);
+  });
+
+  it("recognises every season tag in the committed file", () => {
+    const vocabulary = new Set(CHURCH.seasons.map((s) => s.value));
+    const tagged = drafts.filter((d) => d.season !== null);
+    // The v2 cut tags a minority of rows; if this ever reaches zero the season
+    // column has stopped being read and the feast-ahead panel is quietly empty.
+    expect(tagged.length).toBeGreaterThan(50);
+    for (const d of tagged) {
+      for (const tag of d.season!.split(";")) {
+        expect(vocabulary, `${d.legacyRef} carries an unknown season "${tag}"`).toContain(tag);
+      }
+    }
+  });
+
+  it("raises no season complaints against the committed file", () => {
+    const complaints = drafts.filter((d) => d.reviewFlag?.includes("is not one of the tags we use"));
+    expect(complaints.map((d) => d.legacyRef)).toEqual([]);
   });
 
   it("flags a good number of rows, but not all of them", () => {

@@ -6,7 +6,13 @@
  */
 
 import { CHURCH } from "./church.config";
-import { canonicalComposer, canonicalTitle, formatAccession, parseAccession } from "./normalise";
+import {
+  canonicalComposer,
+  canonicalTitle,
+  formatAccession,
+  formatSeasons,
+  parseAccession,
+} from "./normalise";
 
 /** A piece as the choir sees it, with its current holding folded in. */
 export interface PieceRow {
@@ -14,11 +20,23 @@ export interface PieceRow {
   accession: string | null;
   composer: string;
   composer_canonical: string;
+  /** The composer written out. NULL where the draft index gave only a label. */
+  composer_full: string | null;
+  /** Surname alone, proper case. Capitals are the theme's business, not the data's. */
+  surname: string | null;
   title: string;
   category: string;
   voicing: string | null;
+  /** Semicolon-joined season tags from the config's vocabulary. */
   season: string | null;
+  /** Free text from the draft index — superseded by door and shelf below. */
   location: string | null;
+  /** Cupboard door, "A"–"H". */
+  location_door: string | null;
+  /** Shelf within that door. */
+  location_shelf: number | null;
+  /** 'ok' | 'none' | 'combined' — whether the parcel has a usable spine label. */
+  spine_state: string | null;
   legacy_ref: string | null;
   notes: string | null;
   review_flag: string | null;
@@ -295,7 +313,15 @@ export interface PieceEdit {
   reviewFlag: string | null;
 }
 
-/** Save an edit from the item editor or the review queue. */
+/**
+ * Save an edit from the item editor or the review queue.
+ *
+ * `season` is folded to the controlled vocabulary on the way in, so a box
+ * somebody typed "Whitsun" into stores "pentecost" and the feast-ahead panel
+ * finds it. A word that is not a season at all stores nothing rather than
+ * polluting the column — the screens offer the vocabulary as chips, so getting
+ * here with free text means somebody has gone out of their way.
+ */
 export async function updatePiece(db: D1Database, id: number, edit: PieceEdit): Promise<void> {
   await db
     .prepare(
@@ -311,7 +337,7 @@ export async function updatePiece(db: D1Database, id: number, edit: PieceEdit): 
       edit.title,
       edit.category,
       edit.voicing,
-      edit.season,
+      formatSeasons(edit.season),
       edit.location,
       edit.notes,
       edit.reviewFlag,
@@ -598,7 +624,7 @@ export async function createPiece(
       edit.title,
       edit.category,
       edit.voicing,
-      edit.season,
+      formatSeasons(edit.season),
       edit.location,
       edit.notes,
       edit.reviewFlag,
