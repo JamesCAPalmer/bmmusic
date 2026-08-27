@@ -94,6 +94,17 @@ import { buildAverySheet, buildVolunteerSheets } from "./labelsheet";
 import { copiesRag, ragLabel, ragPill } from "./rag";
 import { childrenFor } from "./choirsize";
 import { pruneBackups, runBackup } from "./backup";
+import { readWorkbook, XlsxError } from "./xlsx";
+import {
+  applyBatch,
+  batchRows,
+  discardBatch,
+  getBatch,
+  listBatches,
+  parseWorkbook,
+  saveBatch,
+  type ProposedPerson,
+} from "./importer";
 import { toCsv } from "./csv";
 import {
   addRate,
@@ -192,6 +203,8 @@ import {
   adminAttendancePage,
   adminDutyEventPage,
   adminExportsPage,
+  adminImportReviewPage,
+  adminImportWorkbookPage,
   adminDutyTodayPage,
   adminPayPage,
   adminPeoplePage,
@@ -1242,6 +1255,149 @@ function schoolYearParam(raw: string): number | null {
 function dateParam(raw: string): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
 }
+
+// ---------------------------------------------------------------------------
+// The workbook importer (Addendum A, A7)
+//
+// Registered above `/admin/people/:id`, like every other literal route under
+// that prefix — see the note where the `:id` handlers are declared.
+// ---------------------------------------------------------------------------
+
+/** Ten megabytes. A register of six hundred people is a fraction of that. */
+const MAX_WORKBOOK_BYTES = 10 * 1024 * 1024;
+
+app.get("/admin/people/import", async (c) => {
+  const params = new URL(c.req.url).searchParams;
+  return c.html(
+    adminImportWorkbookPage(
+      await listBatches(c.env.DB),
+      params.get("done") ?? undefined,
+      params.get("error") ?? undefined
+    )
+  );
+});
+
+app.post("/admin/people/import", async (c) => {
+  const body = await c.req.parseBody();
+  const file = body.workbook;
+  if (!(file instanceof File)) {
+    return c.redirect(
+      `/admin/people/import?error=${encodeURIComponent("Choose a file to read.")}`,
+      302
+    );
+  }
+  if (file.size > MAX_WORKBOOK_BYTES) {
+    return c.redirect(
+      `/admin/people/import?error=${encodeURIComponent(
+        "That file is larger than this screen will take. If the register really is that big, send it to James instead."
+      )}`,
+      302
+    );
+  }
+
+  let parsed;
+  try {
+    const sheets = await readWorkbook(new Uint8Array(await file.arrayBuffer()));
+    parsed = parseWorkbook(sheets, await listPeople(c.env.DB, true));
+  } catch (e) {
+    // The reader's own message when it has one — it is written to be read by a
+    // person — and a plain sentence otherwise. Never a stack trace.
+    const message =
+      e instanceof XlsxError
+        ? e.message
+        : "That file could not be read. If it opens in Excel, tell James and he will look at it.";
+    return c.redirect(`/admin/people/import?error=${encodeURIComponent(message)}`, 302);
+  }
+
+  if (!parsed.rows.length) {
+    const skipped = parsed.sheets
+      .filter((s) => s.skipped)
+      .map((s) => `“${s.name}”: ${s.skipped}`)
+      .join(" ");
+    return c.redirect(
+      `/admin/people/import?error=${encodeURIComponent(
+        `Nothing was found to read in that file. ${skipped}`.trim()
+      )}`,
+      302
+    );
+  }
+
+  const batchId = await saveBatch(c.env.DB, file.name, adminIdentity(c), parsed);
+  // Counts only. The names are in the batch, which is where they belong.
+  await logAdminAction(
+    c,
+    "import.read",
+    "app_setting",
+    batchId,
+    `${parsed.rows.length} ${parsed.rows.length === 1 ? "row" : "rows"} read from ` +
+      `${parsed.sheets.length} ${parsed.sheets.length === 1 ? "sheet" : "sheets"}, nothing added yet`
+  );
+  return c.redirect(`/admin/people/import/${batchId}`, 302);
+});
+
+app.get("/admin/people/import/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const batch = await getBatch(c.env.DB, id);
+  if (!batch || batch.status !== "pending") return c.html(notFoundPage(), 404);
+
+  return c.html(
+    adminImportReviewPage(
+      batch,
+      (await batchRows(c.env.DB, id)).map((row) => ({
+        id: row.id,
+        sheet: row.sheet,
+        rowNumber: row.row_number,
+        issue: row.issue,
+        person: JSON.parse(row.payload) as ProposedPerson,
+      })),
+      new URL(c.req.url).searchParams.get("done") ?? undefined
+    )
+  );
+});
+
+app.post("/admin/people/import/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const batch = await getBatch(c.env.DB, id);
+  if (!batch || batch.status !== "pending") return c.html(notFoundPage(), 404);
+
+  const body = await c.req.parseBody({ all: true });
+
+  if (str(body.action) === "discard") {
+    await discardBatch(c.env.DB, id, adminIdentity(c));
+    await logAdminAction(c, "import.discard", "app_setting", id, "upload thrown away, nothing added");
+    return c.redirect(
+      `/admin/people/import?done=${encodeURIComponent("Thrown away. Nothing was added.")}`,
+      302
+    );
+  }
+
+  const raw = body.accept;
+  const accepted = (Array.isArray(raw) ? raw : raw === undefined ? [] : [raw])
+    .map((value) => numericParam(String(value)))
+    .filter((value): value is number => value !== null);
+
+  const result = await applyBatch(c.env.DB, id, accepted, adminIdentity(c));
+  await logAdminAction(
+    c,
+    "import.apply",
+    "app_setting",
+    id,
+    `${result.added} added, ${result.contacts} parent contacts, ${result.skipped} could not be added`
+  );
+
+  return c.redirect(
+    `/admin/people?done=${encodeURIComponent(
+      `${result.added} added from the workbook` +
+        (result.skipped ? `, ${result.skipped} could not be` : "") +
+        "."
+    )}`,
+    302
+  );
+});
 
 // ---------------------------------------------------------------------------
 // Exports (Addendum A, A6)

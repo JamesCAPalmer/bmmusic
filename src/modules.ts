@@ -132,6 +132,8 @@ const MODULE_PREFIXES: ReadonlyArray<readonly [string, ModuleKey]> = [
   ["/admin/people/register", "attendance"],
   ["/admin/people/rates", "attendance"],
   ["/admin/people/pay", "attendance"],
+  // The workbook importer belongs to the choir list: it makes people.
+  ["/admin/people/import", "people"],
   ["/admin/people/awards", "awards"],
   ["/admin/people/robes", "wardrobe"],
   ["/admin/people/jc", "jc"],

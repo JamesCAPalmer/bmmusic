@@ -24,6 +24,7 @@ import {
 } from "./people";
 import { MODULES, moduleForPath, type ModuleState } from "./modules";
 import { DUTY_ROLES, EVENT_TYPES, type DutyCoverage, type DutyRow } from "./duty";
+import type { BatchRow, ProposedPerson } from "./importer";
 import {
   pounds,
   RATE_ROLES,
@@ -156,6 +157,7 @@ export function adminHomePage(
 
      ${section("The choir", [
        tile("/admin/people", "The choir", "people and the register", betaChip()),
+       tile("/admin/people/import", "Import a workbook", "read the department's register", betaChip()),
        tile("/admin/people/attendance", "Attendance", "who sang, by month and quarter", betaChip()),
        tile("/admin/people/pay", "Pay", "a quarter's figures, and the rates", betaChip()),
        tile("/admin/safeguarding", "Duty rota", "robing, general and dismissal", betaChip()),
@@ -2374,5 +2376,174 @@ export function adminExportsPage(
        .card.contacts { border-left: 4px solid var(--colour-pill-red-ink); }
      </style>`,
     { admin: true, path: "/admin/export" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The workbook importer (Addendum A, A7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Upload a workbook, and what has been uploaded before.
+ *
+ * The screen says what will and will not happen in the plainest terms
+ * available, because the fear this has to answer is "am I about to overwrite
+ * the choir list?" — and the answer is no, nothing at all is written until the
+ * next screen.
+ */
+export function adminImportWorkbookPage(
+  batches: BatchRow[],
+  message?: string,
+  error?: string
+): string {
+  return page(
+    `Import a workbook — ${CHURCH.appName}`,
+    `<h1>Import a workbook ${betaChip()}<span class="sub">Reading the department's register</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+     ${error ? `<div class="notice error"><p style="margin:0">${esc(error)}</p></div>` : ""}
+
+     <div class="notice">
+       <p style="margin:0"><strong>Nothing is added to the choir until you say so.</strong> The file is
+          read, and what it found is shown to you on the next screen, row by row, with anything it could
+          not make sense of marked. You then tick what to keep. Until you do, nothing has changed.</p>
+     </div>
+
+     <div class="card">
+       <h2>The file</h2>
+       <form method="POST" action="/admin/people/import" enctype="multipart/form-data">
+         <div class="field">
+           <label for="workbook">The workbook</label>
+           <input type="file" id="workbook" name="workbook" accept=".xlsx" required>
+           <span class="hint">An Excel .xlsx file. A tab named after a choir — "Girls", "Boys",
+             "Consort", "JC" — is read as that group; the reader looks for a column headed Name, and
+             then for School year, Joined, Surplice, Dean's, Archbishop's, Gold, and anything with
+             "phone" in the heading.</span>
+         </div>
+         <button type="submit">Read it</button>
+       </form>
+       <p class="muted small"><strong>This is an early version.</strong> It is built around the shape
+          the register was described as having, not around the real file — expect to look carefully at
+          what it makes of the first one, and to tell ${esc(CHURCH.contact.maintainer.shortName)} what
+          it got wrong.</p>
+     </div>
+
+     ${
+       batches.length
+         ? `<div class="card">
+              <h2>Uploads so far</h2>
+              <div class="scroll"><table>
+                <tr><th>File</th><th>When</th><th>Who</th><th>State</th><th></th></tr>
+                ${batches
+                  .map(
+                    (b) => `<tr>
+                      <td>${esc(b.filename ?? "—")}</td>
+                      <td>${esc(prettyDate(b.uploaded_at.slice(0, 10)))}</td>
+                      <td class="small">${esc(b.uploaded_by ?? "—")}</td>
+                      <td>${
+                        b.status === "pending"
+                          ? '<span class="pill amber">waiting for you</span>'
+                          : b.status === "applied"
+                            ? '<span class="pill green">added</span>'
+                            : '<span class="pill grey">discarded</span>'
+                      }</td>
+                      <td>${
+                        b.status === "pending"
+                          ? `<a class="btn secondary" href="/admin/people/import/${b.id}">Look at it</a>`
+                          : ""
+                      }</td>
+                    </tr>`
+                  )
+                  .join("")}
+              </table></div>
+            </div>`
+         : ""
+     }
+
+     <p><a class="btn secondary" href="/admin/people">Back to the choir</a></p>`,
+    { admin: true, path: "/admin/people" }
+  );
+}
+
+/**
+ * What the workbook was found to contain, before anything is written.
+ *
+ * Rows with a problem come first and are ticked off by default, because the
+ * ones needing a decision are the only ones worth anybody's attention and a
+ * page of four hundred clean rows buries them. Everything clean is ticked on.
+ */
+export function adminImportReviewPage(
+  batch: BatchRow,
+  rows: Array<{ id: number; sheet: string | null; rowNumber: number | null; issue: string | null; person: ProposedPerson }>,
+  message?: string
+): string {
+  const withIssues = rows.filter((r) => r.issue);
+  const clean = rows.filter((r) => !r.issue);
+
+  const row = (r: (typeof rows)[number]) => `<tr class="${r.issue ? "flagged" : ""}">
+    <td><input type="checkbox" name="accept" value="${r.id}" ${r.issue ? "" : "checked"}></td>
+    <td>${esc(r.person.displayName)}</td>
+    <td>${esc(CHOIRS.find((c) => c.value === r.person.choir)?.label ?? "—")}</td>
+    <td>${esc(schoolYearLabel(r.person.schoolYear))}</td>
+    <td class="small">${esc(r.person.joinedOn ?? "")}</td>
+    <td class="small">${r.person.contacts.length ? `${r.person.contacts.length} contact${r.person.contacts.length === 1 ? "" : "s"}` : ""}</td>
+    <td class="small muted">${esc(r.sheet ?? "")}${r.rowNumber ? ` row ${r.rowNumber}` : ""}</td>
+    <td class="small">${r.issue ? `<span class="pill amber">${esc(r.issue)}</span>` : ""}</td>
+  </tr>`;
+
+  const table = (list: typeof rows) => `<div class="scroll"><table>
+    <tr><th></th><th>Name</th><th>Choir</th><th>School year</th><th>Joined</th><th>Contacts</th>
+        <th>From</th><th>Problem</th></tr>
+    ${list.map(row).join("")}
+  </table></div>`;
+
+  return page(
+    `${batch.filename ?? "Workbook"} — ${CHURCH.appName}`,
+    `<h1>What the workbook says ${betaChip()}
+       <span class="sub">${rows.length} ${rows.length === 1 ? "row" : "rows"} read from ${esc(
+         batch.filename ?? "the file"
+       )}</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     <div class="notice">
+       <p style="margin:0"><strong>Nothing has been added yet.</strong> Tick the rows to keep and press
+          the button at the bottom. The numbers in the "Contacts" column are added alongside the person
+          they belong to. Anything left unticked is not added, and <strong>this upload is finished
+          either way</strong> — if you want the rest, put the file right and read it again.</p>
+     </div>
+
+     <form method="POST" action="/admin/people/import/${batch.id}">
+       ${
+         withIssues.length
+           ? `<div class="card">
+                <h2>${withIssues.length} ${withIssues.length === 1 ? "row needs" : "rows need"} a look</h2>
+                <p class="muted">These are unticked. Tick one to add it as it stands — you can put the
+                   details right afterwards on the person's own page.</p>
+                ${table(withIssues)}
+              </div>`
+           : ""
+       }
+
+       ${
+         clean.length
+           ? `<div class="card">
+                <h2>${clean.length} ${clean.length === 1 ? "row" : "rows"} read cleanly</h2>
+                ${table(clean)}
+              </div>`
+           : `<p class="muted">Nothing in the file read cleanly.</p>`
+       }
+
+       <div class="card">
+         <button type="submit" name="action" value="apply" class="confirm">Add the ticked rows</button>
+         <button type="submit" name="action" value="discard" class="secondary">Throw this upload away</button>
+         <p class="muted small">Throwing it away deletes what was read, names and all. The activity log
+            keeps a line saying you did it, and nothing else.</p>
+       </div>
+     </form>
+
+     <style>
+       tr.flagged td { background: var(--colour-pill-amber-bg); }
+       td .pill { white-space: normal; }
+     </style>`,
+    { admin: true, path: "/admin/people" }
   );
 }

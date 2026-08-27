@@ -62,7 +62,26 @@ export const BACKUP_TABLES = [
   "booklet",
   "feedback",
   "scan_submission",
+  "import_batch",
 ] as const;
+
+/**
+ * Tables deliberately left out, and why.
+ *
+ * A table that is simply forgotten and a table that is deliberately excluded
+ * look identical in a backup — which is the whole reason this list exists
+ * rather than the omission being silent. A test requires every table in the
+ * schema to be in one list or the other, so adding a table without deciding is
+ * not possible.
+ */
+export const EXCLUDED_TABLES: Readonly<Record<string, string>> = {
+  import_row:
+    "A pending upload's parsed rows — children's names, held only until somebody " +
+    "accepts or discards the batch. Copying them nightly to R2 would put a second " +
+    "copy of a child's record in a second place for no purpose: if a pending batch " +
+    "is lost, the workbook is uploaded again. `import_batch`, which is the record " +
+    "that an upload happened and what was decided, is backed up.",
+};
 
 export interface TableDump {
   table: string;

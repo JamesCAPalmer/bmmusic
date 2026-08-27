@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   BACKUP_TABLES,
+  EXCLUDED_TABLES,
   RETENTION_DAYS,
   addDays,
   dateOfBackupKey,
@@ -51,14 +52,30 @@ function tablesInMigrations(): string[] {
 }
 
 describe("what gets backed up", () => {
-  // The failure this catches: a migration adds a table, nobody adds it here,
-  // and the job keeps succeeding every night without it.
-  it("covers every table the migrations create", () => {
+  /**
+   * The failure this catches: a migration adds a table, nobody adds it here,
+   * and the job keeps succeeding every night without it.
+   *
+   * A table left out on purpose looks exactly the same as one forgotten, so
+   * every table has to be in one list or the other. Deciding is compulsory;
+   * which way it is decided is not.
+   */
+  it("has decided about every table the migrations create", () => {
     for (const table of tablesInMigrations()) {
+      const backedUp = (BACKUP_TABLES as readonly string[]).includes(table);
+      const excluded = table in EXCLUDED_TABLES;
       expect(
-        (BACKUP_TABLES as readonly string[]).includes(table),
-        `${table} exists in the schema and is not in BACKUP_TABLES — it is not being backed up`
+        backedUp || excluded,
+        `${table} exists in the schema and is in neither BACKUP_TABLES nor EXCLUDED_TABLES — ` +
+          `it is not being backed up and nothing says that was on purpose`
       ).toBe(true);
+      expect(backedUp && excluded, `${table} is both backed up and excluded`).toBe(false);
+    }
+  });
+
+  it("gives a reason for every exclusion", () => {
+    for (const [table, reason] of Object.entries(EXCLUDED_TABLES)) {
+      expect(reason.length, `${table} is excluded with no reason worth the name`).toBeGreaterThan(40);
     }
   });
 
@@ -66,6 +83,9 @@ describe("what gets backed up", () => {
     const real = tablesInMigrations();
     for (const table of BACKUP_TABLES) {
       expect(real, `BACKUP_TABLES names ${table}, which no migration creates`).toContain(table);
+    }
+    for (const table of Object.keys(EXCLUDED_TABLES)) {
+      expect(real, `EXCLUDED_TABLES names ${table}, which no migration creates`).toContain(table);
     }
   });
 
