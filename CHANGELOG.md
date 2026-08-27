@@ -53,6 +53,50 @@ that SQLite would accept each `ALTER TABLE ADD COLUMN` (no UNIQUE, no
 PRIMARY KEY, a default behind any NOT NULL), which otherwise fails at
 migrate time against the live database rather than in CI.
 
+### Milestone 4 — service feed and matcher
+
+Taken before milestones 2 and 3 because both depend on services existing:
+the choir home screen, the copies RAG and the sung-at history are all
+downstream of this.
+
+**The feed contract turned out to be readable.** The brief assumed it was
+not reachable from this session, so it would have to be guessed at. It is
+not: the live feed answers, and `docs/FEED.md` now records what it
+actually serves, including that it publishes a `sourceHash` — which is
+exactly the hash-gate the brief asked for, already computed upstream.
+
+**`src/feed.ts`** reads a month into services and music lines. Pure, and
+treats the feed as untrusted input: it is written by a language model
+reading a Word document, and currently carries "Wiliam Byrd", "Tomas
+luis da Vittoria" and a choir called "RCSM". A service it cannot read is
+skipped with a reason rather than costing the other thirty-nine.
+
+**`src/matcher.ts`** decides what a line means. The slot drives the
+reading — "Bernard Rose" is a composer in the responses column and a
+title in the anthem column, and the feed has already told us which
+column it came from. Also pure, which is what lets it be tested against
+real lines rather than tidied-up ones.
+
+**`src/services.ts`** is the D1 half: upsert, ingest, confirm, reject.
+A confirmed match survives a re-fetch — lines are compared on slot and
+raw text rather than position, so somebody fixing a typo in the Word
+file cannot undo James confirming forty lines.
+
+**The hourly cron** (`[triggers]` in `wrangler.toml`) reads this month
+and next. An unchanged month writes nothing at all.
+
+Measured against four real months of the feed: **48% matched
+automatically**, the rest one tap each. That number is deliberately not
+higher — an earlier scoring rule reached 61% *and* pointed a Stanford
+anthem at the wrong Stanford parcel and a Handel introit at the wrong
+Handel one, both because shared words were scored against the shorter of
+the two titles rather than against the line's own. Both are regression
+tests now. Every confirmation is written to `match_alias` and reused
+outright, so the rate climbs by itself.
+
+`src/audit.ts` arrives here rather than in milestone 3, because the feed
+routes are the first admin mutations that need it.
+
 ### Milestone 0 — CI green against index v2
 
 Index v2 landed on `main` in 79b3930 with 410 rows where v1 had 324, and
