@@ -23,6 +23,7 @@ import {
   type RegisterRow,
 } from "./people";
 import { MODULES, moduleForPath, type ModuleState } from "./modules";
+import { DUTY_ROLES, EVENT_TYPES, type DutyCoverage, type DutyRow } from "./duty";
 import {
   permits,
   requiredRolesFor,
@@ -145,7 +146,10 @@ export function adminHomePage(
        tile("/admin/loans", "Out on loan", "who has what, and since when"),
      ])}
 
-     ${section("The choir", [tile("/admin/people", "The choir", "people and the register", betaChip())])}
+     ${section("The choir", [
+       tile("/admin/people", "The choir", "people and the register", betaChip()),
+       tile("/admin/safeguarding", "Duty rota", "robing, general and dismissal", betaChip()),
+     ])}
 
      ${section("This app", [
        tile("/admin/settings", "Settings", "choir password, choir sizes, activity"),
@@ -1702,4 +1706,355 @@ function adminContactsCard(
       </form>
     </details>
   </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// The safeguarding rota (Addendum A, A5)
+// ---------------------------------------------------------------------------
+
+export interface DutyEvent {
+  service: {
+    id: number;
+    service_date: string;
+    service_time: string | null;
+    title: string;
+    designation: string | null;
+    event_type: string | null;
+  };
+  duties: DutyRow[];
+  coverage: DutyCoverage;
+  /** Expected under-16 headcount, or null when nobody knows. */
+  childrenExpected: number | null;
+}
+
+/**
+ * What is coming, and whether anybody is on it.
+ *
+ * Red first is deliberate. This is read on a Wednesday evening by somebody
+ * deciding whether they have to ring round, and the events that need ringing
+ * round about are the only ones that matter — so they come first, whatever
+ * order the calendar puts them in.
+ */
+export function adminSafeguardingPage(
+  events: DutyEvent[],
+  childrenPerAdult: number | null,
+  message?: string
+): string {
+  const rank = { red: 0, amber: 1, green: 2 } as const;
+  const sorted = [...events].sort(
+    (a, b) =>
+      rank[a.coverage.rag] - rank[b.coverage.rag] ||
+      a.service.service_date.localeCompare(b.service.service_date)
+  );
+
+  const needing = events.filter((e) => e.coverage.rag !== "green").length;
+
+  const card = (event: DutyEvent) => {
+    const primary = event.duties.filter((d) => !d.is_backup);
+    const backups = event.duties.filter((d) => d.is_backup);
+
+    const forRole = (role: string, list: DutyRow[]) =>
+      list
+        .filter((d) => d.role === role)
+        .map((d) => esc(d.display_name))
+        .join(", ");
+
+    return `<div class="card duty-card ${esc(event.coverage.rag)}">
+      <h2>
+        <a href="/admin/safeguarding/${event.service.id}">${esc(event.service.title)}</a>
+        <span class="pill ${esc(event.coverage.rag)}">${
+          event.coverage.rag === "green" ? "Covered" : event.coverage.rag === "amber" ? "Check" : "Not covered"
+        }</span>
+      </h2>
+      <p class="muted small">${esc(prettyDate(event.service.service_date))}${
+        event.service.service_time ? ` at ${esc(event.service.service_time)}` : ""
+      }${event.service.designation ? ` · ${esc(event.service.designation)}` : ""}${
+        event.childrenExpected !== null ? ` · about ${event.childrenExpected} children` : ""
+      }</p>
+
+      <div class="scroll"><table>
+        ${DUTY_ROLES.map((role) => {
+          const who = forRole(role.value, primary);
+          const backup = forRole(role.value, backups);
+          return `<tr>
+            <td><strong>${esc(role.label)}</strong><div class="small muted">${esc(role.blurb)}</div></td>
+            <td>${who || '<span class="muted">nobody</span>'}${
+              backup ? `<div class="small muted">backup: ${backup}</div>` : ""
+            }</td>
+          </tr>`;
+        }).join("")}
+      </table></div>
+
+      ${
+        event.coverage.issues.length
+          ? `<ul class="issues">${event.coverage.issues
+              .map((i) => `<li class="${esc(i.severity)}">${esc(i.message)}</li>`)
+              .join("")}</ul>`
+          : ""
+      }
+    </div>`;
+  };
+
+  return page(
+    `Duty rota — ${CHURCH.appName}`,
+    `<h1>Duty rota ${betaChip()}<span class="sub">${
+      needing ? `${needing} of the next ${events.length} need attention` : "everything coming up is covered"
+    }</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     <p><a class="btn" href="/admin/safeguarding/today">Today's duty</a></p>
+
+     ${sorted.length ? sorted.map(card).join("") : `<p class="muted">Nothing coming up.</p>`}
+
+     <div class="card">
+       <h2>Add an event</h2>
+       <p class="muted">Practices, weddings, concerts and tours are not on the service app's music list
+          and never will be — it publishes what is being sung, not the department's diary. Put them in
+          here and they carry a rota and a register like anything else.</p>
+       <form method="POST" action="/admin/safeguarding/events">
+         <div class="row">
+           <div class="field">
+             <label for="title">What it is</label>
+             <input type="text" id="title" name="title" required placeholder="Boys practice">
+           </div>
+           <div class="field">
+             <label for="date">Date</label>
+             <input type="date" id="date" name="date" required>
+           </div>
+           <div class="field">
+             <label for="time">Time</label>
+             <input type="time" id="time" name="time">
+           </div>
+           <div class="field">
+             <label for="event_type">Kind</label>
+             <select id="event_type" name="event_type">
+               ${EVENT_TYPES.map(
+                 (t) => `<option value="${esc(t.value)}"${t.value === "other" ? " selected" : ""}>${esc(t.label)}</option>`
+               ).join("")}
+             </select>
+           </div>
+           <div class="field">
+             <label for="designation">Who is singing</label>
+             <input type="text" id="designation" name="designation" placeholder="Boys">
+             <span class="hint">Spelled the way the music list spells it — that is what decides whose
+               names are on the register.</span>
+           </div>
+         </div>
+         <button type="submit">Add the event</button>
+       </form>
+     </div>
+
+     <div class="card">
+       <h2>How many children to an adult</h2>
+       <form method="POST" action="/admin/safeguarding/ratio">
+         <div class="field" style="max-width:10rem">
+           <label for="children_per_adult">Children per adult on duty</label>
+           <input type="number" id="children_per_adult" name="children_per_adult" min="1" max="50"
+                  value="${childrenPerAdult ?? ""}" placeholder="not set">
+         </div>
+         <p class="muted small">Left blank, the ratio is not checked at all. This app does not ship a
+            figure: what is acceptable is the Minster's safeguarding policy to state, not something
+            software should decide. Set it and every event above is checked against it.</p>
+         <button type="submit">Save</button>
+       </form>
+     </div>
+
+     <style>
+       .duty-card.red { border-left: 4px solid var(--colour-pill-red-ink); }
+       .duty-card.amber { border-left: 4px solid var(--colour-pill-amber-ink); }
+       .duty-card h2 { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+       .issues { margin: 0.6rem 0 0; padding-left: 1.1rem; font-size: 0.9rem; }
+       .issues li.red { color: var(--colour-pill-red-ink); }
+       .issues li.amber { color: var(--colour-pill-amber-ink); }
+     </style>`,
+    { admin: true, path: "/admin/safeguarding" }
+  );
+}
+
+/** One event: who is on, who could be, and what is still missing. */
+export function adminDutyEventPage(
+  event: DutyEvent,
+  candidates: PersonRow[],
+  message?: string
+): string {
+  const options = candidates
+    .map((p) => `<option value="${p.id}">${esc(p.display_name)}</option>`)
+    .join("");
+
+  const assigned = (role: string, backup: boolean) =>
+    event.duties
+      .filter((d) => d.role === role && Boolean(d.is_backup) === backup)
+      .map(
+        (d) => `<li>
+          ${esc(d.display_name)}
+          ${
+            d.dbs_valid_until === null
+              ? ' <span class="pill grey">no DBS date</span>'
+              : ""
+          }
+          <form method="POST" action="/admin/safeguarding/${event.service.id}" style="display:inline">
+            <input type="hidden" name="action" value="remove">
+            <input type="hidden" name="duty_id" value="${d.id}">
+            <button type="submit" class="secondary small-btn">Take off</button>
+          </form>
+        </li>`
+      )
+      .join("");
+
+  return page(
+    `${event.service.title} — duty — ${CHURCH.appName}`,
+    `<h1>${esc(event.service.title)} ${betaChip()}
+       <span class="sub">${esc(prettyDate(event.service.service_date))}${
+         event.service.service_time ? ` at ${esc(event.service.service_time)}` : ""
+       }</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     ${
+       event.coverage.issues.length
+         ? `<div class="notice ${event.coverage.rag === "red" ? "error" : ""}">
+              <ul class="issues" style="margin:0">${event.coverage.issues
+                .map((i) => `<li class="${esc(i.severity)}">${esc(i.message)}</li>`)
+                .join("")}</ul>
+            </div>`
+         : `<div class="notice ok"><p style="margin:0">Covered.</p></div>`
+     }
+
+     ${DUTY_ROLES.map(
+       (role) => `<div class="card">
+         <h2>${esc(role.label)}</h2>
+         <p class="muted small">${esc(role.blurb)}</p>
+         <ul class="duty-list">${assigned(role.value, false) || '<li class="muted">Nobody on duty.</li>'}</ul>
+         ${
+           assigned(role.value, true)
+             ? `<p class="small muted" style="margin-bottom:0.2rem">Backup</p>
+                <ul class="duty-list">${assigned(role.value, true)}</ul>`
+             : ""
+         }
+         <form method="POST" action="/admin/safeguarding/${event.service.id}">
+           <input type="hidden" name="action" value="assign">
+           <input type="hidden" name="role" value="${esc(role.value)}">
+           <div class="row">
+             <div class="field">
+               <label for="person-${esc(role.value)}">Put somebody on</label>
+               <select id="person-${esc(role.value)}" name="person_id">${options}</select>
+             </div>
+             <div class="field">
+               <label for="backup-${esc(role.value)}">As</label>
+               <select id="backup-${esc(role.value)}" name="is_backup">
+                 <option value="0">On duty</option>
+                 <option value="1">Backup</option>
+               </select>
+             </div>
+           </div>
+           <button type="submit" ${candidates.length ? "" : "disabled"}>Add</button>
+           ${
+             candidates.length
+               ? ""
+               : `<span class="hint">Nobody on the choir list is recorded as an adult yet — anybody
+                    with no school year counts as one.</span>`
+           }
+         </form>
+       </div>`
+     ).join("")}
+
+     <p><a class="btn secondary" href="/admin/safeguarding">Back to the rota</a></p>
+
+     <style>
+       .duty-list { list-style: none; margin: 0 0 0.6rem; padding: 0; }
+       .duty-list li { padding: 0.25rem 0; }
+       .small-btn { font-size: 0.8rem; padding: 0.15rem 0.5rem; }
+     </style>`,
+    { admin: true, path: "/admin/safeguarding" }
+  );
+}
+
+/**
+ * Today, on a phone, in a doorway.
+ *
+ * One question at the top — what am I on? — then the way straight to the
+ * register, then the tick. Everything else is a link. This is the screen used
+ * one-handed at twenty past eight with the other hand holding a door open, and
+ * the only thing it must do well is be readable at arm's length.
+ */
+export function adminDutyTodayPage(
+  events: DutyEvent[],
+  me: string,
+  registerable: boolean,
+  message?: string
+): string {
+  const mine = (event: DutyEvent) =>
+    event.duties.filter((d) => d.display_name.toLowerCase() === me.toLowerCase());
+
+  const card = (event: DutyEvent) => {
+    const dismissal = event.duties.filter((d) => d.role === "dismissal" && !d.is_backup);
+    const collected = dismissal.find((d) => d.all_collected_at !== null);
+
+    return `<div class="card">
+      <h2>${esc(event.service.title)}</h2>
+      <p class="muted small">${
+        event.service.service_time ? `${esc(event.service.service_time)} · ` : ""
+      }${esc(event.service.designation ?? "")}</p>
+
+      <div class="scroll"><table>
+        ${DUTY_ROLES.map((role) => {
+          const who = event.duties
+            .filter((d) => d.role === role.value && !d.is_backup)
+            .map((d) => esc(d.display_name))
+            .join(", ");
+          return `<tr><td><strong>${esc(role.label)}</strong></td>
+                      <td>${who || '<span class="muted">nobody</span>'}</td></tr>`;
+        }).join("")}
+      </table></div>
+
+      ${
+        registerable
+          ? `<p><a class="btn" href="/admin/people/register/${event.service.id}">Take the register</a></p>`
+          : ""
+      }
+
+      ${
+        collected
+          ? `<div class="notice ok">
+               <p style="margin:0"><strong>Every child under eighteen was collected.</strong>
+                  Ticked by ${esc(collected.all_collected_by ?? "somebody on duty")} at
+                  ${esc((collected.all_collected_at ?? "").slice(11, 16))}.</p>
+             </div>`
+          : dismissal.length
+            ? `<form method="POST" action="/admin/safeguarding/collected">
+                 <input type="hidden" name="duty_id" value="${dismissal[0]!.id}">
+                 <p class="muted small">Tick this once the last child has gone. It is recorded against
+                    your name and the time, and it cannot be un-ticked.</p>
+                 <button type="submit" class="big">Every child under 18 has been collected</button>
+               </form>`
+            : `<p class="muted small">Nobody is on dismissal, so there is nothing to tick.</p>`
+      }
+    </div>`;
+  };
+
+  return page(
+    `Today's duty — ${CHURCH.appName}`,
+    `<h1>Today ${betaChip()}<span class="sub">${
+      events.length ? `${events.length} ${events.length === 1 ? "event" : "events"}` : "nothing on"
+    }</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     ${
+       events.some((e) => mine(e).length)
+         ? `<div class="notice">
+              <p style="margin:0"><strong>You are on duty.</strong> ${events
+                .flatMap((e) => mine(e).map((d) => esc(`${d.role} at ${e.service.title}`)))
+                .join("; ")}.</p>
+            </div>`
+         : ""
+     }
+
+     ${events.length ? events.map(card).join("") : `<p class="muted">Nothing on today.</p>`}
+
+     <p><a class="btn secondary" href="/admin/safeguarding">The whole rota</a></p>
+
+     <style>
+       button.big { font-size: 1.05rem; padding: 0.75rem 1.1rem; width: 100%; }
+     </style>`,
+    { admin: true, path: "/admin/safeguarding" }
+  );
 }

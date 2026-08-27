@@ -65,6 +65,7 @@ import {
   unmatchedLines,
   upcomingServices,
   type IngestSummary,
+  type ServiceRow,
 } from "./services";
 import {
   allFeedback,
@@ -91,6 +92,7 @@ import { findDescant } from "./descants";
 import { serveAsset } from "./assets";
 import { buildAverySheet, buildVolunteerSheets } from "./labelsheet";
 import { copiesRag, ragLabel, ragPill } from "./rag";
+import { childrenFor } from "./choirsize";
 import {
   addContact,
   addPerson,
@@ -113,6 +115,20 @@ import {
   updatePerson,
 } from "./people";
 import { isModuleKey, moduleForPath, readModuleState, setModule } from "./modules";
+import {
+  assignDuty,
+  createManualEvent,
+  dutiesFor,
+  dutiesForServices,
+  dutyCandidates,
+  dutyCoverage,
+  DUTY_ROLES,
+  isDutyRole,
+  isEventType,
+  markAllCollected,
+  removeDuty,
+  type DutyRow,
+} from "./duty";
 import {
   countMusicStaff,
   grantRole,
@@ -152,8 +168,12 @@ import {
   adminLabelsPage,
   adminModulesPage,
   adminNoRolePage,
+  adminDutyEventPage,
+  adminDutyTodayPage,
   adminPeoplePage,
   adminPersonPage,
+  adminSafeguardingPage,
+  type DutyEvent,
   adminRegisterPage,
   adminRolesPage,
   adminWrongRolePage,
@@ -378,15 +398,43 @@ app.get("/service/:id", async (c) => {
   const service = await getService(c.env.DB, id);
   if (!service) return c.html(notFoundPage(), 404);
 
-  const [music, typicalSingers, booklet] = await Promise.all([
+  const [music, typicalSingers, booklet, duty] = await Promise.all([
     serviceMusic(c.env.DB, id),
     typicalSingersFor(c.env.DB, service.designation),
     latestBooklet(c.env.DB, id),
+    choirSideDuty(c.env.DB, id),
   ]);
 
   const message = new URL(c.req.url).searchParams.get("wc") ?? undefined;
-  return c.html(servicePage(service, music, typicalSingers, booklet, message || undefined));
+  return c.html(servicePage(service, music, typicalSingers, booklet, duty, message || undefined));
 });
+
+/**
+ * Who is on duty, for the choir side.
+ *
+ * A7 allows exactly one piece of person data out here — a duty-holder's name on
+ * a service page — and this is the only function that produces it. Names, by
+ * role, primary cover only: a backup is an arrangement between adults and not
+ * something a chorister's parent needs. Nothing else about the person leaves
+ * this function, and nothing at all leaves it while the safeguarding module is
+ * off, which is how it ships.
+ */
+async function choirSideDuty(
+  db: D1Database,
+  serviceId: number
+): Promise<Array<{ role: string; label: string; names: string[] }>> {
+  const modules = await readModuleState(db);
+  if (!modules.safeguarding) return [];
+
+  const duties = await dutiesFor(db, serviceId);
+  return DUTY_ROLES.map((role) => ({
+    role: role.value,
+    label: role.label,
+    names: duties
+      .filter((d) => d.role === role.value && !d.is_backup)
+      .map((d) => d.display_name),
+  }));
+}
 
 app.get("/piece/:id", async (c) => {
   const id = numericParam(c.req.param("id"));
@@ -1261,6 +1309,233 @@ app.post("/admin/people/:id", async (c) => {
   // what the values were.
   await logAdminAction(c, "person.edit", "person", id, "details changed");
   return c.redirect(`/admin/people/${id}?done=${encodeURIComponent("Saved.")}`, 302);
+});
+
+// ---------------------------------------------------------------------------
+// The safeguarding rota (Addendum A, A5)
+// ---------------------------------------------------------------------------
+
+/** `app_setting` key for the ratio. Unset means the check is not run at all. */
+const RATIO_KEY = "safeguarding.children_per_adult";
+
+async function readChildrenPerAdult(db: D1Database): Promise<number | null> {
+  const row = await db
+    .prepare(`SELECT value FROM app_setting WHERE key = ?`)
+    .bind(RATIO_KEY)
+    .first<{ value: string | null }>();
+  const n = Number(row?.value ?? "");
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/** Assemble one event with its duties, its coverage and its headcount. */
+function toDutyEvent(
+  service: ServiceRow & { event_type?: string | null },
+  duties: DutyRow[],
+  childrenPerAdult: number | null,
+  todayIso: string
+): DutyEvent {
+  const childrenExpected = childrenFor(service.designation);
+  return {
+    service: {
+      id: service.id,
+      service_date: service.service_date,
+      service_time: service.service_time,
+      title: service.title,
+      designation: service.designation,
+      event_type: service.event_type ?? null,
+    },
+    duties,
+    childrenExpected,
+    coverage: dutyCoverage({
+      duties,
+      designation: service.designation,
+      childrenExpected,
+      childrenPerAdult,
+      today: todayIso,
+    }),
+  };
+}
+
+app.get("/admin/safeguarding", async (c) => {
+  const now = today();
+  const [services, childrenPerAdult] = await Promise.all([
+    upcomingServices(c.env.DB, now, 30),
+    readChildrenPerAdult(c.env.DB),
+  ]);
+  const duties = await dutiesForServices(c.env.DB, services.map((s) => s.id));
+
+  return c.html(
+    adminSafeguardingPage(
+      services.map((s) => toDutyEvent(s, duties.get(s.id) ?? [], childrenPerAdult, now)),
+      childrenPerAdult,
+      new URL(c.req.url).searchParams.get("done") ?? undefined
+    )
+  );
+});
+
+/**
+ * Today, on a phone, in a doorway.
+ *
+ * Registered before `/admin/safeguarding/:id` on purpose: Hono matches in
+ * declaration order, and "today" would otherwise be read as a service id.
+ */
+app.get("/admin/safeguarding/today", async (c) => {
+  const now = today();
+  const [services, childrenPerAdult] = await Promise.all([
+    todaysServices(c.env.DB, now),
+    readChildrenPerAdult(c.env.DB),
+  ]);
+  const duties = await dutiesForServices(c.env.DB, services.map((s) => s.id));
+
+  return c.html(
+    adminDutyTodayPage(
+      services.map((s) => toDutyEvent(s, duties.get(s.id) ?? [], childrenPerAdult, now)),
+      adminIdentity(c),
+      // The register is a module of its own and may well be off while the rota
+      // is on. No point offering a door that answers 404.
+      c.get("modules").attendance,
+      new URL(c.req.url).searchParams.get("done") ?? undefined
+    )
+  );
+});
+
+/** Everything on one day, manual events included. */
+async function todaysServices(db: D1Database, date: string): Promise<ServiceRow[]> {
+  const rows = await db
+    .prepare(
+      `SELECT * FROM service WHERE service_date = ?
+        ORDER BY COALESCE(service_time, '00:00')`
+    )
+    .bind(date)
+    .all<ServiceRow>();
+  return rows.results ?? [];
+}
+
+app.post("/admin/safeguarding/events", async (c) => {
+  const body = await c.req.parseBody();
+  const title = str(body.title);
+  const date = str(body.date);
+  const eventType = str(body.event_type);
+
+  if (!title) return c.html(errorPage("The event needs a name."), 400);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return c.html(errorPage("The event needs a date."), 400);
+  if (!isEventType(eventType)) return c.html(errorPage("That is not a kind of event."), 400);
+
+  const id = await createManualEvent(c.env.DB, {
+    date,
+    time: /^\d{2}:\d{2}$/.test(str(body.time)) ? str(body.time) : null,
+    title,
+    designation: str(body.designation) || null,
+    eventType,
+  });
+
+  // An event is not personal data — a practice on a Thursday is a fact about
+  // the diary — so it is named in full here.
+  await logAdminAction(c, "event.add", "service", id, `${eventType} on ${date}: ${title}`);
+  return c.redirect(`/admin/safeguarding/${id}`, 302);
+});
+
+app.post("/admin/safeguarding/ratio", async (c) => {
+  const body = await c.req.parseBody();
+  const raw = str(body.children_per_adult);
+  const n = Number(raw);
+  const value = raw && Number.isInteger(n) && n > 0 && n <= 50 ? String(n) : null;
+
+  if (value === null) {
+    await c.env.DB.prepare(`DELETE FROM app_setting WHERE key = ?`).bind(RATIO_KEY).run();
+  } else {
+    await c.env.DB
+      .prepare(
+        `INSERT INTO app_setting (key, value, updated_by, updated_at)
+         VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value,
+           updated_by = excluded.updated_by, updated_at = excluded.updated_at`
+      )
+      .bind(RATIO_KEY, value, adminIdentity(c))
+      .run();
+  }
+
+  await logAdminAction(
+    c,
+    "safeguarding.ratio",
+    "app_setting",
+    null,
+    value === null ? "ratio check switched off" : `${value} children per adult`
+  );
+  return c.redirect(
+    `/admin/safeguarding?done=${encodeURIComponent(value === null ? "The ratio check is off." : "Saved.")}`,
+    302
+  );
+});
+
+/**
+ * The Thursday tick.
+ *
+ * Its own route rather than a field on the duty form, because it is the one
+ * action on this screen that records a safeguarding fact about children rather
+ * than an arrangement about adults. `markAllCollected` will not overwrite an
+ * existing tick: "they had all gone, and then they had not" is not a state the
+ * record should be able to hold.
+ */
+app.post("/admin/safeguarding/collected", async (c) => {
+  const body = await c.req.parseBody();
+  const dutyId = numericParam(str(body.duty_id));
+  if (dutyId === null) return c.html(notFoundPage(), 404);
+
+  await markAllCollected(c.env.DB, dutyId, adminIdentity(c));
+  await logAdminAction(c, "duty.collected", "duty", dutyId, "every child under 18 collected");
+  return c.redirect(
+    `/admin/safeguarding/today?done=${encodeURIComponent("Recorded, with your name and the time.")}`,
+    302
+  );
+});
+
+app.get("/admin/safeguarding/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const service = await getService(c.env.DB, id);
+  if (!service) return c.html(notFoundPage(), 404);
+
+  const now = today();
+  const [duties, childrenPerAdult, people] = await Promise.all([
+    dutiesFor(c.env.DB, id),
+    readChildrenPerAdult(c.env.DB),
+    listPeople(c.env.DB),
+  ]);
+
+  return c.html(
+    adminDutyEventPage(
+      toDutyEvent(service, duties, childrenPerAdult, now),
+      dutyCandidates(people),
+      new URL(c.req.url).searchParams.get("done") ?? undefined
+    )
+  );
+});
+
+app.post("/admin/safeguarding/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const body = await c.req.parseBody();
+
+  if (str(body.action) === "remove") {
+    const dutyId = numericParam(str(body.duty_id));
+    if (dutyId === null) return c.html(notFoundPage(), 404);
+    await removeDuty(c.env.DB, dutyId);
+    // Adults, not children — but still a name, so the log records the event
+    // and not who was taken off it.
+    await logAdminAction(c, "duty.remove", "service", id, "somebody taken off a duty");
+    return c.redirect(`/admin/safeguarding/${id}?done=${encodeURIComponent("Taken off.")}`, 302);
+  }
+
+  const personId = numericParam(str(body.person_id));
+  const role = str(body.role);
+  if (personId === null || !isDutyRole(role)) return c.html(errorPage("Choose somebody and a duty."), 400);
+
+  await assignDuty(c.env.DB, id, personId, role, str(body.is_backup) === "1");
+  await logAdminAction(c, "duty.assign", "service", id, `somebody put on ${role}`);
+  return c.redirect(`/admin/safeguarding/${id}?done=${encodeURIComponent("Added.")}`, 302);
 });
 
 /**
