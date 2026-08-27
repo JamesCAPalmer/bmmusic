@@ -15,6 +15,16 @@ import { betaChip, categoryLabel, esc, flagPills, page, prettyDate } from "./ui"
 import type { CatalogueStats, ChoirProfileRow, PieceWithHolding, SearchQuery, SearchResult } from "./catalogue";
 import type { AuditRow } from "./audit";
 import { CHOIRS, type PersonRow, type RegisterRow } from "./people";
+import { MODULES, moduleForPath, type ModuleState } from "./modules";
+import {
+  permits,
+  requiredRolesFor,
+  ROLES,
+  ROLE_BLURBS,
+  ROLE_LABELS,
+  type Role,
+  type RoleGrant,
+} from "./roles";
 import {
   explainChoirSize,
   singersFor,
@@ -49,60 +59,92 @@ export interface AdminQueueCounts {
 /**
  * The librarian's front page.
  *
- * Six tiles for the things James goes looking for, and above them the queues —
- * the things waiting on him. Queues first because a number waiting is more
- * urgent than a door to walk through, and a tile with nothing behind it should
- * not look the same as one with forty items in it.
+ * Tiles for the things James goes looking for, and above them the queues — the
+ * things waiting on him. Queues first because a number waiting is more urgent
+ * than a door to walk through, and a tile with nothing behind it should not
+ * look the same as one with forty items in it.
+ *
+ * **Every tile is filtered twice**, by the same two rules the gate applies to
+ * the address behind it: the module has to be on, and the reader has to hold a
+ * role that may reach it. A tile the reader could not walk through is not
+ * drawn — an off module is dark rather than locked, and offering a librarian a
+ * door to the register that answers "not for you" is a worse page than not
+ * offering it. `visible()` asks `src/modules.ts` and `src/roles.ts` rather than
+ * repeating their tables, so a rule changed there changes here too.
  */
 export function adminHomePage(
   stats: CatalogueStats,
   queues: AdminQueueCounts,
-  extractionReady: boolean
+  extractionReady: boolean,
+  modules: ModuleState,
+  roles: readonly Role[]
 ): string {
   const unreviewed = stats.pieces - stats.reviewed;
+
+  /** Would the gate let this reader through to this address? */
+  const visible = (href: string): boolean => {
+    const module = moduleForPath(href);
+    if (module && !modules[module]) return false;
+    return permits(roles, requiredRolesFor(href));
+  };
 
   const stat = (n: number | string, label: string) =>
     `<div class="stat"><span class="n">${esc(n)}</span><span class="l">${esc(label)}</span></div>`;
 
   const queue = (href: string, n: number, label: string, blurb: string) =>
-    `<a class="tile${n ? " has-work" : ""}" href="${href}">
-       <span class="n">${n}</span>
-       <span class="t">${esc(label)}</span>
-       <span class="b">${esc(blurb)}</span>
-     </a>`;
+    visible(href)
+      ? `<a class="tile${n ? " has-work" : ""}" href="${href}">
+           <span class="n">${n}</span>
+           <span class="t">${esc(label)}</span>
+           <span class="b">${esc(blurb)}</span>
+         </a>`
+      : "";
 
   const tile = (href: string, label: string, blurb: string, chip = "") =>
-    `<a class="tile" href="${href}">
-       <span class="t">${esc(label)}${chip}</span>
-       <span class="b">${esc(blurb)}</span>
-     </a>`;
+    visible(href)
+      ? `<a class="tile" href="${href}">
+           <span class="t">${esc(label)}${chip}</span>
+           <span class="b">${esc(blurb)}</span>
+         </a>`
+      : "";
+
+  /** A heading with nothing under it is worse than no heading. */
+  const section = (heading: string, tiles: string[]): string => {
+    const drawn = tiles.filter(Boolean);
+    if (!drawn.length) return "";
+    return `<h2>${esc(heading)}</h2><div class="tiles">${drawn.join("")}</div>`;
+  };
 
   return page(
     `Librarian — ${CHURCH.appName}`,
     `<h1>Librarian<span class="sub">${esc(CHURCH.name)} music library</span></h1>
 
-     <h2>Waiting for you</h2>
-     <div class="tiles">
-       ${queue("/admin/review", queues.toReview, "Draft entries", "read off label photographs, unchecked")}
-       ${queue("/admin/services", queues.musicLines, "Music list lines", "matched or waiting to be matched")}
-       ${queue("/admin/scans", queues.pendingScans, "Scans sent in", "photographed by choristers")}
-       ${queue("/admin/feedback", queues.openFeedback, "Feedback", "sent from the widget")}
-       ${queue("/admin/queues", queues.openRepairs, "Repairs", "poor, urgent, or no usable spine")}
-       ${queue("/admin/stocktake", queues.dueRecount, "Due a recount", "five years old, or sung a lot since")}
-     </div>
+     ${section("Waiting for you", [
+       queue("/admin/review", queues.toReview, "Draft entries", "read off label photographs, unchecked"),
+       queue("/admin/services", queues.musicLines, "Music list lines", "matched or waiting to be matched"),
+       queue("/admin/scans", queues.pendingScans, "Scans sent in", "photographed by choristers"),
+       queue("/admin/feedback", queues.openFeedback, "Feedback", "sent from the widget"),
+       queue("/admin/queues", queues.openRepairs, "Repairs", "poor, urgent, or no usable spine"),
+       queue("/admin/stocktake", queues.dueRecount, "Due a recount", "five years old, or sung a lot since"),
+     ])}
 
-     <h2>The library</h2>
-     <div class="tiles">
-       ${tile("/admin/new", "New catalogue item", "parse a scan, or enter it by hand")}
-       ${tile("/admin/search", "Search and bulk edit", "filter, select, change many at once")}
-       ${tile("/admin/reports", "Reports", "what gets sung, condition, coverage")}
-       ${tile("/admin/queues", "What to do next", "scanning and repair, in priority order")}
-       ${tile("/admin/labels", "Print labels", "volunteer sheets, and reprints")}
-       ${tile("/admin/suggestions", "Choosing music", "by season, with copies and scans")}
-       ${tile("/admin/people", "The choir", "people and the register", betaChip())}
-       ${tile("/admin/loans", "Out on loan", "who has what, and since when")}
-       ${tile("/admin/settings", "Settings", "choir password, choir sizes, activity")}
-     </div>
+     ${section("The library", [
+       tile("/admin/new", "New catalogue item", "parse a scan, or enter it by hand"),
+       tile("/admin/search", "Search and bulk edit", "filter, select, change many at once"),
+       tile("/admin/reports", "Reports", "what gets sung, condition, coverage"),
+       tile("/admin/queues", "What to do next", "scanning and repair, in priority order"),
+       tile("/admin/labels", "Print labels", "volunteer sheets, and reprints"),
+       tile("/admin/suggestions", "Choosing music", "by season, with copies and scans"),
+       tile("/admin/loans", "Out on loan", "who has what, and since when"),
+     ])}
+
+     ${section("The choir", [tile("/admin/people", "The choir", "people and the register", betaChip())])}
+
+     ${section("This app", [
+       tile("/admin/settings", "Settings", "choir password, choir sizes, activity"),
+       tile("/admin/modules", "Modules", "what this app does at all", betaChip()),
+       tile("/admin/roles", "Roles", "who may do what in here", betaChip()),
+     ])}
 
      <div class="card">
        <h2>Where things stand</h2>
@@ -1029,7 +1071,7 @@ export function adminRegisterPage(
          ? `<div class="register">
               ${rows
                 .map(
-                  (r) => `<form method="POST" action="/admin/register/${service.id}/${r.id}">
+                  (r) => `<form method="POST" action="/admin/people/register/${service.id}/${r.id}">
                     <button type="submit" class="who">
                       <span class="n">${esc(r.display_name)}</span>
                       ${statusPill(r.status)}
@@ -1054,7 +1096,7 @@ export function adminRegisterPage(
        .register .who:hover { background: var(--colour-accent-tint); }
        .register .who .n { font-weight: 600; }
      </style>`,
-    { admin: true, path: `/admin/register/${service.id}` }
+    { admin: true, path: `/admin/people/register/${service.id}` }
   );
 }
 
@@ -1135,5 +1177,217 @@ export function adminSuggestionsPage(
          : `<p class="muted">Nothing matched. Try loosening the season or the category.</p>`
      }`,
     { admin: true, path: "/admin/suggestions" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Modules, roles, and the two ways in that are refused (Addendum A)
+// ---------------------------------------------------------------------------
+
+/**
+ * The Modules screen.
+ *
+ * Everything the register brought with it ships off. This is where it gets
+ * turned on, one switch at a time, by music staff — and every flip is audited,
+ * because "who turned the register on?" is a question somebody may one day ask.
+ *
+ * The screen says plainly what a module holds, and marks the ones that hold
+ * children's names, so that switching one on is a decision rather than a
+ * reflex.
+ */
+export function adminModulesPage(state: ModuleState, message?: string): string {
+  const row = (m: (typeof MODULES)[number]) => {
+    const on = state[m.key];
+    return `<tr>
+      <td>
+        <strong>${esc(m.label)}</strong>${m.personal ? ` <span class="chip personal">holds names</span>` : ""}
+        <div class="small muted">${esc(m.blurb)}</div>
+      </td>
+      <td class="num">${on ? `<span class="chip on">On</span>` : `<span class="chip off">Off</span>`}</td>
+      <td>
+        <form method="POST" action="/admin/modules" style="display:inline">
+          <input type="hidden" name="module" value="${esc(m.key)}">
+          <input type="hidden" name="on" value="${on ? "0" : "1"}">
+          <button type="submit" class="${on ? "secondary" : ""}">${on ? "Switch off" : "Switch on"}</button>
+        </form>
+      </td>
+    </tr>`;
+  };
+
+  return page(
+    `Modules — ${CHURCH.appName}`,
+    `<h1>Modules<span class="sub">What this app does at all</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     <div class="notice">
+       <p style="margin:0">A module that is off is <strong>not there</strong>: its screens are gone from the
+          front page and its addresses answer as though they had never existed. Switching one off does not
+          delete anything — the records stay in the database, and come back exactly as they were when it is
+          switched on again.</p>
+     </div>
+
+     <div class="card">
+       <div class="scroll"><table>
+         <tr><th>Module</th><th class="num">State</th><th></th></tr>
+         ${MODULES.map(row).join("")}
+       </table></div>
+     </div>
+
+     <style>
+       .chip { display: inline-block; padding: 0.05rem 0.45rem; border-radius: var(--radius-pill);
+               font-size: 0.75rem; font-weight: 700; }
+       .chip.on { background: var(--colour-accent-tint); color: var(--colour-accent); }
+       .chip.off { background: var(--colour-surface-sunk); color: var(--colour-muted); }
+       .chip.personal { background: var(--colour-surface-sunk); color: var(--colour-muted);
+                        font-weight: 400; }
+     </style>`,
+    { admin: true, path: "/admin/modules" }
+  );
+}
+
+/**
+ * The Roles screen.
+ *
+ * Cloudflare Access says who may reach `/admin`. This says what they may do
+ * once they are here, which is a different question — six people hold a
+ * Librarian policy so the library can be catalogued, and none of that is a
+ * reason to hand them the register.
+ *
+ * The last `music_staff` grant cannot be revoked from here: without one there
+ * is nobody who can grant anybody anything, and this screen is itself music
+ * staff only.
+ */
+export function adminRolesPage(
+  grants: RoleGrant[],
+  musicStaffCount: number,
+  message?: string,
+  error?: string
+): string {
+  const byEmail = new Map<string, Role[]>();
+  for (const g of grants) {
+    const held = byEmail.get(g.email);
+    if (held) held.push(g.role);
+    else byEmail.set(g.email, [g.role]);
+  }
+
+  const roleOptions = ROLES.map((r) => `<option value="${esc(r)}">${esc(ROLE_LABELS[r])}</option>`).join("");
+
+  const person = ([email, held]: [string, Role[]]) => `<tr>
+    <td>${esc(email)}</td>
+    <td>${ROLES.map((r) => {
+      if (!held.includes(r)) return "";
+      const last = r === "music_staff" && musicStaffCount <= 1;
+      return `<form method="POST" action="/admin/roles" style="display:inline-block; margin:0 0.3rem 0.3rem 0">
+                <input type="hidden" name="action" value="revoke">
+                <input type="hidden" name="email" value="${esc(email)}">
+                <input type="hidden" name="role" value="${esc(r)}">
+                <button type="submit" class="secondary" ${last ? "disabled" : ""}
+                  title="${last ? "The last music staff grant cannot be removed" : `Remove ${esc(ROLE_LABELS[r])}`}">
+                  ${esc(ROLE_LABELS[r])} ×
+                </button>
+              </form>`;
+    }).join("")}</td>
+  </tr>`;
+
+  return page(
+    `Roles — ${CHURCH.appName}`,
+    `<h1>Roles<span class="sub">What each administrator may do</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+     ${error ? `<div class="notice error"><p style="margin:0">${esc(error)}</p></div>` : ""}
+
+     <div class="notice">
+       <p style="margin:0">Cloudflare Access decides who reaches this side of the app at all. This decides
+          what they find when they do. Somebody with no role here sees a page telling them to ask you.</p>
+     </div>
+
+     <div class="card">
+       <h2>Who has what</h2>
+       ${
+         byEmail.size
+           ? `<div class="scroll"><table>
+                <tr><th>Email</th><th>Roles — click one to remove it</th></tr>
+                ${[...byEmail.entries()].map(person).join("")}
+              </table></div>`
+           : `<p class="muted">Nobody has a role yet.</p>`
+       }
+     </div>
+
+     <div class="card">
+       <h2>Give somebody a role</h2>
+       <form method="POST" action="/admin/roles">
+         <input type="hidden" name="action" value="grant">
+         <div class="row">
+           <div class="field">
+             <label for="email">Email</label>
+             <input type="email" id="email" name="email" required
+                    placeholder="as it is spelled in Cloudflare Access">
+             <span class="hint">It has to match the address Access signs them in with, exactly.</span>
+           </div>
+           <div class="field">
+             <label for="role">Role</label>
+             <select id="role" name="role">${roleOptions}</select>
+           </div>
+         </div>
+         <button type="submit">Give the role</button>
+       </form>
+     </div>
+
+     <div class="card">
+       <h2>What each role means</h2>
+       <dl>
+         ${ROLES.map(
+           (r) => `<dt><strong>${esc(ROLE_LABELS[r])}</strong></dt><dd class="muted">${esc(ROLE_BLURBS[r])}</dd>`
+         ).join("")}
+       </dl>
+     </div>`,
+    { admin: true, path: "/admin/roles" }
+  );
+}
+
+/**
+ * Signed in, and holding nothing.
+ *
+ * Cloudflare Access let them through, so they are somebody the Minster knows,
+ * and the page treats them that way: no stack trace, no "forbidden", just what
+ * has happened and who fixes it.
+ */
+export function adminNoRolePage(email: string): string {
+  return page(
+    `Nothing set up yet — ${CHURCH.appName}`,
+    `<h1>Nothing set up for you yet</h1>
+     <div class="card">
+       <p>You are signed in as <strong>${esc(email)}</strong>, but nobody has said yet what you should be
+          able to do here.</p>
+       <p>Ask a member of the music staff to give you a role — they can do it from the Roles screen in a
+          few seconds. Tell them the address above, exactly as it is written.</p>
+       <p class="muted small">Nothing has gone wrong, and there is nothing for you to fix at this end.</p>
+     </div>`,
+    { admin: true, path: "/admin" }
+  );
+}
+
+/**
+ * Signed in, holding a role, but not this one.
+ *
+ * Names the role needed rather than the one held: what the reader wants to know
+ * is what to ask for. A module that is switched off never reaches this page —
+ * it answers 404, because a locked door still tells you there is a room.
+ */
+export function adminWrongRolePage(required: readonly Role[]): string {
+  const names = required.map((r) => ROLE_LABELS[r]);
+  const list =
+    names.length === 1
+      ? names[0]!
+      : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]!}`;
+
+  return page(
+    `Not for you — ${CHURCH.appName}`,
+    `<h1>That part is not yours</h1>
+     <div class="card">
+       <p>This screen is for <strong>${esc(list)}</strong>, and you do not have that role.</p>
+       <p>If you think you should, ask a member of the music staff — they can add it from the Roles screen.</p>
+       <p><a class="btn secondary" href="/admin">Back to the front page</a></p>
+     </div>`,
+    { admin: true, path: "/admin" }
   );
 }

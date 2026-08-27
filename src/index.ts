@@ -13,8 +13,8 @@
  */
 
 import { Hono } from "hono";
-import type { Context } from "hono";
-import type { Env } from "./env";
+import type { Context, MiddlewareHandler } from "hono";
+import type { AppEnv, Env } from "./env";
 import { audit } from "./audit";
 import { CHURCH } from "./church.config";
 import {
@@ -104,6 +104,20 @@ import {
   registerTally,
   setPersonActive,
 } from "./people";
+import { isModuleKey, moduleForPath, readModuleState, setModule } from "./modules";
+import {
+  countMusicStaff,
+  grantRole,
+  hasAnyRole,
+  isRole,
+  listGrants,
+  permits,
+  readRoles,
+  requiredRolesFor,
+  revokeRole,
+  ROLES,
+  ROLE_LABELS,
+} from "./roles";
 import { changePassword, readPasswordState } from "./password";
 import { recentActivity } from "./audit";
 import { seasonsInPlay } from "./churchyear";
@@ -128,8 +142,12 @@ import {
   adminActivityPage,
   adminHomePage,
   adminLabelsPage,
+  adminModulesPage,
+  adminNoRolePage,
   adminPeoplePage,
   adminRegisterPage,
+  adminRolesPage,
+  adminWrongRolePage,
   adminSuggestionsPage,
   adminLoansPage,
   adminNewItemPage,
@@ -180,7 +198,7 @@ import SEED_CSV from "../data/seed/bm-music-draft-index.csv";
  */
 const MIN_PASSWORD_LENGTH = 8;
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<AppEnv>();
 
 /**
  * Noindex on every response, and never let a browser hold on to a page.
@@ -199,6 +217,54 @@ app.use("*", async (c, next) => {
 });
 
 app.use("*", authMiddleware);
+
+/**
+ * The admin gate: modules, then roles.
+ *
+ * Cloudflare Access has already decided that this person may reach `/admin`
+ * (see `src/auth.ts`). This decides what is there when they do, and it is one
+ * middleware over the whole prefix rather than a check inside each handler —
+ * a route added next month is gated by existing, not by somebody remembering.
+ *
+ * **The order is deliberate.** The module check runs first and answers 404, so
+ * a switched-off module is indistinguishable from a route that was never built,
+ * whoever is asking. Only then do roles apply, and they answer a page rather
+ * than a bare status: Access let this person in, so they are somebody the
+ * Minster knows, and the honest answer is what to ask for and who to ask.
+ *
+ * `requiredRolesFor` fails closed on a path it has never heard of, so a route
+ * that nobody added to the table is locked down rather than open.
+ */
+const adminGate: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  const email = adminIdentity(c);
+
+  // `wrangler dev` opens /admin entirely (ADMIN_MODE=local, never production),
+  // and there is no Access header to carry an identity, so there would be no
+  // roles to hold. Grant all three rather than lock the developer out of the
+  // screens they are working on.
+  const local = c.env.ADMIN_MODE === "local";
+
+  const [modules, roles] = await Promise.all([
+    readModuleState(c.env.DB),
+    local ? Promise.resolve([...ROLES]) : readRoles(c.env.DB, email),
+  ]);
+  c.set("modules", modules);
+  c.set("roles", roles);
+
+  const module = moduleForPath(path);
+  if (module && !modules[module]) return c.html(notFoundPage(), 404);
+
+  if (!hasAnyRole(roles)) return c.html(adminNoRolePage(email), 403);
+
+  const required = requiredRolesFor(path);
+  if (!permits(roles, required)) return c.html(adminWrongRolePage(required), 403);
+
+  return next();
+};
+
+app.use("/admin", adminGate);
+app.use("/admin/*", adminGate);
 
 /** No crawler should be here, and there is nothing for one to find. */
 app.get("/robots.txt", (c) => c.text("User-agent: *\nDisallow: /\n"));
@@ -618,7 +684,9 @@ app.get("/file/:id", async (c) => {
 
 app.get("/admin", async (c) => {
   const [stats, queues] = await Promise.all([catalogueStats(c.env.DB), adminQueueCounts(c.env.DB)]);
-  return c.html(adminHomePage(stats, queues, extractionAvailable(c.env)));
+  return c.html(
+    adminHomePage(stats, queues, extractionAvailable(c.env), c.get("modules"), c.get("roles"))
+  );
 });
 
 /** The numbers on the admin home tiles, in one round trip. */
@@ -862,6 +930,79 @@ app.get("/admin/activity", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Modules and roles (Addendum A) — music staff only, gated above
+// ---------------------------------------------------------------------------
+
+app.get("/admin/modules", async (c) => {
+  const message = new URL(c.req.url).searchParams.get("done") ?? undefined;
+  return c.html(adminModulesPage(c.get("modules"), message || undefined));
+});
+
+app.post("/admin/modules", async (c) => {
+  const body = await c.req.parseBody();
+  const module = str(body.module);
+  if (!isModuleKey(module)) return c.html(errorPage("That is not a module."), 400);
+
+  const on = str(body.on) === "1";
+  await setModule(c.env.DB, module, on, adminIdentity(c));
+
+  // Worth a line: "who switched the register on?" is a question somebody may
+  // one day ask, and a module flag is exactly the sort of change nobody
+  // remembers making.
+  await logAdminAction(c, on ? "module.on" : "module.off", "app_setting", null, `module.${module}`);
+  return c.redirect(
+    `/admin/modules?done=${encodeURIComponent(on ? "Switched on." : "Switched off.")}`,
+    302
+  );
+});
+
+app.get("/admin/roles", async (c) => {
+  const params = new URL(c.req.url).searchParams;
+  const [grants, musicStaff] = await Promise.all([listGrants(c.env.DB), countMusicStaff(c.env.DB)]);
+  return c.html(
+    adminRolesPage(grants, musicStaff, params.get("done") ?? undefined, params.get("error") ?? undefined)
+  );
+});
+
+app.post("/admin/roles", async (c) => {
+  const body = await c.req.parseBody();
+  const action = str(body.action);
+  const email = str(body.email).trim().toLowerCase();
+  const role = str(body.role);
+
+  if (!email || !email.includes("@")) {
+    return c.redirect(`/admin/roles?error=${encodeURIComponent("That does not look like an email address.")}`, 302);
+  }
+  if (!isRole(role)) return c.html(errorPage("That is not a role."), 400);
+
+  if (action === "revoke") {
+    // The last music_staff grant cannot go. Without one there is nobody who can
+    // grant anybody anything, and this screen is itself music staff only — the
+    // way back would be a migration.
+    if (role === "music_staff" && (await countMusicStaff(c.env.DB)) <= 1) {
+      return c.redirect(
+        `/admin/roles?error=${encodeURIComponent(
+          "That is the last music staff role. Give it to somebody else first, or nobody will be able to give out roles at all."
+        )}`,
+        302
+      );
+    }
+    await revokeRole(c.env.DB, email, role);
+    await logAdminAction(c, "role.revoke", "admin_role", null, `${role} from ${email}`);
+    return c.redirect(`/admin/roles?done=${encodeURIComponent("Removed.")}`, 302);
+  }
+
+  await grantRole(c.env.DB, email, role, adminIdentity(c));
+  // An admin's work email is not a chorister's personal data, and who holds
+  // which role is precisely what this line exists to record.
+  await logAdminAction(c, "role.grant", "admin_role", null, `${role} to ${email}`);
+  return c.redirect(
+    `/admin/roles?done=${encodeURIComponent(`${ROLE_LABELS[role]} given to ${email}.`)}`,
+    302
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Labels (1A, H10) and the QR route (H1)
 // ---------------------------------------------------------------------------
 
@@ -1015,7 +1156,16 @@ app.post("/admin/people/:id", async (c) => {
   return c.redirect(`/admin/people?done=${encodeURIComponent("Marked as having left.")}`, 302);
 });
 
-app.get("/admin/register/:serviceId", async (c) => {
+/**
+ * The register lives under `/admin/people` and not at `/admin/register`.
+ *
+ * Addendum A, A2: every route that renders a child's name sits under
+ * `/admin/people*` or `/admin/safeguarding*` and nowhere else, so that a
+ * second and tighter Cloudflare Access application can be scoped to exactly
+ * those two path prefixes without any of this having to be moved again. The
+ * register was outside both and is moved here.
+ */
+app.get("/admin/people/register/:serviceId", async (c) => {
   const serviceId = numericParam(c.req.param("serviceId"));
   if (serviceId === null) return c.html(notFoundPage(), 404);
 
@@ -1027,7 +1177,7 @@ app.get("/admin/register/:serviceId", async (c) => {
 });
 
 /** One tap on one name. Cycles, and saves as it goes. */
-app.post("/admin/register/:serviceId/:personId", async (c) => {
+app.post("/admin/people/register/:serviceId/:personId", async (c) => {
   const serviceId = numericParam(c.req.param("serviceId"));
   const personId = numericParam(c.req.param("personId"));
   if (serviceId === null || personId === null) return c.html(notFoundPage(), 404);
@@ -1044,7 +1194,7 @@ app.post("/admin/register/:serviceId/:personId", async (c) => {
   // No audit line. Attendance is personal data about a child and does not
   // belong in a log admins read looking for a mistake; the attendance row
   // carries marked_by, which is where the accountability belongs.
-  return c.redirect(`/admin/register/${serviceId}`, 302);
+  return c.redirect(`/admin/people/register/${serviceId}`, 302);
 });
 
 // ---------------------------------------------------------------------------
@@ -1233,7 +1383,7 @@ type Body = Record<string, unknown>;
  * trustworthy on `/admin/*` — and every caller of this is on `/admin/*`.
  */
 function logAdminAction(
-  c: Context<{ Bindings: Env }>,
+  c: Context<AppEnv>,
   action: string,
   entity: string | null,
   entityId: number | null,

@@ -20,7 +20,7 @@
  */
 
 import type { Context, MiddlewareHandler } from "hono";
-import type { Env } from "./env";
+import type { AppEnv, Env } from "./env";
 import { checkChoirPassword, readPasswordState } from "./password";
 
 const COOKIE_NAME = "bmmusic_session";
@@ -34,7 +34,7 @@ const FAILED_LOGIN_DELAY_MS = 1000;
 /** The header Cloudflare Access puts on every request it lets through. */
 const ACCESS_ASSERTION_HEADER = "Cf-Access-Jwt-Assertion";
 
-type Ctx = Context<{ Bindings: Env }>;
+type Ctx = Context<AppEnv>;
 
 // --- crypto helpers (WebCrypto only) ---
 
@@ -200,7 +200,7 @@ export function adminIdentity(c: Ctx): string {
  * catalogue of where several hundred pieces of music physically live is not
  * something to leave lying about for a crawler.
  */
-export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
+export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const path = new URL(c.req.url).pathname;
 
   // Admin routes: Cloudflare Access, checked before the choir session so that a
