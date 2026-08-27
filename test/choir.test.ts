@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { copiesRag, ragLabel, worstRag, type RagState } from "../src/rag";
 import { allBinders, binderFor, findDescant, readHymnNumber } from "../src/descants";
 import { CHURCH } from "../src/church.config";
+import { adventSunday, easterSunday, seasonsInPlay } from "../src/churchyear";
 
 // ---------------------------------------------------------------------------
 
@@ -183,5 +184,79 @@ describe("the descant finder", () => {
     expect(binders).toContain("141–150");
     expect(binders).toContain("St Patrick's Breastplate");
     expect(binders.filter((b) => /^\d/.test(b))).toHaveLength(15);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("where we are in the church year", () => {
+  // Checked against the published dates. Everything from Ash Wednesday to
+  // Pentecost is counted from Easter, so being a week out here would put the
+  // whole Passiontide shelf in the wrong month.
+  it("computes Easter for a spread of real years", () => {
+    const easter = (y: number) => easterSunday(y).toISOString().slice(0, 10);
+    expect(easter(2024)).toBe("2024-03-31");
+    expect(easter(2025)).toBe("2025-04-20");
+    expect(easter(2026)).toBe("2026-04-05");
+    expect(easter(2027)).toBe("2027-03-28");
+    expect(easter(2030)).toBe("2030-04-21");
+    // The extremes of the range Easter can occupy.
+    expect(easter(2038)).toBe("2038-04-25");
+    expect(easter(2285)).toBe("2285-03-22");
+  });
+
+  it("always lands Easter on a Sunday", () => {
+    for (let y = 2024; y < 2075; y++) expect(easterSunday(y).getUTCDay()).toBe(0);
+  });
+
+  it("finds Advent Sunday, four Sundays before Christmas", () => {
+    const advent = (y: number) => adventSunday(y).toISOString().slice(0, 10);
+    expect(advent(2026)).toBe("2026-11-29");
+    expect(advent(2027)).toBe("2027-11-28");
+    for (let y = 2024; y < 2060; y++) expect(adventSunday(y).getUTCDay()).toBe(0);
+  });
+
+  // The panel looks ahead on purpose: telling a librarian on Palm Sunday that
+  // it is Holy Week is no use to anybody.
+  it("sees a season coming before it arrives", () => {
+    // Easter 2026 is 5 April, so Lent begins 18 February.
+    const earlyFebruary = seasonsInPlay(new Date("2026-02-01T00:00:00Z"));
+    expect(earlyFebruary).toContain("lent");
+  });
+
+  it("knows Advent and Christmas in late November", () => {
+    const seasons = seasonsInPlay(new Date("2026-11-25T00:00:00Z"));
+    expect(seasons).toContain("advent");
+    expect(seasons).toContain("christmas");
+  });
+
+  it("knows harvest in September", () => {
+    expect(seasonsInPlay(new Date("2026-09-10T00:00:00Z"))).toContain("harvest");
+  });
+
+  it("carries Christmas across the year boundary into January", () => {
+    expect(seasonsInPlay(new Date("2027-01-02T00:00:00Z"), 3)).toContain("christmas");
+  });
+
+  it("returns them in church-year order, not the order they were found", () => {
+    const seasons = seasonsInPlay(new Date("2026-03-20T00:00:00Z"), 60);
+    const order = CHURCH.seasons.map((s) => s.value);
+    const positions = seasons.map((s) => order.indexOf(s));
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  });
+
+  // "general" means "any time", which is not the same as "in season now".
+  it("never selects the general tag by date", () => {
+    for (const date of ["2026-01-15", "2026-04-05", "2026-07-01", "2026-12-25"]) {
+      expect(seasonsInPlay(new Date(`${date}T00:00:00Z`))).not.toContain("general");
+    }
+  });
+
+  it("only ever names seasons the vocabulary knows", () => {
+    const vocabulary = new Set(CHURCH.seasons.map((s) => s.value));
+    for (let month = 1; month <= 12; month++) {
+      const date = new Date(Date.UTC(2026, month - 1, 15));
+      for (const season of seasonsInPlay(date)) expect(vocabulary).toContain(season);
+    }
   });
 });
