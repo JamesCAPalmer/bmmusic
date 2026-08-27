@@ -37,8 +37,13 @@ import {
   getPiece,
   getPieceByAccession,
   getPieceDetail,
+  adminSearchPieces,
+  applyBulkEdit,
+  choirProfiles,
   mergePieces,
   recentlyAdded,
+  saveChoirProfile,
+  setChoirSize,
   recordCount,
   reviewQueue,
   searchPieces,
@@ -83,6 +88,36 @@ import {
   WorkingCopyError,
 } from "./workingcopy";
 import { findDescant } from "./descants";
+import { changePassword, readPasswordState } from "./password";
+import { recentActivity } from "./audit";
+import { seasonsInPlay } from "./churchyear";
+import {
+  conditionSummary,
+  coverage,
+  dueRecount,
+  leastSung,
+  lendOut,
+  markReturned,
+  mostSung,
+  openLoans,
+  repairPriority,
+  scanningPriority,
+  seasonReadiness,
+} from "./reports";
+import {
+  adminActivityPage,
+  adminHomePage,
+  adminLoansPage,
+  adminNewItemPage,
+  adminQueuesPage,
+  adminReportsPage,
+  adminSearchPage,
+  adminSettingsPage,
+  adminStocktakePage,
+  type AdminQueueCounts,
+  type AdminSearchFilters,
+} from "./ui-admin";
+
 import { extractionAvailable, extractLabel } from "./extract";
 import { NotConfiguredError, toContentBlock } from "./anthropic";
 import {
@@ -90,7 +125,6 @@ import {
   adminEditPage,
   adminFeedbackPage,
   adminFeedResultPage,
-  adminHomePage,
   adminMatchQueuePage,
   adminScanQueuePage,
   adminImportPage,
@@ -106,11 +140,21 @@ import {
   notFoundPage,
   portalCountPage,
   portalDonePage,
+  manualForm,
   portalPage,
   servicePage,
   type HomeService,
 } from "./ui";
 import SEED_CSV from "../data/seed/bm-music-draft-index.csv";
+
+/**
+ * Shortest password the screen will take.
+ *
+ * Not a complexity rule — three ordinary words beat a jumble of symbols for
+ * something a whole choir has to be told and remember, and a rule demanding a
+ * digit and a capital would just produce "Anthem1" every term.
+ */
+const MIN_PASSWORD_LENGTH = 8;
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -145,7 +189,10 @@ app.post("/login", async (c) => {
   const body = await c.req.parseBody();
   const password = typeof body.password === "string" ? body.password : "";
   if (password && (await checkPassword(c.env, password))) {
-    c.header("Set-Cookie", sessionCookieHeader(await createSessionValue(c.env)));
+    // Stamp the cookie with the generation in force now, so it survives until
+    // the password is next changed and not a moment longer.
+    const { generation } = await readPasswordState(c.env.DB);
+    c.header("Set-Cookie", sessionCookieHeader(await createSessionValue(c.env, generation)));
     return c.redirect("/", 302);
   }
   // One generic message and a fixed delay: no enumeration, no lockout to lock
@@ -312,6 +359,26 @@ app.post("/api/feedback", async (c) => {
 
   return c.json({ ok: true });
 });
+
+/** Read the admin table's filters off the query string. */
+function readAdminSearch(url: string): AdminSearchFilters {
+  const params = new URL(url).searchParams;
+  const pick = (name: string, allowed?: readonly string[]) => {
+    const value = params.get(name)?.trim() || undefined;
+    if (!value) return undefined;
+    return !allowed || allowed.includes(value) ? value : undefined;
+  };
+
+  return {
+    q: pick("q"),
+    category: pick("category", CHURCH.categories.map((x) => x.code)),
+    season: pick("season", CHURCH.seasons.map((s) => s.value)),
+    locationDoor: pick("door", CHURCH.storage.doors),
+    scanned: pick("scanned", ["yes", "no"]),
+    flagged: pick("flagged", ["flagged", "unreviewed", "reviewed"]),
+    limit: 100,
+  };
+}
 
 function readSearchQuery(url: string): SearchQuery {
   const params = new URL(url).searchParams;
@@ -513,8 +580,248 @@ app.get("/file/:id", async (c) => {
 // ---------------------------------------------------------------------------
 
 app.get("/admin", async (c) => {
-  const stats = await catalogueStats(c.env.DB);
-  return c.html(adminHomePage(stats, extractionAvailable(c.env)));
+  const [stats, queues] = await Promise.all([catalogueStats(c.env.DB), adminQueueCounts(c.env.DB)]);
+  return c.html(adminHomePage(stats, queues, extractionAvailable(c.env)));
+});
+
+/** The numbers on the admin home tiles, in one round trip. */
+async function adminQueueCounts(db: D1Database): Promise<AdminQueueCounts> {
+  const row = await db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM piece WHERE reviewed_at IS NULL) AS toReview,
+         (SELECT COUNT(*) FROM service_music WHERE match_state != 'confirmed') AS musicLines,
+         (SELECT COUNT(*) FROM scan_submission WHERE status = 'pending') AS pendingScans,
+         (SELECT COUNT(*) FROM feedback WHERE resolved_at IS NULL) AS openFeedback,
+         (SELECT COUNT(*) FROM repair_job WHERE status IN ('open','in_progress')) AS openRepairs,
+         0 AS dueRecount`
+    )
+    .first<AdminQueueCounts>();
+
+  // The recount list is the one number that needs the real query — it depends
+  // on both the count date and how much has been sung since.
+  const due = await dueRecount(db, today(), 500);
+  return { ...(row ?? emptyQueueCounts()), dueRecount: due.length };
+}
+
+function emptyQueueCounts(): AdminQueueCounts {
+  return { toReview: 0, musicLines: 0, pendingScans: 0, openFeedback: 0, openRepairs: 0, dueRecount: 0 };
+}
+
+// --- New catalogue item (5A as amended) -------------------------------------
+
+app.get("/admin/new", (c) => c.html(adminNewItemPage(extractionAvailable(c.env), manualForm())));
+
+// --- Search and bulk edit ---------------------------------------------------
+
+app.get("/admin/search", async (c) => {
+  const filters = readAdminSearch(c.req.url);
+  const result = await adminSearchPieces(c.env.DB, filters);
+  const changed = new URL(c.req.url).searchParams.get("changed");
+  return c.html(
+    adminSearchPage(
+      filters,
+      result,
+      changed ? `${changed} ${changed === "1" ? "piece" : "pieces"} changed.` : undefined
+    )
+  );
+});
+
+app.post("/admin/search/bulk", async (c) => {
+  const body = await c.req.parseBody({ all: true });
+
+  const raw = body.id;
+  const ids = (Array.isArray(raw) ? raw : [raw])
+    .map((v) => Number(str(v)))
+    .filter((n) => Number.isSafeInteger(n) && n > 0);
+
+  if (!ids.length) {
+    return c.html(errorPage("Tick the pieces you want to change first."), 400);
+  }
+
+  const shelf = str(body.location_shelf);
+  const edit = {
+    category: CHURCH.categories.some((x) => x.code === str(body.category)) ? str(body.category) : undefined,
+    season: str(body.season) || undefined,
+    locationDoor: CHURCH.storage.doors.includes(str(body.location_door)) ? str(body.location_door) : undefined,
+    locationShelf: /^\d{1,3}$/.test(shelf) ? Number(shelf) : undefined,
+    spineState: ["ok", "none", "combined"].includes(str(body.spine_state)) ? str(body.spine_state) : undefined,
+  };
+
+  const changed = await applyBulkEdit(c.env.DB, ids, edit);
+  if (!changed) {
+    return c.html(errorPage("Nothing was changed — every box in the bulk editor was left alone."), 400);
+  }
+
+  await logAdminAction(
+    c,
+    "bulk.edit",
+    "piece",
+    null,
+    `${changed} pieces: ${Object.entries(edit)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(", ")}`
+  );
+
+  return c.redirect(`/admin/search?changed=${changed}`, 302);
+});
+
+// --- Reports and queues -----------------------------------------------------
+
+app.get("/admin/reports", async (c) => {
+  const now = new Date();
+  // A year back, which is the window James thinks in: "have we done this since
+  // last Advent?"
+  const since = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate()))
+    .toISOString()
+    .slice(0, 10);
+
+  const [cover, most, least, conditions, readiness] = await Promise.all([
+    coverage(c.env.DB),
+    mostSung(c.env.DB, since),
+    leastSung(c.env.DB, since),
+    conditionSummary(c.env.DB),
+    seasonReadiness(c.env.DB, seasonsInPlay(now)),
+  ]);
+
+  return c.html(adminReportsPage(cover, most, least, conditions, readiness, since));
+});
+
+app.get("/admin/queues", async (c) => {
+  const [scanning, repairs] = await Promise.all([
+    scanningPriority(c.env.DB, today(), seasonsInPlay(new Date())),
+    repairPriority(c.env.DB),
+  ]);
+  return c.html(adminQueuesPage(scanning, repairs));
+});
+
+app.get("/admin/stocktake", async (c) => {
+  return c.html(adminStocktakePage(await dueRecount(c.env.DB, today())));
+});
+
+// --- Loans (H5) -------------------------------------------------------------
+
+app.get("/admin/loans", async (c) => {
+  const message = new URL(c.req.url).searchParams.get("done") ?? undefined;
+  return c.html(adminLoansPage(await openLoans(c.env.DB), message || undefined));
+});
+
+app.post("/admin/loans", async (c) => {
+  const body = await c.req.parseBody();
+  const pieceId = Number(str(body.piece_id));
+  const copies = Number(str(body.copies));
+  const borrower = str(body.borrower);
+
+  if (!Number.isSafeInteger(pieceId) || pieceId <= 0 || !borrower) {
+    return c.html(errorPage("A piece number and somebody's name are both needed."), 400);
+  }
+  if (!Number.isSafeInteger(copies) || copies <= 0) {
+    return c.html(errorPage("How many copies are going out?"), 400);
+  }
+
+  const dueBack = str(body.due_back);
+  await lendOut(
+    c.env.DB,
+    {
+      pieceId,
+      copies,
+      borrower,
+      reason: str(body.reason) || null,
+      dueBack: /^\d{4}-\d{2}-\d{2}$/.test(dueBack) ? dueBack : null,
+    },
+    adminIdentity(c)
+  );
+  await logAdminAction(c, "loan.out", "piece", pieceId, `${copies} to ${borrower}`);
+  return c.redirect(`/admin/loans?done=${encodeURIComponent(`Logged out to ${borrower}.`)}`, 302);
+});
+
+app.post("/admin/loans/:id/back", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+  await markReturned(c.env.DB, id);
+  await logAdminAction(c, "loan.back", "loan", id, null);
+  return c.redirect(`/admin/loans?done=${encodeURIComponent("Marked as back.")}`, 302);
+});
+
+// --- Settings: password, choir sizes, activity ------------------------------
+
+app.get("/admin/settings", async (c) => {
+  const params = new URL(c.req.url).searchParams;
+  const [profiles, state] = await Promise.all([
+    choirProfiles(c.env.DB),
+    readPasswordState(c.env.DB),
+  ]);
+  return c.html(
+    adminSettingsPage(
+      profiles,
+      state.hash !== null,
+      state.generation,
+      params.get("done") ?? undefined,
+      params.get("problem") ?? undefined
+    )
+  );
+});
+
+/**
+ * Change the choir password (11A).
+ *
+ * Typed twice, because getting it wrong here signs the whole choir out and
+ * leaves nobody — James included — able to get back in without coming to this
+ * screen again.
+ */
+app.post("/admin/settings/password", async (c) => {
+  const body = await c.req.parseBody();
+  const password = typeof body.password === "string" ? body.password : "";
+  const confirm = typeof body.confirm === "string" ? body.confirm : "";
+
+  const problem = (why: string) => c.redirect(`/admin/settings?problem=${encodeURIComponent(why)}`, 302);
+
+  if (password !== confirm) return problem("The two passwords did not match. Nothing has been changed.");
+  if (password.trim().length < MIN_PASSWORD_LENGTH) {
+    return problem(
+      `That is too short to be a term's password — ${MIN_PASSWORD_LENGTH} characters at least. Nothing has been changed.`
+    );
+  }
+
+  const generation = await changePassword(c.env.DB, password, adminIdentity(c));
+  // Deliberately not logging the password, obviously — but not its length or
+  // any part of it either. Only that it changed, and to which generation.
+  await logAdminAction(c, "password.change", "app_setting", null, `now generation ${generation}`);
+
+  return c.redirect(
+    `/admin/settings?done=${encodeURIComponent(
+      "The password is changed and everybody has been signed out. Tell the choir the new one."
+    )}`,
+    302
+  );
+});
+
+app.post("/admin/settings/choirs", async (c) => {
+  const body = await c.req.parseBody();
+  let changed = 0;
+
+  for (const [key, value] of Object.entries(body)) {
+    const match = /^singers-(\d+)$/.exec(key);
+    if (!match) continue;
+    const id = Number(match[1]);
+    const raw = str(value);
+    // Empty means "still not known", which is a real answer and stores NULL.
+    const singers = raw === "" ? null : Number(raw);
+    if (singers !== null && (!Number.isSafeInteger(singers) || singers < 0 || singers > 200)) continue;
+    await setChoirSize(c.env.DB, id, singers);
+    changed++;
+  }
+
+  const added = str(body.new_designation);
+  if (added) await saveChoirProfile(c.env.DB, added, null);
+
+  await logAdminAction(c, "choirs.update", "choir_profile", null, `${changed} updated${added ? `, added ${added}` : ""}`);
+  return c.redirect(`/admin/settings?done=${encodeURIComponent("Saved.")}`, 302);
+});
+
+app.get("/admin/activity", async (c) => {
+  return c.html(adminActivityPage(await recentActivity(c.env.DB, 200)));
 });
 
 app.get("/admin/review", async (c) => {

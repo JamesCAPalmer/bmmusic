@@ -704,6 +704,172 @@ export async function typicalSingersFor(
   return row?.typical_singers ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// Admin search and bulk edit
+// ---------------------------------------------------------------------------
+
+export interface AdminSearch {
+  q?: string;
+  category?: string;
+  season?: string;
+  locationDoor?: string;
+  /** 'yes' | 'no' — has a reference scan, or has not. */
+  scanned?: string;
+  /** 'flagged' | 'unreviewed' | 'reviewed'. */
+  flagged?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** The filterable table behind the bulk editor. */
+export async function adminSearchPieces(db: D1Database, search: AdminSearch): Promise<SearchResult> {
+  const where: string[] = [];
+  const binds: unknown[] = [];
+
+  const q = (search.q ?? "").trim();
+  if (q) {
+    where.push(
+      `(p.composer_canonical LIKE ?
+        OR REPLACE(LOWER(p.title), '''', '') LIKE ?
+        OR EXISTS (SELECT 1 FROM alias a WHERE a.piece_id = p.id AND a.alt_canonical LIKE ?))`
+    );
+    binds.push(`%${canonicalComposer(q)}%`, `%${q.toLowerCase()}%`, `%${canonicalTitle(q)}%`);
+  }
+  if (search.category) {
+    where.push("p.category = ?");
+    binds.push(search.category);
+  }
+  // Season is a semicolon-joined list, so this is a substring test. The tags are
+  // a closed vocabulary with no tag a substring of another, which is what makes
+  // that safe here.
+  if (search.season) {
+    where.push("p.season LIKE ?");
+    binds.push(`%${search.season}%`);
+  }
+  if (search.locationDoor) {
+    where.push("p.location_door = ?");
+    binds.push(search.locationDoor);
+  }
+  if (search.scanned === "yes") {
+    where.push("EXISTS (SELECT 1 FROM file f WHERE f.piece_id = p.id AND f.kind = 'reference_scan')");
+  } else if (search.scanned === "no") {
+    where.push("NOT EXISTS (SELECT 1 FROM file f WHERE f.piece_id = p.id AND f.kind = 'reference_scan')");
+  }
+  if (search.flagged === "flagged") where.push("p.review_flag IS NOT NULL");
+  else if (search.flagged === "unreviewed") where.push("p.reviewed_at IS NULL");
+  else if (search.flagged === "reviewed") where.push("p.reviewed_at IS NOT NULL");
+
+  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const limit = Math.min(Math.max(search.limit ?? 100, 1), 300);
+  const offset = Math.max(search.offset ?? 0, 0);
+
+  const countRow = await db
+    .prepare(`SELECT COUNT(*) AS n FROM piece p ${whereSql}`)
+    .bind(...binds)
+    .first<{ n: number }>();
+
+  const rows = await db
+    .prepare(
+      `${PIECE_WITH_HOLDING} ${whereSql}
+        ORDER BY p.composer_canonical, p.title
+        LIMIT ? OFFSET ?`
+    )
+    .bind(...binds, limit, offset)
+    .all<PieceWithHolding>();
+
+  return { pieces: rows.results ?? [], total: countRow?.n ?? 0 };
+}
+
+/** The fields a bulk edit can set. Anything left undefined is left alone. */
+export interface BulkEdit {
+  category?: string;
+  season?: string;
+  locationDoor?: string;
+  locationShelf?: number;
+  spineState?: string;
+}
+
+/**
+ * Apply a bulk edit to a set of pieces.
+ *
+ * **Only fields that were actually given are touched.** A blank box in the
+ * bulk-edit bar means "leave this alone", never "clear it" — getting that
+ * backwards would let one careless click wipe the season tags off two hundred
+ * rows, and there is no undo. Emptying a field is a deliberate act on one
+ * piece's own page.
+ *
+ * Returns how many rows were changed, so the caller can say so and log it.
+ */
+export async function applyBulkEdit(db: D1Database, ids: number[], edit: BulkEdit): Promise<number> {
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+
+  if (edit.category) {
+    sets.push("category = ?");
+    binds.push(edit.category);
+  }
+  if (edit.season) {
+    sets.push("season = ?");
+    binds.push(formatSeasons(edit.season));
+  }
+  if (edit.locationDoor) {
+    sets.push("location_door = ?");
+    binds.push(edit.locationDoor);
+  }
+  if (edit.locationShelf !== undefined) {
+    sets.push("location_shelf = ?");
+    binds.push(edit.locationShelf);
+  }
+  if (edit.spineState) {
+    sets.push("spine_state = ?");
+    binds.push(edit.spineState);
+  }
+
+  if (!sets.length || !ids.length) return 0;
+  sets.push("updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')");
+
+  let changed = 0;
+  // Chunked so the IN list stays a sensible size whatever somebody ticks.
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    const placeholders = chunk.map(() => "?").join(",");
+    const result = await db
+      .prepare(`UPDATE piece SET ${sets.join(", ")} WHERE id IN (${placeholders})`)
+      .bind(...binds, ...chunk)
+      .run();
+    changed += result.meta?.changes ?? chunk.length;
+  }
+  return changed;
+}
+
+/** Add a choir designation, or update its size. */
+export async function saveChoirProfile(
+  db: D1Database,
+  designation: string,
+  typicalSingers: number | null
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO choir_profile (designation, typical_singers) VALUES (?, ?)
+       ON CONFLICT (designation) DO UPDATE SET
+         typical_singers = excluded.typical_singers,
+         updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')`
+    )
+    .bind(designation.trim(), typicalSingers)
+    .run();
+}
+
+/** Set one profile's size by id, for the settings table. */
+export async function setChoirSize(db: D1Database, id: number, typicalSingers: number | null): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE choir_profile SET typical_singers = ?,
+              updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`
+    )
+    .bind(typicalSingers, id)
+    .run();
+}
+
 /** One file row, for the streaming route to resolve an id to an R2 key. */
 export async function getFile(db: D1Database, id: number): Promise<FileRow | null> {
   return db.prepare(`SELECT * FROM file WHERE id = ?`).bind(id).first<FileRow>();
