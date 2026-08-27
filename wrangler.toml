@@ -39,6 +39,20 @@ type = "Text"
 globs = ["**/*.csv"]
 fallthrough = true
 
+# The estate's brand assets — the Minster logo, the icons, and the two type
+# faces the rest of the estate is set in — are bundled as bytes and served by
+# the Worker from /asset/*.
+#
+# Bundled rather than fetched from a CDN, deliberately. `CLAUDE.md` rules out
+# CDN assets because the volunteer portal is used on a phone in a cold song
+# school with one bar of signal, and a webfont request to a third party is
+# exactly the round trip that rule exists to prevent. Same-origin bytes with a
+# one-year immutable cache cost one download, once, per device.
+[[rules]]
+type = "Data"
+globs = ["**/*.woff2", "**/*.png", "**/*.ico"]
+fallthrough = true
+
 # --- Bindings ---
 # Estate rule (docs/ESTATE.md): bindings are configured in the Cloudflare
 # dashboard, never committed. The entries below carry names only — no database
