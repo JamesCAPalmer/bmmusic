@@ -88,6 +88,7 @@ import {
   WorkingCopyError,
 } from "./workingcopy";
 import { findDescant } from "./descants";
+import { serveAsset } from "./assets";
 import { buildAverySheet, buildVolunteerSheets } from "./labelsheet";
 import { copiesRag, ragLabel, ragPill } from "./rag";
 import {
@@ -201,6 +202,19 @@ app.use("*", authMiddleware);
 
 /** No crawler should be here, and there is nothing for one to find. */
 app.get("/robots.txt", (c) => c.text("User-agent: *\nDisallow: /\n"));
+
+/**
+ * The estate's brand assets: the Minster logo, the icons and the type faces.
+ *
+ * Unauthenticated, because the sign-in page needs them before there is a
+ * session — see `src/assets.ts` for why that is not a hole in the gate. Served
+ * with a one-year immutable cache so a phone in the song school downloads them
+ * once and never again.
+ */
+app.get("/asset/:name", (c) => {
+  const response = serveAsset(c.req.param("name"));
+  return response ?? c.notFound();
+});
 
 // ---------------------------------------------------------------------------
 // Sign in
