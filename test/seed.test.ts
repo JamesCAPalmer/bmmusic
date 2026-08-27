@@ -25,6 +25,17 @@ import { canonicalComposer, canonicalTitle, formatAccession, parseAccession, spl
 const SEED_PATH = join(import.meta.dirname, "..", "data", "seed", "bm-music-draft-index.csv");
 const SEED_CSV = readFileSync(SEED_PATH, "utf8");
 
+/**
+ * The shape of the committed cut of the draft index, as two numbers.
+ *
+ * James re-photographs the shelves and replaces the CSV; when he does, these are
+ * the only two lines to change. Keeping them here rather than scattered through
+ * the assertions is what turns "the index moved on" from a hunt through four
+ * failing tests into a one-line edit. Index v2: 410 rows, 69 multi-title.
+ */
+const SEED_ROWS = 410;
+const SEED_MULTI_TITLE_PARCELS = 69;
+
 // ---------------------------------------------------------------------------
 
 describe("CSV reading", () => {
@@ -267,8 +278,8 @@ describe("the real committed draft index", () => {
   const drafts = rows.map(toDraftPiece);
 
   it("reads every row", () => {
-    expect(rows.length).toBe(324);
-    expect(drafts.length).toBe(324);
+    expect(rows.length).toBe(SEED_ROWS);
+    expect(drafts.length).toBe(SEED_ROWS);
   });
 
   it("gives every row a ref, a composer and a title", () => {
@@ -279,9 +290,9 @@ describe("the real committed draft index", () => {
     }
   });
 
-  it("finds the 65 multi-title parcels and splits them", () => {
+  it("finds the multi-title parcels and splits them", () => {
     const multi = drafts.filter((d) => d.aliases.length > 0);
-    expect(multi.length).toBe(65);
+    expect(multi.length).toBe(SEED_MULTI_TITLE_PARCELS);
     const batten = drafts.find((d) => d.legacyRef === "D-026")!;
     expect(batten.aliases.map((a) => a.altName)).toEqual([
       "O sing joyfully",
@@ -293,7 +304,7 @@ describe("the real committed draft index", () => {
   it("imports the whole file cleanly, with nothing rejected", () => {
     const plan = planImport(drafts, []);
     expect(plan.rejected).toEqual([]);
-    expect(plan.insert).toHaveLength(324);
+    expect(plan.insert).toHaveLength(SEED_ROWS);
   });
 
   // The one that matters: re-running the same file changes nothing.
@@ -315,7 +326,7 @@ describe("the real committed draft index", () => {
     expect(second.insert).toHaveLength(0);
     expect(second.update).toHaveLength(0);
     expect(second.rejected).toEqual([]);
-    expect(second.unchanged).toHaveLength(324);
+    expect(second.unchanged).toHaveLength(SEED_ROWS);
   });
 
   it("flags a good number of rows, but not all of them", () => {
@@ -328,5 +339,27 @@ describe("the real committed draft index", () => {
 
   it("refuses a file missing the columns it needs", () => {
     expect(() => parseSeedCsv("composer,titles\nBYRD,Ave verum\n")).toThrow(SeedError);
+  });
+
+  // Index v2 added composer_full, surname and season. The reader takes the
+  // columns it names and ignores the rest by design, which is what lets a new
+  // cut of the index carry extra columns without the importer needing to know
+  // about them first. This pins that, so a future cut adding a column cannot
+  // quietly break the parse.
+  it("takes a cut of the index carrying columns it does not know about", () => {
+    const rows = parseSeedCsv(
+      "ref,composer,composer_full,surname,season,titles,category,handwritten,confidence,source_photos,flags,invented\n" +
+        "D-001,ADAMS,Thomas Adams,Adams,harvest,Is it not wheat harvest today?,anthem,yes,0.95,IMG_4285,,nonsense\n"
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.ref).toBe("D-001");
+    expect(rows[0]!.titles).toBe("Is it not wheat harvest today?");
+  });
+
+  it("reads the v2 columns off the real committed file", () => {
+    const raw = parseCsvObjects(SEED_CSV);
+    for (const key of ["composer_full", "surname", "season"]) {
+      expect(Object.keys(raw[0]!), `the committed index has no ${key} column`).toContain(key);
+    }
   });
 });
