@@ -32,7 +32,11 @@ import type {
 } from "./catalogue";
 import type { ImportSummary } from "./seed";
 import type { ExtractedLabel } from "./extract";
-import { slotLabel, type IngestSummary, type ServiceMusicWithPiece } from "./services";
+import { slotLabel, type IngestSummary, type ServiceMusicWithPiece, type ServiceRow } from "./services";
+import { isMatchable, type Slot } from "./matcher";
+import { copiesRag, ragLabel, ragPill, worstRag } from "./rag";
+import { allBinders, type DescantResult } from "./descants";
+import type { FeedbackRow, ScanSubmissionRow } from "./submissions";
 
 // ---------------------------------------------------------------------------
 // Escaping and small helpers
@@ -212,20 +216,75 @@ const STYLES = `
   .portal .choice .g { display: block; font-size: 0.88rem; color: var(--colour-muted); }
   .portal .choice strong { font-weight: 700; }
   @media print { .navbar, .no-print { display: none !important; } body { background: #fff; } }
+
+  /* A beta chip says "this is new and may misbehave" without a paragraph of
+     apology. Amber rather than red: it works, it is just not settled. */
+  .beta { display: inline-block; padding: 0.05rem 0.45rem; border-radius: var(--radius-pill);
+          font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+          background: var(--colour-pill-amber-bg); color: var(--colour-pill-amber-ink);
+          vertical-align: middle; margin-left: 0.35rem; }
+
+  /* The service list: a slot label, then what the list said, then what we
+     matched it to. Reads down the page like an order of service. */
+  .music { list-style: none; padding: 0; margin: 0; }
+  .music li { display: grid; grid-template-columns: 7.5rem 1fr; gap: 0.2rem 0.9rem;
+              padding: 0.6rem 0; border-bottom: 1px solid var(--colour-border-subtle); }
+  .music li:last-child { border-bottom: 0; }
+  .music .slot { color: var(--colour-muted); font-size: 0.85rem; text-transform: uppercase;
+                 letter-spacing: 0.04em; padding-top: 0.15rem; }
+  .music .said { font-size: 1.05rem; }
+  .music .matched { font-size: 0.88rem; color: var(--colour-subtle); }
+  @media (max-width: 34rem) {
+    .music li { grid-template-columns: 1fr; }
+    .music .slot { padding-top: 0; }
+  }
+
+  .service-head { display: flex; align-items: baseline; justify-content: space-between;
+                  gap: 0.5rem 1rem; flex-wrap: wrap; }
+  .rail { display: flex; gap: 0.6rem; overflow-x: auto; padding: 0.2rem 0 0.6rem; }
+  .rail a { flex: 0 0 auto; max-width: 14rem; border: 1px solid var(--colour-border);
+            border-radius: var(--radius-lg); padding: 0.6rem 0.8rem; text-decoration: none;
+            background: var(--colour-surface); color: var(--colour-ink); }
+  .rail a .t { font-family: var(--type-family-display); font-weight: 700; display: block; }
+  .rail a .c { font-size: 0.85rem; color: var(--colour-muted); }
+
+  /* Feedback widget — ported from bmcompanion. Floating button bottom-right,
+     slide-up panel. Hidden from print and from the page's flow. */
+  .fb-btn { position: fixed; right: 1rem; bottom: 1rem; z-index: 40; border-radius: var(--radius-pill);
+            padding: 0.6rem 1.05rem; box-shadow: var(--shadow-raised); font-size: 0.95rem; }
+  .fb-panel { position: fixed; right: 1rem; bottom: 4.2rem; z-index: 41; width: min(23rem, calc(100vw - 2rem));
+              background: var(--colour-surface); border: 1px solid var(--colour-border);
+              border-radius: var(--radius-xl); box-shadow: var(--shadow-raised); padding: 1rem; }
+  .fb-panel h2 { margin-top: 0; font-size: 1.05rem; }
+  .fb-panel .field { margin-bottom: 0.6rem; }
+  .fb-panel textarea { min-height: 5rem; }
+  /* The honeypot. Off-screen rather than display:none, which some bots skip. */
+  .fb-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  @media print { .fb-btn, .fb-panel { display: none !important; } }
 `;
 
 interface PageOptions {
   /** Which nav item to highlight. */
-  nav?: "browse" | "portal" | "admin";
+  nav?: "browse" | "portal" | "admin" | "home";
   /** Admin pages get the admin nav instead of the choir one. */
   admin?: boolean;
   /** Login page has no nav at all. */
   chrome?: boolean;
+  /** Path the feedback widget reports as the page it was opened on. */
+  path?: string;
+}
+
+/** The amber "beta" chip (Milestone 2). Used wherever a feature is new. */
+export function betaChip(): string {
+  return `<span class="beta" title="New — it may not be perfect yet">beta</span>`;
 }
 
 function page(title: string, bodyHtml: string, opts: PageOptions = {}): string {
   const chrome = opts.chrome !== false;
   const navbar = chrome ? navFor(opts) : "";
+  // The login page has no widget: somebody who cannot get in has nothing to
+  // report but that, and there is no session to attach it to anyway.
+  const feedback = chrome ? feedbackWidget(opts.path ?? "") : "";
   return `<!doctype html>
 <html lang="en-GB">
 <head>
@@ -239,9 +298,98 @@ function page(title: string, bodyHtml: string, opts: PageOptions = {}): string {
 <body>
 ${navbar}
 ${bodyHtml}
+${feedback}
 </body>
 </html>`;
 }
+
+/**
+ * The feedback widget, on every page, choir side and admin.
+ *
+ * Ported from bmcompanion: floating button, slide-up panel, the page it was
+ * opened on carried in a hidden field, and a honeypot named `company` that a
+ * person never sees and a bot fills in.
+ *
+ * No name field and no email field. This is a choir-side app used by children,
+ * and collecting either would be collecting personal data to no purpose —
+ * James wants to know the page is broken, not who noticed.
+ */
+function feedbackWidget(path: string): string {
+  return `<button type="button" class="fb-btn no-print" id="fb-open">Feedback</button>
+<div class="fb-panel hidden no-print" id="fb-panel" role="dialog" aria-label="Send feedback">
+  <h2>Something wrong, or an idea?</h2>
+  <form id="fb-form">
+    <input type="hidden" name="page" value="${esc(path)}">
+    <div class="fb-hp" aria-hidden="true">
+      <label for="fb-company">Company</label>
+      <input type="text" id="fb-company" name="company" tabindex="-1" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="fb-category">What is it about?</label>
+      <select id="fb-category" name="category">
+        <option value="wrong">Something here is wrong</option>
+        <option value="broken">Something does not work</option>
+        <option value="missing">Something is missing</option>
+        <option value="idea">An idea</option>
+        <option value="other">Something else</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="fb-message">Tell us about it</label>
+      <textarea id="fb-message" name="message" rows="4" required
+        placeholder="As much or as little as you like."></textarea>
+    </div>
+    <button type="submit" id="fb-send">Send</button>
+    <button type="button" class="secondary" id="fb-close">Close</button>
+    <p class="muted small" id="fb-status" style="margin-bottom:0"></p>
+  </form>
+</div>
+<script>${FEEDBACK_SCRIPT}</script>`;
+}
+
+/**
+ * The widget's behaviour.
+ *
+ * Progressive enhancement in the sense that matters: if the script does not
+ * run, the button simply is not there, and nothing else on the page depends on
+ * it. Every message written with `textContent`, never innerHTML.
+ */
+const FEEDBACK_SCRIPT = String.raw`
+(function () {
+  var open = document.getElementById('fb-open');
+  var panel = document.getElementById('fb-panel');
+  var form = document.getElementById('fb-form');
+  if (!open || !panel || !form) return;
+  var statusEl = document.getElementById('fb-status');
+  var send = document.getElementById('fb-send');
+
+  function show(on) {
+    panel.classList.toggle('hidden', !on);
+    if (on) document.getElementById('fb-message').focus();
+  }
+  open.addEventListener('click', function () { show(panel.classList.contains('hidden')); });
+  document.getElementById('fb-close').addEventListener('click', function () { show(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') show(false); });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var data = new FormData(form);
+    send.disabled = true;
+    statusEl.textContent = 'Sending…';
+
+    fetch('/api/feedback', { method: 'POST', body: data }).then(function (r) {
+      send.disabled = false;
+      if (!r.ok) { statusEl.textContent = 'That did not send. Please try again in a moment.'; return; }
+      form.reset();
+      statusEl.textContent = 'Thank you — that has gone to James.';
+      setTimeout(function () { show(false); statusEl.textContent = ''; }, 2200);
+    }).catch(function () {
+      send.disabled = false;
+      statusEl.textContent = 'Could not reach the server. Please try again in a moment.';
+    });
+  });
+})();
+`;
 
 function navFor(opts: PageOptions): string {
   const item = (href: string, label: string, key: string) =>
@@ -253,8 +401,10 @@ function navFor(opts: PageOptions): string {
       <nav class="nav-actions">
         <a href="/admin/review">Review queue</a>
         <a href="/admin/services">Music lists</a>
+        <a href="/admin/scans">Scans</a>
+        <a href="/admin/feedback">Feedback</a>
         <a href="/admin/intake">Photo intake</a>
-        <a href="/admin/import">Import draft index</a>
+        <a href="/admin/import">Import</a>
         <a href="/">Choir view</a>
       </nav>
     </header>`;
@@ -262,7 +412,8 @@ function navFor(opts: PageOptions): string {
   return `<header class="navbar no-print">
     <a href="/" class="brand">${esc(CHURCH.appName)} <span class="where">${esc(CHURCH.library.location)}</span></a>
     <nav class="nav-actions">
-      ${item("/", "Browse", "browse")}
+      ${item("/", "Home", "home")}
+      ${item("/music", "Browse", "browse")}
       ${item("/portal", "Count a parcel", "portal")}
       <a href="/logout">Sign out</a>
     </nav>
@@ -299,6 +450,256 @@ export function loginPage(failed = false): string {
 }
 
 // ---------------------------------------------------------------------------
+// Choir — home (15A)
+// ---------------------------------------------------------------------------
+
+export interface HomeService {
+  service: ServiceRow;
+  music: ServiceMusicWithPiece[];
+  typicalSingers: number | null;
+}
+
+/**
+ * The home screen: what we are singing next, then what is coming, then what is
+ * new — and search one tap away throughout.
+ *
+ * The order is the order a chorister actually wants it in. Somebody opening
+ * this on the bus is nearly always asking "what's on tonight and have I looked
+ * at the anthem?", so that goes at the top with its music list already open
+ * rather than behind a link.
+ */
+export function homePage(
+  next: HomeService | null,
+  upcoming: ServiceRow[],
+  recent: PieceWithHolding[]
+): string {
+  const nextCard = next
+    ? `<div class="card">
+         <div class="service-head">
+           <h2 style="margin:0">${esc(next.service.title)}</h2>
+           <span class="muted">${esc(prettyDate(next.service.service_date))}${
+             next.service.service_time ? ` · ${esc(next.service.service_time)}` : ""
+           }</span>
+         </div>
+         ${
+           next.service.designation
+             ? `<p class="muted small" style="margin:0.2rem 0 0.6rem">${esc(next.service.designation)}</p>`
+             : ""
+         }
+         ${musicList(next.music, next.typicalSingers, next.service.designation)}
+         <p style="margin-bottom:0"><a class="btn secondary" href="/service/${next.service.id}">Open this service</a></p>
+       </div>`
+    : `<div class="card">
+         <h2>Nothing coming up yet</h2>
+         <p class="muted">The music list for the next service has not reached us yet. It arrives from the
+            Minster's service app and updates by itself — there is nothing for you to do.</p>
+       </div>`;
+
+  const later = upcoming.length
+    ? `<div class="card">
+         <h2>Later this term</h2>
+         <ul class="results">
+           ${upcoming
+             .map(
+               (s) => `<li>
+                 <a class="title" href="/service/${s.id}">${esc(s.title)}</a>
+                 <div class="meta">${esc(prettyDate(s.service_date))}${
+                   s.service_time ? ` · ${esc(s.service_time)}` : ""
+                 }${s.designation ? ` · ${esc(s.designation)}` : ""}</div>
+               </li>`
+             )
+             .join("")}
+         </ul>
+       </div>`
+    : "";
+
+  const rail = recent.length
+    ? `<div class="card">
+         <h2>Recently added</h2>
+         <div class="rail">
+           ${recent
+             .map(
+               (p) => `<a href="/piece/${p.id}">
+                 <span class="t">${esc(p.title.length > 44 ? `${p.title.slice(0, 43)}…` : p.title)}</span>
+                 <span class="c">${esc(p.composer)}</span>
+               </a>`
+             )
+             .join("")}
+         </div>
+       </div>`
+    : "";
+
+  return page(
+    `${CHURCH.appName}`,
+    `<h1>The music library<span class="sub">${esc(CHURCH.name)} — for the choir</span></h1>
+
+     <div class="card">
+       <form method="GET" action="/music">
+         <div class="field" style="margin:0">
+           <label for="q">Find a piece</label>
+           <input type="search" id="q" name="q" placeholder="Composer, title or accession number">
+         </div>
+         <p class="small muted" style="margin:0.5rem 0 0">
+           <a href="/music">Browse everything</a> · <a href="/descants">Find a descant</a>
+         </p>
+       </form>
+     </div>
+
+     <h2>Next</h2>
+     ${nextCard}
+     ${later}
+     ${rail}`,
+    { nav: "home", path: "/" }
+  );
+}
+
+/**
+ * One service's music list, with the copies RAG against each matched piece.
+ *
+ * Every line shows what the music list actually said, whether or not we matched
+ * it. That is deliberate: the list is the truth about what is being sung, and a
+ * line we could not find a parcel for still needs to be on the page.
+ */
+function musicList(
+  music: ServiceMusicWithPiece[],
+  typicalSingers: number | null,
+  designation: string | null
+): string {
+  if (!music.length) return `<p class="muted">No music has been published for this service yet.</p>`;
+
+  return `<ul class="music">
+      ${music
+        .map((line) => {
+          const matched = line.piece_id
+            ? `<a href="/piece/${line.piece_id}">${esc(line.piece_title ?? "in the library")}</a>${
+                line.match_state === "auto" ? ` <span class="pill grey">not checked</span>` : ""
+              }`
+            : "";
+
+          // Only matched, matchable lines get a RAG. A psalm number has no
+          // copies to count, and an unmatched line has no parcel to count them
+          // in — a pill on either would be a number about nothing.
+          const rag =
+            line.piece_id && isMatchable(line.slot as Slot)
+              ? copiesRag({
+                  copiesUsable: line.copies_usable,
+                  typicalSingers,
+                  designation,
+                })
+              : null;
+
+          const ragPill_ = rag
+            ? `<span class="pill ${ragPill(rag.state)}" title="${esc(rag.reason)}">${esc(ragLabel(rag.state))}</span>`
+            : "";
+
+          return `<li>
+              <span class="slot">${esc(slotLabel(line.slot))}</span>
+              <span>
+                <span class="said">${esc(line.raw_text)}</span>
+                ${matched || ragPill_ ? `<div class="matched">${matched} ${ragPill_}</div>` : ""}
+              </span>
+            </li>`;
+        })
+        .join("")}
+    </ul>`;
+}
+
+/**
+ * One service in full: its music, the copies RAG, and the booklet if there is
+ * one.
+ */
+export function servicePage(
+  service: ServiceRow,
+  music: ServiceMusicWithPiece[],
+  typicalSingers: number | null,
+  booklet: { id: number; ref: string } | null,
+  workingCopyMessage?: string
+): string {
+  const states = music
+    .filter((l) => l.piece_id && isMatchable(l.slot as Slot))
+    .map((l) => copiesRag({ copiesUsable: l.copies_usable, typicalSingers, designation: service.designation }).state);
+  const overall = worstRag(states);
+
+  const ragSummary =
+    typicalSingers === null
+      ? `<p class="muted small">We have not recorded how many singers${
+          service.designation ? ` "${esc(service.designation)}"` : " this service"
+        } usually means, so the copy checks below are grey rather than wrong.
+        ${esc(CHURCH.contact.maintainer.shortName)} can fill that in on the librarian's side.</p>`
+      : `<p class="small">Copies overall:
+          <span class="pill ${ragPill(overall)}">${esc(ragLabel(overall))}</span></p>`;
+
+  return page(
+    `${service.title} — ${CHURCH.appName}`,
+    `<p class="crumb"><a href="/">← Home</a></p>
+     <h1>${esc(service.title)}<span class="sub">${esc(prettyDate(service.service_date))}${
+       service.service_time ? ` · ${esc(service.service_time)}` : ""
+     }${service.designation ? ` · ${esc(service.designation)}` : ""}</span></h1>
+
+     <div class="card">
+       ${ragSummary}
+       ${musicList(music, typicalSingers, service.designation)}
+     </div>
+
+     <div class="card no-print">
+       <h2>Working copy ${betaChip()}</h2>
+       <p class="muted">Joins this service's reference scans into one PDF to read in a rehearsal.
+          Only music that has been scanned and approved goes in, so it may not be the whole list.</p>
+       ${workingCopyMessage ? `<div class="notice">${esc(workingCopyMessage)}</div>` : ""}
+       <p><a class="btn secondary" href="/service/${service.id}/working-copy">Make a working copy</a></p>
+       ${
+         booklet
+           ? `<p class="small"><a href="/booklet/${booklet.id}">Booklet ${esc(booklet.ref)}</a> is already made for this service.</p>`
+           : ""
+       }
+     </div>`,
+    { nav: "home", path: `/service/${service.id}` }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Choir — the descant finder (H4)
+// ---------------------------------------------------------------------------
+
+export function descantPage(query: string, result: DescantResult | null): string {
+  const answer = result
+    ? result.found
+      ? `<div class="notice ok">
+           <p style="font-size:1.25rem;margin:0">Hymn ${result.answer.hymn} —
+              binder <strong>${esc(result.answer.binder)}</strong></p>
+           <p class="small" style="margin-bottom:0">${esc(result.answer.note ?? "")}</p>
+         </div>`
+      : `<div class="notice">
+           <p style="margin:0">${esc(result.miss.reason)}</p>
+         </div>`
+    : "";
+
+  return page(
+    `Find a descant — ${CHURCH.appName}`,
+    `<p class="crumb"><a href="/">← Home</a></p>
+     <h1>Find a descant<span class="sub">Which binder holds it</span></h1>
+     <div class="card">
+       <form method="GET" action="/descants">
+         <div class="field">
+           <label for="hymn">Hymn number</label>
+           <input type="search" id="hymn" name="hymn" value="${esc(query)}" inputmode="numeric"
+                  placeholder="e.g. 85" autofocus>
+         </div>
+         <button type="submit">Find it</button>
+       </form>
+     </div>
+     ${answer}
+     <div class="card">
+       <h2>What is on the shelf</h2>
+       <p class="muted small">The descants are not catalogued one by one — they live in these binders,
+          indexed by hymn number.</p>
+       <p>${allBinders().map((b) => `<span class="pill grey">${esc(b)}</span>`).join(" ")}</p>
+     </div>`,
+    { nav: "home", path: "/descants" }
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Choir — browse and search
 // ---------------------------------------------------------------------------
 
@@ -316,7 +717,7 @@ export function browsePage(
     )
     .join("");
 
-  const filters = `<form method="GET" action="/" class="filters">
+  const filters = `<form method="GET" action="/music" class="filters">
       <div class="field" style="margin:0">
         <label for="q">Search</label>
         <input type="search" id="q" name="q" value="${esc(query.q ?? "")}"
@@ -339,7 +740,7 @@ export function browsePage(
     : `${result.total} ${result.total === 1 ? "piece" : "pieces"} in the library`;
 
   const body = result.pieces.length
-    ? `<ul class="results">${result.pieces.map(resultRow).join("")}</ul>${pager("/", query, result)}`
+    ? `<ul class="results">${result.pieces.map(resultRow).join("")}</ul>${pager("/music", query, result)}`
     : `<p class="muted">${
         isFiltered
           ? "Nothing matched that. Try a shorter search — one word of the title, or just the composer's surname."
@@ -348,11 +749,13 @@ export function browsePage(
 
   return page(
     `${CHURCH.appName}`,
-    `<h1>The music library<span class="sub">${esc(CHURCH.name)} — ${esc(CHURCH.library.location)}</span></h1>
+    `<p class="crumb"><a href="/">← Home</a></p>
+     <h1>The music library<span class="sub">${esc(CHURCH.name)} — ${esc(CHURCH.library.location)}</span></h1>
      <div class="card">${filters}</div>
+     <p class="small muted"><a href="/descants">Find a descant</a> — which binder holds a hymn descant.</p>
      <h2>${esc(heading)}</h2>
      ${body}`,
-    { nav: "browse" }
+    { nav: "browse", path: "/music" }
   );
 }
 
@@ -402,7 +805,34 @@ function pager(path: string, query: SearchQuery, result: SearchResult): string {
 // Choir — one piece
 // ---------------------------------------------------------------------------
 
-export function itemPage(detail: PieceDetail): string {
+const SEASON_LABEL = new Map(CHURCH.seasons.map((s) => [s.value, s.label]));
+
+/** Season tags as chips, in the order they were stored (church-year order). */
+function seasonChips(season: string | null): string {
+  if (!season) return '<span class="muted">Not recorded</span>';
+  const chips = season
+    .split(";")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => `<span class="pill violet">${esc(SEASON_LABEL.get(t) ?? t)}</span>`);
+  return chips.length ? chips.join(" ") : '<span class="muted">Not recorded</span>';
+}
+
+/** Where the parcel physically is: door and shelf, falling back to free text. */
+function whereItLives(piece: PieceWithHolding): string {
+  if (piece.location_door) {
+    const shelf = piece.location_shelf ? `, shelf ${piece.location_shelf}` : "";
+    return `Door ${esc(piece.location_door)}${esc(shelf)}`;
+  }
+  if (piece.location) return esc(piece.location);
+  return `<span class="muted">Not recorded — ${esc(CHURCH.library.location)}</span>`;
+}
+
+export function itemPage(
+  detail: PieceDetail,
+  sung: { service_date: string; title: string; service_id: number }[] = [],
+  scanMessage?: { ok: boolean; text: string }
+): string {
   const { piece, aliases, holdings, files, performances } = detail;
 
   const draftNotice = !piece.reviewed_at
@@ -415,10 +845,16 @@ export function itemPage(detail: PieceDetail): string {
        </div>`
     : "";
 
+  // The composer written out, where we have it — the parcel label shouts a
+  // surname, and "STANFORD" is not what anybody calls him.
+  const composerLine = piece.composer_full && piece.composer_full !== piece.composer
+    ? `${esc(piece.composer_full)}`
+    : `${esc(piece.composer)}`;
+
   return page(
     `${piece.title} — ${CHURCH.appName}`,
-    `<p class="crumb"><a href="/">← All music</a></p>
-     <h1>${esc(piece.title)}<span class="sub">${esc(piece.composer)}</span></h1>
+    `<p class="crumb"><a href="/music">← All music</a></p>
+     <h1>${esc(piece.title)}<span class="sub">${composerLine}</span></h1>
      ${draftNotice}
      <div class="card">
        <dl class="dl">
@@ -427,10 +863,8 @@ export function itemPage(detail: PieceDetail): string {
          }</dd>
          <dt>Category</dt><dd>${esc(categoryLabel(piece.category))}</dd>
          <dt>Voicing</dt><dd>${piece.voicing ? esc(piece.voicing) : '<span class="muted">Not recorded</span>'}</dd>
-         <dt>Season</dt><dd>${piece.season ? esc(piece.season) : '<span class="muted">Not recorded</span>'}</dd>
-         <dt>Where it lives</dt><dd>${
-           piece.location ? esc(piece.location) : `<span class="muted">Not recorded — ${esc(CHURCH.library.location)}</span>`
-         }</dd>
+         <dt>Season</dt><dd>${seasonChips(piece.season)}</dd>
+         <dt>Where it lives</dt><dd>${whereItLives(piece)}</dd>
          ${aliases.length ? `<dt>Also known as</dt><dd>${aliases.map((a: AliasRow) => esc(a.alt_name)).join("<br>")}</dd>` : ""}
          ${piece.notes ? `<dt>Notes</dt><dd>${esc(piece.notes)}</dd>` : ""}
        </dl>
@@ -438,11 +872,75 @@ export function itemPage(detail: PieceDetail): string {
 
      ${holdingsSection(holdings, piece)}
      ${filesSection(files)}
+     ${scanUploadSection(piece, scanMessage)}
+     ${sungAtSection(sung)}
      ${performanceSection(performances)}
 
      <p class="no-print"><a class="btn secondary" href="/portal/count/${piece.id}">Count this parcel</a></p>`,
-    { nav: "browse" }
+    { nav: "browse", path: `/piece/${piece.id}` }
   );
+}
+
+/**
+ * "Scan this with your phone" (18A, **beta**).
+ *
+ * A chorister photographs the copy in front of them and it lands as a *pending*
+ * submission — invisible to everybody else until an admin approves it. That
+ * gate is the whole feature: these are photographs of somebody's marked-up
+ * working copy, and the choir side must never surface one nobody has looked at.
+ */
+function scanUploadSection(piece: PieceWithHolding, message?: { ok: boolean; text: string }): string {
+  return `<div class="card no-print">
+      <h2>Scan this with your phone ${betaChip()}</h2>
+      <p class="muted">If you have a copy in front of you, photographing it helps everybody —
+         one good copy of each piece is all the library needs. Lay it flat, get the whole page in,
+         and take one photo per page.</p>
+      ${message ? `<div class="notice ${message.ok ? "ok" : "error"}"><p style="margin:0">${esc(message.text)}</p></div>` : ""}
+      <form method="POST" action="/piece/${piece.id}/scan" enctype="multipart/form-data">
+        <div class="field">
+          <label for="scan">Photos of the copy</label>
+          <input type="file" id="scan" name="scan" accept="image/*" capture="environment" multiple required>
+        </div>
+        <div class="field">
+          <label for="scan-label">Anything worth saying about it?</label>
+          <input type="text" id="scan-label" name="submitted_label"
+                 placeholder="e.g. the tenor copy, pages 1–4 only">
+        </div>
+        <button type="submit" class="secondary">Send these in</button>
+      </form>
+      <p class="muted small">Nobody else sees these until ${esc(CHURCH.contact.maintainer.shortName)}
+         has looked at them.</p>
+    </div>`;
+}
+
+/**
+ * When we last sang it (H3), from confirmed music-list matches only.
+ *
+ * An 'auto' guess has no business on this list: it would be presenting the
+ * matcher's opinion as the choir's history.
+ */
+function sungAtSection(sung: { service_date: string; title: string; service_id: number }[]): string {
+  if (!sung.length) return "";
+  const [latest, ...rest] = sung;
+  return `<div class="card">
+      <h2>When we last sang it</h2>
+      <p style="font-size:1.1rem;margin:0.2rem 0">
+        <a href="/service/${latest!.service_id}">${esc(prettyDate(latest!.service_date))}</a>
+        <span class="muted">— ${esc(latest!.title)}</span>
+      </p>
+      ${
+        rest.length
+          ? `<details><summary class="muted small">Before that (${rest.length})</summary>
+               <ul>${rest
+                 .map(
+                   (s) =>
+                     `<li><a href="/service/${s.service_id}">${esc(prettyDate(s.service_date))}</a> — ${esc(s.title)}</li>`
+                 )
+                 .join("")}</ul>
+             </details>`
+          : ""
+      }
+    </div>`;
 }
 
 function holdingsSection(holdings: HoldingRow[], piece: PieceWithHolding): string {
@@ -1323,6 +1821,86 @@ export function adminFeedResultPage(
      <p><a class="btn" href="/admin/services">Check the music lists</a></p>
      <p><a href="/admin">← Back to the librarian's page</a></p>`,
     { admin: true }
+  );
+}
+
+// --- Feedback and crowd scans ------------------------------------------------
+
+export function adminFeedbackPage(items: FeedbackRow[]): string {
+  const open = items.filter((f) => !f.resolved_at);
+  const done = items.filter((f) => f.resolved_at);
+
+  const row = (f: FeedbackRow) => `<div class="card">
+      <p class="muted small" style="margin-top:0">
+        ${esc(prettyDate(f.at))}${f.page ? ` · ${esc(f.page)}` : ""}${f.category ? ` · ${esc(f.category)}` : ""}
+      </p>
+      <p style="white-space:pre-wrap;margin:0.3rem 0">${esc(f.message)}</p>
+      ${
+        f.resolved_at
+          ? `<p class="muted small" style="margin-bottom:0">Dealt with ${esc(prettyDate(f.resolved_at))}${
+              f.resolved_by ? ` by ${esc(f.resolved_by)}` : ""
+            }.</p>`
+          : `<form method="POST" action="/admin/feedback/${f.id}">
+               <button type="submit" class="secondary">Mark as dealt with</button>
+             </form>`
+      }
+      ${f.ua ? `<details><summary class="muted small">Browser</summary><p class="small muted">${esc(f.ua)}</p></details>` : ""}
+    </div>`;
+
+  return page(
+    `Feedback — ${CHURCH.appName}`,
+    `<h1>Feedback<span class="sub">${open.length} to look at</span></h1>
+     ${
+       items.length
+         ? `${open.map(row).join("")}
+            ${done.length ? `<h2>Already dealt with</h2>${done.map(row).join("")}` : ""}`
+         : `<div class="notice ok"><p>Nothing has been sent in yet.</p></div>`
+     }
+     <p><a href="/admin">← Back to the librarian's page</a></p>`,
+    { admin: true, path: "/admin/feedback" }
+  );
+}
+
+/**
+ * The crowd-scan approval queue.
+ *
+ * Nothing here is visible to the choir. Approving writes a `file` row, which is
+ * the moment it becomes readable — so this screen is the gate, and it shows the
+ * photograph rather than making somebody approve a filename.
+ */
+export function adminScanQueuePage(items: ScanSubmissionRow[]): string {
+  if (!items.length) {
+    return page(
+      `Scans sent in — ${CHURCH.appName}`,
+      `<h1>Scans sent in</h1>
+       <div class="notice ok"><p>Nothing waiting. Everything sent in has been looked at.</p></div>
+       <p><a href="/admin">← Back to the librarian's page</a></p>`,
+      { admin: true, path: "/admin/scans" }
+    );
+  }
+
+  return page(
+    `Scans sent in — ${CHURCH.appName}`,
+    `<h1>Scans sent in<span class="sub">${items.length} waiting ${betaChip()}</span></h1>
+     <p class="muted">Choristers photographed these on their phones. Nothing here is visible to anybody
+        else until you approve it — approving is what turns it into a reference scan.</p>
+     ${items
+       .map(
+         (s) => `<div class="card">
+           <p class="muted small" style="margin-top:0">${esc(prettyDate(s.at))}${
+             s.submitted_label ? ` · “${esc(s.submitted_label)}”` : ""
+           }</p>
+           <p style="margin:0.2rem 0"><a href="/piece/${s.piece_id}"><strong>${esc(s.piece_title)}</strong></a>
+              — ${esc(s.piece_composer)}</p>
+           <p><a href="/admin/scans/${s.id}/preview" target="_blank" rel="noopener">Look at this photo</a></p>
+           <form method="POST" action="/admin/scans/${s.id}">
+             <button type="submit" name="action" value="approve" class="confirm">Approve</button>
+             <button type="submit" name="action" value="reject" class="secondary">Reject</button>
+           </form>
+         </div>`
+       )
+       .join("")}`,
+    { admin: true, path: "/admin/scans" }
   );
 }
 

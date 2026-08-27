@@ -18,13 +18,28 @@ and `robots.txt` disallows everything.
 
 | | |
 | --- | --- |
-| **Choir** | Browse and search by composer, title, category and voicing; an item page with copy counts and where the parcel lives. |
+| **Choir** | A home screen showing the next service with its music list and copies RAG; browse and search by composer, title, category and voicing; a piece page with copy counts, season, where the parcel lives, when we last sang it, and its reference scans. A descant finder. |
 | **Volunteers** | A phone-shaped portal for counting a parcel: totals, condition, voicing, notes. |
-| **Librarian** (`/admin`) | The review queue for draft entries, accession numbering, an item editor, photo intake, and the draft-index importer. |
+| **Librarian** (`/admin`) | The review queue for draft entries, the music-list match queue, the crowd-scan approval queue, feedback, accession numbering, an item editor, photo intake, and the draft-index importer. |
 
-Phase 0 does not include PDF viewing, performance history, YouTube mining,
-booklet building, or the pinch-point warnings. The item page marks where those
-will go.
+Services and their music lists arrive from bmserviceapp's feed on an hourly
+cron. bmmusic never fetches or parses the Minster's music-list document itself
+— see `docs/FEED.md`, and the data boundary at the end of this file.
+
+### Beta features
+
+Marked in the interface with an amber **beta** chip, and built to fail soft: if
+one of these cannot do its job, it says so in a sentence and the rest of the
+page carries on working.
+
+- **Working copies** — a service's approved reference scans joined into one
+  watermarked PDF for rehearsal.
+- **Scan this with your phone** — a chorister photographs a copy; it is invisible
+  to everybody else until an admin approves it.
+
+Not yet built: the label PDFs, people and attendance, reports, bulk edit, and
+the repertoire picker. The proper booklet builder with the Minster cover
+template stays a Phase 3 job.
 
 ## Layout
 
@@ -37,10 +52,23 @@ src/auth.ts            the choir password gate and the Access gate
 src/catalogue.ts       all the D1
 src/seed.ts            the draft-index importer
 src/extract.ts         label reading (Anthropic), and its fallback
+src/feed.ts            reading bmserviceapp's music feed (pure)
+src/matcher.ts         matching a music-list line to a parcel (pure)
+src/services.ts        services, music lists and the matcher's memory — the D1 half
+src/rag.ts             the copies RAG (pure)
+src/descants.ts        which binder holds a hymn descant (pure)
+src/submissions.ts     crowd scans, feedback and booklets
+src/workingcopy.ts     joining reference scans into one PDF
+src/audit.ts           who changed what
 migrations/            the D1 schema
 data/seed/             the committed draft index
 docs/PIPELINE.md       how music gets in, and the label-reading prompt
+docs/FEED.md           the music feed contract, and what the matcher achieves
 ```
+
+The pure modules — `feed`, `matcher`, `rag`, `descants` — hold no D1 and make no
+network calls, which is what lets them be tested directly against real feed
+lines rather than against tidied-up examples.
 
 A fork of this app for another church edits `church.config.ts` and `theme.ts`
 and nothing else. If a third file needs touching, a fact has leaked out of

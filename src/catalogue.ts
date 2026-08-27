@@ -649,6 +649,61 @@ export async function addAlias(db: D1Database, pieceId: number, altName: string)
     .run();
 }
 
+/**
+ * The most recently catalogued pieces, for the home screen's rail.
+ *
+ * Newest first by creation, and reviewed pieces only: "recently added" on a
+ * chorister's home screen should not be a shop window for rows nobody has
+ * checked, where the composer may still be wrong.
+ */
+export async function recentlyAdded(db: D1Database, limit = 8): Promise<PieceWithHolding[]> {
+  const rows = await db
+    .prepare(
+      `${PIECE_WITH_HOLDING}
+        WHERE p.reviewed_at IS NOT NULL
+        ORDER BY p.created_at DESC, p.id DESC
+        LIMIT ?`
+    )
+    .bind(Math.min(Math.max(limit, 1), 50))
+    .all<PieceWithHolding>();
+  return rows.results ?? [];
+}
+
+export interface ChoirProfileRow {
+  id: number;
+  designation: string;
+  typical_singers: number | null;
+}
+
+/** Every choir designation and its size, for the RAG and the admin table. */
+export async function choirProfiles(db: D1Database): Promise<ChoirProfileRow[]> {
+  const rows = await db
+    .prepare(`SELECT id, designation, typical_singers FROM choir_profile ORDER BY designation`)
+    .all<ChoirProfileRow>();
+  return rows.results ?? [];
+}
+
+/**
+ * How many singers a designation usually means.
+ *
+ * Matched case-insensitively on the whole string. The music list publishes
+ * designations we have never seen — "Symbel choir", "Liturgy Singers", and at
+ * least once "RCSM" for the RSCM — and the right answer for those is NULL,
+ * which the RAG renders grey. Guessing at a near match would be worse: it would
+ * put a confident green tick against a number nobody has recorded.
+ */
+export async function typicalSingersFor(
+  db: D1Database,
+  designation: string | null
+): Promise<number | null> {
+  if (!designation) return null;
+  const row = await db
+    .prepare(`SELECT typical_singers FROM choir_profile WHERE LOWER(designation) = LOWER(?)`)
+    .bind(designation.trim())
+    .first<{ typical_singers: number | null }>();
+  return row?.typical_singers ?? null;
+}
+
 /** One file row, for the streaming route to resolve an id to an R2 key. */
 export async function getFile(db: D1Database, id: number): Promise<FileRow | null> {
   return db.prepare(`SELECT * FROM file WHERE id = ?`).bind(id).first<FileRow>();
