@@ -15,6 +15,14 @@ import { betaChip, categoryLabel, esc, flagPills, page, prettyDate } from "./ui"
 import type { CatalogueStats, ChoirProfileRow, PieceWithHolding, SearchQuery, SearchResult } from "./catalogue";
 import type { AuditRow } from "./audit";
 import { CHOIRS, type PersonRow, type RegisterRow } from "./people";
+import {
+  explainChoirSize,
+  singersFor,
+  ADULT_TOTAL,
+  FULL_CHOIR_TOTAL,
+  TEAM_A_TOTAL,
+  TEAM_B_TOTAL,
+} from "./choirsize";
 import type {
   ConditionCount,
   Coverage,
@@ -669,22 +677,50 @@ export function adminSettingsPage(
 
      <div class="card">
        <h2>How big each choir is</h2>
-       <p class="muted">The copies check on a service page divides these into the usable copy count.
-          Until a number is filled in, that check shows grey rather than guessing — which is why every
-          service reads grey today.</p>
+       <p class="muted">The copies check on a service page divides these into the usable copy count.</p>
+       <p class="muted small">Most of these work themselves out: "Boys and SATB" is the boys plus the
+          adults, added up from the section sizes below. Put a number in only where a term is
+          genuinely different — an entry here overrides the calculation for that designation.
+          A designation naming a visiting choir stays blank on purpose, because nobody here knows
+          how many they are bringing.</p>
        <form method="POST" action="/admin/settings/choirs">
          <div class="scroll"><table>
-           <tr><th>Designation</th><th class="num">Typical singers</th></tr>
+           <tr><th>Designation</th><th class="num">Typical singers</th><th>How it is worked out</th></tr>
            ${profiles
-             .map(
-               (p) => `<tr>
+             .map((p) => {
+               const worked = singersFor(p.designation);
+               return `<tr>
                  <td>${esc(p.designation)}</td>
                  <td class="num"><input type="number" name="singers-${p.id}" min="0" max="200"
-                      value="${p.typical_singers ?? ""}" style="width:6rem" placeholder="not known"></td>
-               </tr>`
-             )
+                      value="${p.typical_singers ?? ""}" style="width:6rem"
+                      placeholder="${worked ?? "—"}"></td>
+                 <td class="small ${p.typical_singers != null ? "muted" : ""}">${
+                   p.typical_singers != null
+                     ? `overridden — normally ${esc(explainChoirSize(p.designation))}`
+                     : esc(explainChoirSize(p.designation))
+                 }</td>
+               </tr>`;
+             })
              .join("")}
          </table></div>
+
+         <details style="margin-top:0.8rem">
+           <summary class="muted small">The section sizes these are added up from</summary>
+           <div class="scroll"><table>
+             <tr><th>Section</th><th class="num">Singers</th></tr>
+             <tr><td>Boys</td><td class="num">${CHURCH.choirSections.boys}</td></tr>
+             <tr><td>Girls (younger girls)</td><td class="num">${CHURCH.choirSections.girls}</td></tr>
+             <tr><td>Consort (older girls)</td><td class="num">${CHURCH.choirSections.consort}</td></tr>
+             <tr><td>Adults — Team A</td><td class="num">${TEAM_A_TOTAL}</td></tr>
+             <tr><td>Adults — Team B</td><td class="num">${TEAM_B_TOTAL}</td></tr>
+             <tr><td><strong>SATB (both teams)</strong></td><td class="num"><strong>${ADULT_TOTAL}</strong></td></tr>
+             <tr><td><strong>Full Choir</strong></td><td class="num"><strong>${FULL_CHOIR_TOTAL}</strong></td></tr>
+           </table></div>
+           <p class="muted small">From September 2026 — the children's numbers from Rachel Dent, the
+              adults counted off the choir teams list. When they drift, they are changed in
+              <code>src/church.config.ts</code> and everything above follows.
+              The Junior Choir is not counted: they do not sing from copies.</p>
+         </details>
          <div class="field" style="margin-top:0.8rem">
            <label for="new_designation">Add a designation</label>
            <input type="text" id="new_designation" name="new_designation"
