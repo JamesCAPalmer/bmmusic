@@ -88,6 +88,21 @@ import {
   WorkingCopyError,
 } from "./workingcopy";
 import { findDescant } from "./descants";
+import { buildAverySheet, buildVolunteerSheets } from "./labelsheet";
+import { copiesRag, ragLabel, ragPill } from "./rag";
+import {
+  addPerson,
+  clearAttendance,
+  deletePerson,
+  isChoir,
+  isVoicePart,
+  listPeople,
+  markAttendance,
+  nextStatus,
+  registerFor,
+  registerTally,
+  setPersonActive,
+} from "./people";
 import { changePassword, readPasswordState } from "./password";
 import { recentActivity } from "./audit";
 import { seasonsInPlay } from "./churchyear";
@@ -100,13 +115,21 @@ import {
   markReturned,
   mostSung,
   openLoans,
+  labelCandidates,
+  labelContentsFor,
+  recordLabelPrints,
   repairPriority,
+  repertoireSuggestions,
   scanningPriority,
   seasonReadiness,
 } from "./reports";
 import {
   adminActivityPage,
   adminHomePage,
+  adminLabelsPage,
+  adminPeoplePage,
+  adminRegisterPage,
+  adminSuggestionsPage,
   adminLoansPage,
   adminNewItemPage,
   adminQueuesPage,
@@ -822,6 +845,221 @@ app.post("/admin/settings/choirs", async (c) => {
 
 app.get("/admin/activity", async (c) => {
   return c.html(adminActivityPage(await recentActivity(c.env.DB, 200)));
+});
+
+// ---------------------------------------------------------------------------
+// Labels (1A, H10) and the QR route (H1)
+// ---------------------------------------------------------------------------
+
+app.get("/admin/labels", async (c) => {
+  const params = new URL(c.req.url).searchParams;
+  const door = params.get("door")?.trim();
+  const unlabelled = params.get("unlabelled") === "1";
+
+  const candidates = await labelCandidates(c.env.DB, {
+    door: door && CHURCH.storage.doors.includes(door) ? door : undefined,
+    unlabelled,
+  });
+
+  return c.html(adminLabelsPage(candidates, { door: door ?? undefined, unlabelled }, params.get("note") ?? undefined));
+});
+
+/**
+ * Build a label PDF.
+ *
+ * Streamed straight back rather than stored: a label sheet is a thing you print
+ * once and throw away, and keeping every run in R2 would fill a bucket with
+ * paper nobody will look at again. What *is* recorded is that it was printed —
+ * `label_print` — so a reprint or a combined-label run can be traced later.
+ */
+app.post("/admin/labels/print", async (c) => {
+  const body = await c.req.parseBody({ all: true });
+  const stock = str(body.stock);
+
+  // The calibration pages need no pieces at all: they are the die-cut outline.
+  if (stock === "calibration-volunteer" || stock === "calibration-avery") {
+    const bytes =
+      stock === "calibration-volunteer"
+        ? await buildVolunteerSheets([])
+        : await buildAverySheet([], { calibration: true });
+    return pdfResponse(bytes, `calibration-${stock === "calibration-avery" ? "avery" : "volunteer"}.pdf`);
+  }
+
+  const raw = body.id;
+  const ids = (Array.isArray(raw) ? raw : [raw])
+    .map((v) => Number(str(v)))
+    .filter((n) => Number.isSafeInteger(n) && n > 0);
+
+  if (!ids.length) {
+    return c.html(errorPage("Tick at least one piece to print a label for."), 400);
+  }
+
+  const contents = await labelContentsFor(c.env.DB, ids);
+  if (!contents.length) {
+    return c.html(errorPage("None of those pieces could be found."), 404);
+  }
+
+  try {
+    const kind = ["spine", "face", "combined"].includes(str(body.kind)) ? str(body.kind) : "spine";
+
+    if (stock === "volunteer") {
+      const bytes = await buildVolunteerSheets(contents);
+      await recordLabelPrints(c.env.DB, contents.map((x: { pieceId: number }) => x.pieceId), "spine", adminIdentity(c));
+      await logAdminAction(c, "labels.print", "piece", null, `${contents.length} volunteer sheets`);
+      return pdfResponse(bytes, "volunteer-sheets.pdf");
+    }
+
+    // Positions are 1-based on the screen because that is how somebody counts
+    // labels on a sheet in their hand; the geometry is 0-based.
+    const start = Number(str(body.start));
+    const startAt = Number.isSafeInteger(start) && start > 0 ? start - 1 : 0;
+
+    const bytes = await buildAverySheet(contents, { startAt, calibration: true });
+    await recordLabelPrints(c.env.DB, contents.map((x: { pieceId: number }) => x.pieceId), kind, adminIdentity(c));
+    await logAdminAction(c, "labels.print", "piece", null, `${contents.length} ${kind} labels`);
+    return pdfResponse(bytes, `${kind}-labels.pdf`);
+  } catch (e) {
+    console.error("label print failed", e);
+    return c.html(
+      errorPage("Those labels could not be made just now. Try a smaller selection, or tell James."),
+      500
+    );
+  }
+});
+
+/**
+ * The QR route (H1): `/q/BM-0042` → the piece.
+ *
+ * Short and stable on purpose. The accession is written on the parcel in ink,
+ * so it is the one identifier that cannot go stale — a `/piece/:id` link could
+ * be renumbered by a re-import, and a printed QR cannot be reprinted on four
+ * hundred parcels. When the app moves to music.beverleyminster.org.uk, the old
+ * hostname keeps a Worker that 301s everything here, and the printed codes go
+ * on working.
+ *
+ * Behind the choir gate like everything else: scanning a label still needs the
+ * term's password.
+ */
+app.get("/q/:accession", async (c) => {
+  const accession = c.req.param("accession");
+  const piece = await getPieceByAccession(c.env.DB, accession);
+  if (!piece) {
+    return c.html(
+      errorPage(
+        `Nothing in the catalogue has the number ${accession}. If it is written on a parcel, ` +
+          `tell ${CHURCH.contact.maintainer.shortName} — the label may be older than the catalogue.`
+      ),
+      404
+    );
+  }
+  return c.redirect(`/piece/${piece.id}`, 302);
+});
+
+// ---------------------------------------------------------------------------
+// People and the register (beta)
+// ---------------------------------------------------------------------------
+
+app.get("/admin/people", async (c) => {
+  const message = new URL(c.req.url).searchParams.get("done") ?? undefined;
+  return c.html(adminPeoplePage(await listPeople(c.env.DB), message || undefined));
+});
+
+app.post("/admin/people", async (c) => {
+  const body = await c.req.parseBody();
+  const displayName = str(body.display_name);
+  const choir = str(body.choir);
+  const voicePart = str(body.voice_part);
+
+  if (!displayName) return c.html(errorPage("A name is needed."), 400);
+  if (!isChoir(choir)) return c.html(errorPage("Choose which choir they sing in."), 400);
+
+  await addPerson(c.env.DB, {
+    displayName,
+    choir,
+    voicePart: voicePart && isVoicePart(voicePart) ? voicePart : null,
+  });
+
+  // Deliberately not naming the person in the audit log: that log is read by
+  // admins looking for a mistake, and a child's name has no business in it.
+  await logAdminAction(c, "person.add", "person", null, `one added to ${choir}`);
+  return c.redirect(`/admin/people?done=${encodeURIComponent("Added.")}`, 302);
+});
+
+app.post("/admin/people/:id", async (c) => {
+  const id = numericParam(c.req.param("id"));
+  if (id === null) return c.html(notFoundPage(), 404);
+
+  const body = await c.req.parseBody();
+  if (str(body.action) === "delete") {
+    await deletePerson(c.env.DB, id);
+    await logAdminAction(c, "person.delete", "person", id, "removed entirely, with their attendance");
+    return c.redirect(`/admin/people?done=${encodeURIComponent("Removed.")}`, 302);
+  }
+
+  await setPersonActive(c.env.DB, id, false);
+  await logAdminAction(c, "person.leave", "person", id, "marked as having left");
+  return c.redirect(`/admin/people?done=${encodeURIComponent("Marked as having left.")}`, 302);
+});
+
+app.get("/admin/register/:serviceId", async (c) => {
+  const serviceId = numericParam(c.req.param("serviceId"));
+  if (serviceId === null) return c.html(notFoundPage(), 404);
+
+  const service = await getService(c.env.DB, serviceId);
+  if (!service) return c.html(notFoundPage(), 404);
+
+  const rows = await registerFor(c.env.DB, serviceId, service.designation);
+  return c.html(adminRegisterPage(service, rows, registerTally(rows)));
+});
+
+/** One tap on one name. Cycles, and saves as it goes. */
+app.post("/admin/register/:serviceId/:personId", async (c) => {
+  const serviceId = numericParam(c.req.param("serviceId"));
+  const personId = numericParam(c.req.param("personId"));
+  if (serviceId === null || personId === null) return c.html(notFoundPage(), 404);
+
+  const current = await c.env.DB
+    .prepare(`SELECT status FROM attendance WHERE service_id = ? AND person_id = ?`)
+    .bind(serviceId, personId)
+    .first<{ status: string }>();
+
+  const next = nextStatus(current?.status ?? null);
+  if (next === null) await clearAttendance(c.env.DB, serviceId, personId);
+  else await markAttendance(c.env.DB, serviceId, personId, next, adminIdentity(c));
+
+  // No audit line. Attendance is personal data about a child and does not
+  // belong in a log admins read looking for a mistake; the attendance row
+  // carries marked_by, which is where the accountability belongs.
+  return c.redirect(`/admin/register/${serviceId}`, 302);
+});
+
+// ---------------------------------------------------------------------------
+// The repertoire picker (8A)
+// ---------------------------------------------------------------------------
+
+app.get("/admin/suggestions", async (c) => {
+  const params = new URL(c.req.url).searchParams;
+  const season = params.get("season")?.trim();
+  const category = params.get("category")?.trim();
+  const designation = params.get("designation")?.trim();
+
+  const filters = {
+    season: season && CHURCH.seasons.some((s) => s.value === season) ? season : undefined,
+    category: category && CHURCH.categories.some((x) => x.code === category) ? category : undefined,
+    designation: designation || undefined,
+  };
+
+  const [results, typicalSingers] = await Promise.all([
+    repertoireSuggestions(c.env.DB, filters),
+    typicalSingersFor(c.env.DB, filters.designation ?? null),
+  ]);
+
+  return c.html(
+    adminSuggestionsPage(results, filters, typicalSingers, (copiesUsable) => {
+      const verdict = copiesRag({ copiesUsable, typicalSingers, designation: filters.designation ?? null });
+      return { state: ragPill(verdict.state), label: ragLabel(verdict.state), reason: verdict.reason };
+    })
+  );
 });
 
 app.get("/admin/review", async (c) => {

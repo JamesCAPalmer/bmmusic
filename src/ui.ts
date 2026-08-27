@@ -402,6 +402,7 @@ function navFor(opts: PageOptions): string {
         <a href="/admin/review">Review queue</a>
         <a href="/admin/services">Music lists</a>
         <a href="/admin/scans">Scans</a>
+        <a href="/admin/labels">Labels</a>
         <a href="/admin/feedback">Feedback</a>
         <a href="/admin/intake">Photo intake</a>
         <a href="/admin/import">Import</a>

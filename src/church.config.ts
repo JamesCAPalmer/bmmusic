@@ -72,6 +72,46 @@ export interface VoicePart {
   label: string;
 }
 
+/** A sheet of labels, measured in millimetres from the top-left of the page. */
+export interface LabelGrid {
+  /** What is printed on the box, for the admin screen to name it. */
+  stock: string;
+  pageWidth: number;
+  pageHeight: number;
+  /** One die-cut label. */
+  labelWidth: number;
+  labelHeight: number;
+  /** Distance from the left edge of the sheet to the left edge of column 1. */
+  marginLeft: number;
+  /** Distance from the top edge of the sheet to the top edge of row 1. */
+  marginTop: number;
+  columns: number;
+  rows: number;
+  /** Gap between columns and between rows. Zero on a butt-cut sheet. */
+  columnGap: number;
+  rowGap: number;
+  /**
+   * Ink kept clear of the die-cut edge.
+   *
+   * Sheet-fed printers wander by a millimetre or two, and a title that runs to
+   * the cut looks like a mistake even when the alignment is perfect.
+   */
+  safeMargin: number;
+}
+
+export interface LabelStocks {
+  /**
+   * The volunteer sheet (1A): Triplast A4 integrated sheets, one peel-off
+   * label, the rest of the sheet ordinary paper to write on.
+   *
+   * The die-cut position is measured, not derived: 110×60mm sitting 10mm from
+   * the left edge and 49mm from the top.
+   */
+  volunteerSheet: LabelGrid;
+  /** Reprints, face labels and combined labels (H10): Avery L7163. */
+  avery: LabelGrid;
+}
+
 export interface ChurchConfig {
   /** Full public name of the institution. */
   name: string;
@@ -165,6 +205,19 @@ export interface ChurchConfig {
     yearsBetweenCounts: number;
     performancesBetweenCounts: number;
   };
+  /**
+   * The label stocks, in millimetres.
+   *
+   * Both stocks are physical things sitting in a box in Beverley, and the
+   * geometry below has to match them to a fraction of a millimetre or the print
+   * lands off the die-cut. They live in config precisely so that changing stock
+   * is an edit here rather than a hunt through PDF-drawing code.
+   *
+   * Millimetres throughout, because that is what the packaging says and what
+   * James will measure with. `src/labels.ts` converts to PDF points once, at
+   * the boundary, so no drawing code carries a conversion factor.
+   */
+  labels: LabelStocks;
   /** Prefix and width of an accession number: "BM-" + 4 digits → "BM-0001". */
   accession: {
     prefix: string;
@@ -283,6 +336,45 @@ export const CHURCH: ChurchConfig = {
   stocktake: {
     yearsBetweenCounts: 5,
     performancesBetweenCounts: 10,
+  },
+  labels: {
+    // Triplast A4 integrated label sheet: one 110×60mm peel-off label, placed
+    // 10mm in from the left and 49mm down from the top. Everything below that
+    // is plain paper for the volunteer to write on.
+    volunteerSheet: {
+      stock: "Triplast A4 integrated, 1 label 110×60mm",
+      pageWidth: 210,
+      pageHeight: 297,
+      labelWidth: 110,
+      labelHeight: 60,
+      marginLeft: 10,
+      marginTop: 49,
+      columns: 1,
+      rows: 1,
+      columnGap: 0,
+      rowGap: 0,
+      safeMargin: 3,
+    },
+    // Avery L7163: 14 per sheet, 99.1×38.1mm, two columns of seven.
+    //
+    // Horizontal pitch is 101.6mm (four inches), so the gap between the columns
+    // is 101.6 − 99.1 = 2.5mm. Vertical pitch is 38.1mm exactly, which is why
+    // the rows butt up with no gap: 7 × 38.1 = 266.7mm, leaving 15.15mm top and
+    // bottom on a 297mm page — matching Avery's published 15.1mm top margin.
+    avery: {
+      stock: "Avery L7163, 14 per sheet, 99.1×38.1mm",
+      pageWidth: 210,
+      pageHeight: 297,
+      labelWidth: 99.1,
+      labelHeight: 38.1,
+      marginLeft: 5,
+      marginTop: 15.1,
+      columns: 2,
+      rows: 7,
+      columnGap: 2.5,
+      rowGap: 0,
+      safeMargin: 3,
+    },
   },
   accession: {
     prefix: "BM-",
