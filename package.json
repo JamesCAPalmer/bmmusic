@@ -13,7 +13,8 @@
     "migrate:remote": "wrangler d1 migrations apply minster-data --remote"
   },
   "dependencies": {
-    "hono": "^4.6.0"
+    "hono": "^4.6.0",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260825.1",
