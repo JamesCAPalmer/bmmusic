@@ -53,6 +53,56 @@ that SQLite would accept each `ALTER TABLE ADD COLUMN` (no UNIQUE, no
 PRIMARY KEY, a default behind any NOT NULL), which otherwise fails at
 migrate time against the live database rather than in CI.
 
+### Milestone 3b — labels, QR, people and the picker
+
+**Both label stocks, with their geometry in `church.config.ts`** in
+millimetres — what the packaging says and what James will measure with.
+`src/labels.ts` converts to PDF points once, at the boundary, so no
+drawing code carries a conversion factor.
+
+A test asserting the grid fits its page caught a real mistake while it
+was being written: an early Avery left margin of 7.2mm made two 99.1mm
+columns plus a 2.5mm gap 5mm wider than A4. The only symptom in the
+world would have been a column of labels printed off the edge of the
+paper, discovered part-way through a run.
+
+**Every label file starts with a calibration page** — the die-cut
+outline, a centre cross, and instructions to print at 100%. Finding out
+after 410 sheets that the Brother is 3mm out is an expensive way to
+learn it.
+
+**Category glyphs** are drawn as paths rather than set in a font, so
+they print on a mono laser exactly as authored: quaver, moon, sunrise,
+loaf, two voices, harp, star, book. Glyph **and** letter, per the brief —
+the glyph is quick to spot along a shelf, the letter survives a label
+gone brown after twenty years.
+
+**QR (H1)** encodes `/q/{accession}`, not `/piece/{id}`. The accession is
+written on the parcel in ink and is the one identifier that cannot go
+stale; a database id could be renumbered by a re-import, and four
+hundred parcels cannot be reprinted. Error correction M, and a proper
+quiet zone — without one a scanner cannot find the code against a busy
+label. `qrcode-generator`, which has no dependencies of its own.
+
+**People and the register**, beta. Names only: no email, telephone,
+address or date of birth, and no choir-side read path. Each name is one
+big button tapped down a list at a door, cycling unmarked → here → away
+→ excused → unmarked, saving as it goes.
+
+Attendance is deliberately **absent from the audit log** — verified live,
+not merely intended: adding four people wrote `person.add → "one added
+to satb"`, never a name, and marking a register wrote nothing at all.
+
+**The repertoire picker (8A):** filters exact from day one, the ranking
+by history marked beta because it rests on confirmed matches and there
+are few of those yet.
+
+Verified by generating both PDFs and reading them back: A4 exactly, the
+Avery label at 5.00mm from the left and the volunteer die-cut at 10.00mm
+and 49mm, surnames in capitals, long titles wrapping over two lines, the
+calibration page present, and the live route returning
+`application/pdf`.
+
 ### Milestone 3a — the admin refit
 
 **Admin home becomes tiles**, with the queues above the doors: six things

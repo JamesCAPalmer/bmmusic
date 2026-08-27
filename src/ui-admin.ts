@@ -14,6 +14,7 @@ import { CHURCH } from "./church.config";
 import { betaChip, categoryLabel, esc, flagPills, page, prettyDate } from "./ui";
 import type { CatalogueStats, ChoirProfileRow, PieceWithHolding, SearchQuery, SearchResult } from "./catalogue";
 import type { AuditRow } from "./audit";
+import { CHOIRS, type PersonRow, type RegisterRow } from "./people";
 import type {
   ConditionCount,
   Coverage,
@@ -88,6 +89,9 @@ export function adminHomePage(
        ${tile("/admin/search", "Search and bulk edit", "filter, select, change many at once")}
        ${tile("/admin/reports", "Reports", "what gets sung, condition, coverage")}
        ${tile("/admin/queues", "What to do next", "scanning and repair, in priority order")}
+       ${tile("/admin/labels", "Print labels", "volunteer sheets, and reprints")}
+       ${tile("/admin/suggestions", "Choosing music", "by season, with copies and scans")}
+       ${tile("/admin/people", "The choir", "people and the register", betaChip())}
        ${tile("/admin/loans", "Out on loan", "who has what, and since when")}
        ${tile("/admin/settings", "Settings", "choir password, choir sizes, activity")}
      </div>
@@ -740,3 +744,360 @@ export function adminActivityPage(rows: AuditRow[]): string {
 }
 
 export { betaChip };
+
+// ---------------------------------------------------------------------------
+// Labels (1A, H10)
+// ---------------------------------------------------------------------------
+
+/**
+ * The label print screen.
+ *
+ * Two stocks, two jobs. The volunteer run is a sheet per parcel with the
+ * hand-fill form below the label; the Avery run is reprints and combined
+ * labels, with a start position so a part-used sheet is not wasted.
+ *
+ * Both are described in terms of the physical thing in the box, because that is
+ * what James is holding when he uses this.
+ */
+export function adminLabelsPage(
+  candidates: PieceWithHolding[],
+  filters: { door?: string; unlabelled?: boolean },
+  message?: string
+): string {
+  const doorOptions = CHURCH.storage.doors
+    .map((d) => `<option value="${esc(d)}"${filters.door === d ? " selected" : ""}>Door ${esc(d)}</option>`)
+    .join("");
+
+  const rows = candidates
+    .map(
+      (p) => `<tr>
+        <td><input type="checkbox" name="id" value="${p.id}" form="labels" checked></td>
+        <td>${p.accession ? `<span class="pill grey">${esc(p.accession)}</span>` : '<span class="muted small">no number yet</span>'}</td>
+        <td>${esc(p.surname ?? p.composer)}</td>
+        <td>${esc(p.title.length > 60 ? `${p.title.slice(0, 59)}…` : p.title)}</td>
+        <td>${esc(categoryLabel(p.category))}</td>
+      </tr>`
+    )
+    .join("");
+
+  return page(
+    `Print labels — ${CHURCH.appName}`,
+    `<h1>Print labels<span class="sub">${candidates.length} selected</span></h1>
+     ${message ? `<div class="notice">${esc(message)}</div>` : ""}
+
+     <div class="notice info">
+       <p style="margin:0"><strong>Print at 100%.</strong> Every one of these files starts with a
+          calibration page: hold it against a blank sheet of the stock before committing to a long run.
+          If your printer dialog says "Fit to page" or "Shrink oversized pages", turn it off — that is
+          what puts a whole run 3mm out.</p>
+     </div>
+
+     <div class="card">
+       <h2>Choose what to print</h2>
+       <form method="GET" action="/admin/labels">
+         <div class="row">
+           <div class="field">
+             <label for="door">Where it lives</label>
+             <select id="door" name="door"><option value="">Anywhere</option>${doorOptions}</select>
+           </div>
+           <div class="field">
+             <label for="unlabelled">Which parcels</label>
+             <select id="unlabelled" name="unlabelled">
+               <option value="">All reviewed pieces</option>
+               <option value="1"${filters.unlabelled ? " selected" : ""}>Only ones never printed</option>
+             </select>
+           </div>
+         </div>
+         <button type="submit" class="secondary">Show them</button>
+       </form>
+     </div>
+
+     ${
+       candidates.length
+         ? `<div class="scroll"><table>
+              <tr><th></th><th>Accession</th><th>Composer</th><th>Title</th><th>Category</th></tr>
+              ${rows}
+            </table></div>
+
+            <form method="POST" action="/admin/labels/print" id="labels" target="_blank">
+              <div class="card">
+                <h2>Volunteer sheets <span class="muted small">${esc(CHURCH.labels.volunteerSheet.stock)}</span></h2>
+                <p class="muted">One A4 sheet per parcel: the peel-off label at the top goes on the parcel,
+                   and the form below it is what the volunteer fills in with the parcel open. This is the
+                   run for the volunteer day.</p>
+                <button type="submit" name="stock" value="volunteer">Make the volunteer sheets</button>
+              </div>
+
+              <div class="card">
+                <h2>Labels <span class="muted small">${esc(CHURCH.labels.avery.stock)}</span></h2>
+                <p class="muted">Reprints, face labels and combined labels, 14 to a sheet.</p>
+                <div class="row">
+                  <div class="field">
+                    <label for="start">Start at position</label>
+                    <input type="number" id="start" name="start" min="1" max="14" value="1">
+                    <span class="hint">Counting left to right, then down. Use this on a part-used sheet
+                      so the labels already peeled off are skipped.</span>
+                  </div>
+                  <div class="field">
+                    <label for="kind">What kind</label>
+                    <select id="kind" name="kind">
+                      <option value="spine">Spine labels</option>
+                      <option value="face">Face labels</option>
+                      <option value="combined">Combined label for a box</option>
+                    </select>
+                  </div>
+                </div>
+                <button type="submit" name="stock" value="avery">Make the label sheet</button>
+              </div>
+
+              <div class="card">
+                <h2>Just the calibration page</h2>
+                <p class="muted small">Prints the die-cut outline and nothing else, for either stock.</p>
+                <button type="submit" name="stock" value="calibration-volunteer" class="secondary">Volunteer stock</button>
+                <button type="submit" name="stock" value="calibration-avery" class="secondary">Avery stock</button>
+              </div>
+            </form>`
+         : `<p class="muted">Nothing matches those filters. Labels are only offered for reviewed pieces —
+              an accession number goes on a physical parcel, so it should not go on a row whose composer
+              might still be wrong.</p>`
+     }`,
+    { admin: true, path: "/admin/labels" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// People and the register (beta)
+// ---------------------------------------------------------------------------
+
+export function adminPeoplePage(people: PersonRow[], message?: string): string {
+  const choirOptions = CHOIRS.map((c) => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join("");
+  const partOptions = CHURCH.voiceParts
+    .map((v) => `<option value="${esc(v.value)}">${esc(v.label)}</option>`)
+    .join("");
+
+  const byChoir = new Map<string, PersonRow[]>();
+  for (const p of people) {
+    const list = byChoir.get(p.choir);
+    if (list) list.push(p);
+    else byChoir.set(p.choir, [p]);
+  }
+
+  return page(
+    `The choir — ${CHURCH.appName}`,
+    `<h1>The choir ${betaChip()}<span class="sub">${people.length} on the list</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     <div class="notice">
+       <p style="margin:0"><strong>Names only.</strong> This holds what a register needs and nothing more —
+          no contact details, no dates of birth. Nothing on the choir side can see any of it, and no
+          chorister can see anybody else's attendance.</p>
+     </div>
+
+     ${
+       people.length
+         ? CHOIRS.filter((c) => byChoir.has(c.value))
+             .map(
+               (c) => `<div class="card">
+                 <h2>${esc(c.label)}</h2>
+                 <div class="scroll"><table>
+                   <tr><th>Name</th><th>Voice part</th><th></th></tr>
+                   ${byChoir
+                     .get(c.value)!
+                     .map(
+                       (p) => `<tr>
+                         <td>${esc(p.display_name)}</td>
+                         <td>${
+                           p.voice_part
+                             ? esc(CHURCH.voiceParts.find((v) => v.value === p.voice_part)?.label ?? p.voice_part)
+                             : '<span class="muted">not recorded</span>'
+                         }</td>
+                         <td><form method="POST" action="/admin/people/${p.id}" style="display:inline">
+                               <button type="submit" name="action" value="leave" class="secondary">Has left</button>
+                             </form></td>
+                       </tr>`
+                     )
+                     .join("")}
+                 </table></div>
+               </div>`
+             )
+             .join("")
+         : `<p class="muted">Nobody on the list yet.</p>`
+     }
+
+     <div class="card">
+       <h2>Add somebody</h2>
+       <form method="POST" action="/admin/people">
+         <div class="row">
+           <div class="field">
+             <label for="display_name">Name</label>
+             <input type="text" id="display_name" name="display_name" required>
+           </div>
+           <div class="field">
+             <label for="choir">Choir</label>
+             <select id="choir" name="choir">${choirOptions}</select>
+           </div>
+           <div class="field">
+             <label for="voice_part">Voice part</label>
+             <select id="voice_part" name="voice_part">
+               <option value="">Not recorded</option>${partOptions}
+             </select>
+             <span class="hint">Optional. Section-level attendance waits on these being filled in.</span>
+           </div>
+         </div>
+         <button type="submit">Add</button>
+       </form>
+     </div>`,
+    { admin: true, path: "/admin/people" }
+  );
+}
+
+/**
+ * The register, taken at the door on a phone.
+ *
+ * Every name is one big tappable button that cycles unmarked → present →
+ * absent → excused and saves as it goes. Big targets because this is used
+ * one-handed on an iPhone in a doorway, with the other hand holding a door open.
+ */
+export function adminRegisterPage(
+  service: { id: number; title: string; service_date: string; designation: string | null },
+  rows: RegisterRow[],
+  tally: { present: number; absent: number; excused: number; unmarked: number }
+): string {
+  const statusPill = (status: string | null) => {
+    switch (status) {
+      case "present":
+        return `<span class="pill green">Here</span>`;
+      case "absent":
+        return `<span class="pill red">Away</span>`;
+      case "excused":
+        return `<span class="pill amber">Excused</span>`;
+      default:
+        return `<span class="pill grey">Tap to mark</span>`;
+    }
+  };
+
+  return page(
+    `Register — ${CHURCH.appName}`,
+    `<p class="crumb"><a href="/admin/people">← The choir</a></p>
+     <h1>Register ${betaChip()}<span class="sub">${esc(service.title)} — ${esc(prettyDate(service.service_date))}</span></h1>
+
+     <p class="small">
+       <span class="pill green">${tally.present} here</span>
+       <span class="pill red">${tally.absent} away</span>
+       <span class="pill amber">${tally.excused} excused</span>
+       <span class="pill grey">${tally.unmarked} not marked</span>
+     </p>
+
+     ${
+       rows.length
+         ? `<div class="register">
+              ${rows
+                .map(
+                  (r) => `<form method="POST" action="/admin/register/${service.id}/${r.id}">
+                    <button type="submit" class="who">
+                      <span class="n">${esc(r.display_name)}</span>
+                      ${statusPill(r.status)}
+                    </button>
+                  </form>`
+                )
+                .join("")}
+            </div>
+            <p class="muted small">Each tap moves on: not marked → here → away → excused → not marked.
+               It saves as you go.</p>`
+         : `<p class="muted">Nobody is on the list for this service's choir yet.
+              <a href="/admin/people">Add the choir</a> first.</p>`
+     }
+
+     <style>
+       .register { display: grid; gap: 0.4rem; }
+       .register form { margin: 0; }
+       .register .who { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+                        width: 100%; text-align: left; font-size: 1.1rem; padding: 0.9rem 1rem;
+                        background: var(--colour-surface); color: var(--colour-ink);
+                        border: 1px solid var(--colour-border); }
+       .register .who:hover { background: var(--colour-accent-tint); }
+       .register .who .n { font-weight: 600; }
+     </style>`,
+    { admin: true, path: `/admin/register/${service.id}` }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The repertoire picker (8A)
+// ---------------------------------------------------------------------------
+
+/**
+ * Choosing music for a service.
+ *
+ * Filters work from day one; the ranking by history is **beta** and says so,
+ * because it is only as good as the confirmed matches behind it and there are
+ * very few of those until the music lists have been worked through.
+ */
+export function adminSuggestionsPage(
+  results: (PieceWithHolding & { times_sung: number; last_sung: string | null; scanned: number })[],
+  filters: { season?: string; category?: string; designation?: string },
+  typicalSingers: number | null,
+  ragFor: (copiesUsable: number | null) => { state: string; label: string; reason: string }
+): string {
+  const seasonOptions = CHURCH.seasons
+    .map((s) => `<option value="${esc(s.value)}"${filters.season === s.value ? " selected" : ""}>${esc(s.label)}</option>`)
+    .join("");
+  const categoryOptions = CHURCH.categories
+    .map((c) => `<option value="${esc(c.code)}"${filters.category === c.code ? " selected" : ""}>${esc(c.label)}</option>`)
+    .join("");
+
+  return page(
+    `Choosing music — ${CHURCH.appName}`,
+    `<h1>Choosing music<span class="sub">${results.length} to look at</span></h1>
+
+     <div class="card">
+       <form method="GET" action="/admin/suggestions">
+         <div class="row">
+           <div class="field">
+             <label for="season">Season</label>
+             <select id="season" name="season"><option value="">Any</option>${seasonOptions}</select>
+           </div>
+           <div class="field">
+             <label for="category">Category</label>
+             <select id="category" name="category"><option value="">Any</option>${categoryOptions}</select>
+           </div>
+           <div class="field">
+             <label for="designation">Which choir</label>
+             <input type="text" id="designation" name="designation" value="${esc(filters.designation ?? "")}"
+                    placeholder="e.g. Boys and SATB">
+             <span class="hint">Sets the copy check below against that choir's size.</span>
+           </div>
+         </div>
+         <button type="submit">Show me</button>
+       </form>
+     </div>
+
+     <p class="muted small">Ordered by how often it has been sung ${betaChip()} — that ranking is only as
+        good as the music-list lines confirmed so far, so it settles down as those are worked through.
+        The filters are exact from day one.</p>
+
+     ${
+       results.length
+         ? `<div class="scroll"><table>
+              <tr><th>Piece</th><th>Composer</th><th>Season</th><th class="num">Sung</th><th>Last</th>
+                  <th>Copies</th><th>Scan</th></tr>
+              ${results
+                .map((p) => {
+                  const rag = ragFor(p.copies_usable);
+                  return `<tr>
+                    <td><a href="/admin/piece/${p.id}">${esc(p.title)}</a></td>
+                    <td>${esc(p.composer)}</td>
+                    <td>${p.season ? esc(p.season.replace(/;/g, ", ")) : ""}</td>
+                    <td class="num">${p.times_sung}</td>
+                    <td>${p.last_sung ? esc(prettyDate(p.last_sung)) : '<span class="muted">—</span>'}</td>
+                    <td><span class="pill ${esc(rag.state)}" title="${esc(rag.reason)}">${esc(rag.label)}</span></td>
+                    <td>${p.scanned ? "yes" : '<span class="muted">no</span>'}</td>
+                  </tr>`;
+                })
+                .join("")}
+            </table></div>`
+         : `<p class="muted">Nothing matched. Try loosening the season or the category.</p>`
+     }`,
+    { admin: true, path: "/admin/suggestions" }
+  );
+}
