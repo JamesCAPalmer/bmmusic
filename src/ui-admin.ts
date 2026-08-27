@@ -163,6 +163,7 @@ export function adminHomePage(
 
      ${section("This app", [
        tile("/admin/settings", "Settings", "choir password, choir sizes, activity"),
+       tile("/admin/export", "Exports", "take the data out as a spreadsheet", betaChip()),
        tile("/admin/modules", "Modules", "what this app does at all", betaChip()),
        tile("/admin/roles", "Roles", "who may do what in here", betaChip()),
      ])}
@@ -2296,5 +2297,82 @@ export function adminPayPage(
        .small-btn { font-size: 0.8rem; padding: 0.15rem 0.5rem; }
      </style>`,
     { admin: true, path: "/admin/people" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Exports (Addendum A, A6)
+// ---------------------------------------------------------------------------
+
+export interface ExportOption {
+  href: string;
+  label: string;
+  blurb: string;
+  /** True for the one export that carries parents' telephone numbers. */
+  contacts?: boolean;
+}
+
+/**
+ * Everything that can be taken out of the app, in one place.
+ *
+ * The list is filtered by the same two rules as the front page — the module
+ * has to be on, and the reader has to hold a role that may reach it — so a
+ * librarian sees the catalogue exports and nothing about a person.
+ *
+ * The contacts export is set apart deliberately, in its own card and its own
+ * colour, and it is the only export in the app that carries a telephone
+ * number. Every other person export leaves them out entirely, which is what
+ * makes this one worth marking out.
+ */
+export function adminExportsPage(
+  options: ExportOption[],
+  contactsExport: ExportOption | null,
+  message?: string
+): string {
+  const row = (o: ExportOption) => `<tr>
+    <td><strong>${esc(o.label)}</strong><div class="small muted">${esc(o.blurb)}</div></td>
+    <td><a class="btn secondary" href="${o.href}">Download</a></td>
+  </tr>`;
+
+  return page(
+    `Exports — ${CHURCH.appName}`,
+    `<h1>Exports ${betaChip()}<span class="sub">Taking the data out</span></h1>
+     ${message ? `<div class="notice ok"><p style="margin:0">${esc(message)}</p></div>` : ""}
+
+     <div class="notice">
+       <p style="margin:0">All of these are CSV, which opens in Excel and in Numbers. Every download is
+          recorded in the activity log. A file on a laptop has none of the protections this app has —
+          keep it where you would keep a printed register, and delete it when you are done with it.</p>
+     </div>
+
+     <div class="card">
+       <h2>What you can take out</h2>
+       ${
+         options.length
+           ? `<div class="scroll"><table>${options.map(row).join("")}</table></div>`
+           : `<p class="muted">Nothing to export — the modules that would have something in them are
+                switched off.</p>`
+       }
+     </div>
+
+     ${
+       contactsExport
+         ? `<div class="card contacts">
+              <h2>Parents' contact details</h2>
+              <p><strong>This is the only export in this app that contains a telephone number.</strong>
+                 Every other one leaves them out, on purpose. Downloading it is recorded against your
+                 name with a fingerprint of the file.</p>
+              <p class="muted small">A spreadsheet of children's parents' telephone numbers is the
+                 single most sensitive thing this app can produce. Take it only when you have a reason
+                 to, keep it off anything shared, and delete it afterwards.</p>
+              <p><a class="btn" href="${contactsExport.href}">Download the contacts</a></p>
+            </div>`
+         : ""
+     }
+
+     <style>
+       .card.contacts { border-left: 4px solid var(--colour-pill-red-ink); }
+     </style>`,
+    { admin: true, path: "/admin/export" }
   );
 }

@@ -73,12 +73,25 @@ const ROLE_PREFIXES: ReadonlyArray<readonly [string, readonly Role[]]> = [
   // first is the wrong answer. Every look writes an audit line naming them.
   ["/admin/people/contact", ROTA],
 
+  // **Not** the same thing, and the difference is the point. `/contact/:id` is
+  // one child's number, revealed deliberately and audited. `/contacts.csv` is
+  // every child's number in one file, and that is music staff only. Spelled out
+  // rather than left to the boundary rule, because "contacts" happening not to
+  // sit under "contact" is too fine a thread to hang this on.
+  ["/admin/people/contacts", STAFF],
+
   // The app's own administration.
   ["/admin/settings", STAFF],
   ["/admin/modules", STAFF],
   ["/admin/roles", STAFF],
   ["/admin/activity", STAFF],
-  ["/admin/export", STAFF],
+
+  // The Exports page itself is open to any role, because the list on it is
+  // already filtered by exactly the rules that guard the files — a librarian
+  // sees the catalogue and the music lists and nothing about a person. Making
+  // the page music-staff-only would deny a librarian the catalogue export they
+  // are plainly entitled to, to protect files they could not download anyway.
+  ["/admin/export", ROLES],
 
   // The library and the music lists.
   ["/admin/accessions", LIBRARY],

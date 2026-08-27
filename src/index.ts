@@ -131,6 +131,8 @@ import {
   registerTally,
   revealContacts,
   rollOverSchoolYears,
+  schoolYearLabel,
+  CHOIRS,
   updatePerson,
 } from "./people";
 import { isModuleKey, moduleForPath, readModuleState, setModule } from "./modules";
@@ -189,6 +191,7 @@ import {
   adminNoRolePage,
   adminAttendancePage,
   adminDutyEventPage,
+  adminExportsPage,
   adminDutyTodayPage,
   adminPayPage,
   adminPeoplePage,
@@ -1239,6 +1242,242 @@ function schoolYearParam(raw: string): number | null {
 function dateParam(raw: string): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
 }
+
+// ---------------------------------------------------------------------------
+// Exports (Addendum A, A6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Everything that can be taken out, filtered the way the front page is.
+ *
+ * Declared here rather than in the page so that the filter is the gate's own
+ * two functions and not a second opinion about them: an export whose route the
+ * reader could not reach is not offered.
+ */
+const EXPORTS: ReadonlyArray<{ href: string; label: string; blurb: string }> = [
+  {
+    href: "/admin/search/export.csv",
+    label: "The catalogue",
+    blurb: "Every piece, with its accession number, location, copies and condition.",
+  },
+  {
+    href: "/admin/services/export.csv",
+    label: "Services and their music",
+    blurb: "Every service on file and every line of its music list, matched or not.",
+  },
+  {
+    href: "/admin/people/export.csv",
+    label: "The choir",
+    blurb: "Names, choirs, school years, joining and award dates. No contact details.",
+  },
+  {
+    href: "/admin/people/attendance.csv",
+    label: "Attendance, this quarter",
+    blurb: "Per person, per month, with the percentage.",
+  },
+  {
+    href: "/admin/people/pay.csv",
+    label: "Pay, this quarter",
+    blurb: "Per person, priced at the rates in force on each day.",
+  },
+  {
+    href: "/admin/safeguarding/export.csv",
+    label: "The duty rota",
+    blurb: "Who is on what, for every event on file, with the collection ticks.",
+  },
+];
+
+app.get("/admin/export", (c) => {
+  const modules = c.get("modules");
+  const roles = c.get("roles");
+
+  const visible = (href: string): boolean => {
+    const path = href.split("?")[0]!;
+    const module = moduleForPath(path);
+    if (module && !modules[module]) return false;
+    return permits(roles, requiredRolesFor(path));
+  };
+
+  const contactsHref = "/admin/people/contacts.csv";
+  return c.html(
+    adminExportsPage(
+      EXPORTS.filter((e) => visible(e.href)),
+      visible(contactsHref)
+        ? {
+            href: contactsHref,
+            label: "Parents' contact details",
+            blurb: "The only export that carries a telephone number.",
+            contacts: true,
+          }
+        : null,
+      new URL(c.req.url).searchParams.get("done") ?? undefined
+    )
+  );
+});
+
+app.get("/admin/search/export.csv", async (c) => {
+  const rows = await c.env.DB
+    .prepare(
+      `SELECT p.accession, p.composer, p.title, p.category, p.voicing, p.season,
+              p.location, p.location_door, p.location_shelf, p.spine_state, p.legacy_ref,
+              h.copies_total, h.copies_usable, h.condition, h.last_counted,
+              CASE WHEN p.reviewed_at IS NULL THEN 'no' ELSE 'yes' END AS reviewed
+         FROM piece p LEFT JOIN holding h ON h.piece_id = p.id
+        ORDER BY p.composer_canonical, p.title`
+    )
+    .all<Record<string, unknown>>();
+  const results = rows.results ?? [];
+
+  const csv = toCsv(
+    ["Accession", "Composer", "Title", "Category", "Voicing", "Season", "Location", "Door", "Shelf",
+     "Spine", "Legacy ref", "Copies", "Usable", "Condition", "Last counted", "Reviewed"],
+    results.map((r) => [
+      r.accession, r.composer, r.title, r.category, r.voicing, r.season, r.location,
+      r.location_door, r.location_shelf, r.spine_state, r.legacy_ref,
+      r.copies_total, r.copies_usable, r.condition, r.last_counted, r.reviewed,
+    ])
+  );
+
+  await logAdminAction(c, "export.catalogue", "app_setting", null, `${results.length} pieces`);
+  return csvResponse(csv, `catalogue-${today()}.csv`);
+});
+
+app.get("/admin/services/export.csv", async (c) => {
+  const rows = await c.env.DB
+    .prepare(
+      `SELECT s.service_date, s.service_time, s.title, s.designation,
+              COALESCE(s.event_type, 'regular') AS event_type, s.source,
+              m.slot, m.raw_text, m.match_state, p.accession, p.title AS piece_title
+         FROM service s
+         LEFT JOIN service_music m ON m.service_id = s.id
+         LEFT JOIN piece p ON p.id = m.piece_id
+        ORDER BY s.service_date, COALESCE(s.service_time,'00:00'), m.position`
+    )
+    .all<Record<string, unknown>>();
+  const results = rows.results ?? [];
+
+  const csv = toCsv(
+    ["Date", "Time", "Service", "Designation", "Kind", "Source", "Slot", "As written", "Match", "Accession", "Matched to"],
+    results.map((r) => [
+      r.service_date, r.service_time, r.title, r.designation, r.event_type, r.source,
+      r.slot, r.raw_text, r.match_state, r.accession, r.piece_title,
+    ])
+  );
+
+  await logAdminAction(c, "export.services", "app_setting", null, `${results.length} lines`);
+  return csvResponse(csv, `services-${today()}.csv`);
+});
+
+/**
+ * The choir list.
+ *
+ * **No parent contacts.** Not omitted by remembering, either: `listPeople`
+ * reads `person`, and `person` has no column that could carry one — the
+ * telephone numbers are in another table entirely, and getting them into a file
+ * takes the deliberate act below.
+ */
+app.get("/admin/people/export.csv", async (c) => {
+  const people = await listPeople(c.env.DB, true);
+  const csv = toCsv(
+    ["Name", "Choir", "School year", "Voice part", "Joined", "Surpliced", "Dean's", "Archbishop's",
+     "Gold", "DBS valid until", "Left"],
+    people.map((p) => [
+      p.display_name,
+      CHOIRS.find((ch) => ch.value === p.choir)?.label ?? p.choir,
+      schoolYearLabel(p.school_year),
+      p.voice_part,
+      p.joined_on,
+      p.surplice_awarded_on,
+      p.deans_award_on,
+      p.archbishops_award_on,
+      p.gold_award_on,
+      p.dbs_valid_until,
+      p.left_on,
+    ])
+  );
+
+  await logAdminAction(c, "export.people", "app_setting", null, `${people.length} people, no contacts`);
+  return csvResponse(csv, `choir-${today()}.csv`);
+});
+
+/**
+ * The one export that carries a telephone number.
+ *
+ * Music staff only — `/admin/people/contacts` is its own row in the role table
+ * precisely so this is not the same permission as the per-child reveal, which
+ * safeguarding may also do. Audited separately from every other export, with a
+ * fingerprint of the file, and named in the log as what it is.
+ */
+app.get("/admin/people/contacts.csv", async (c) => {
+  const rows = await c.env.DB
+    .prepare(
+      `SELECT p.display_name, p.choir, p.school_year, c.label, c.name, c.phone
+         FROM parent_contact c
+         JOIN person p ON p.id = c.person_id
+        WHERE p.left_on IS NULL
+        ORDER BY p.choir, p.display_name, c.id`
+    )
+    .all<{
+      display_name: string;
+      choir: string;
+      school_year: number | null;
+      label: string | null;
+      name: string | null;
+      phone: string | null;
+    }>();
+  const results = rows.results ?? [];
+
+  const csv = toCsv(
+    ["Child", "Choir", "School year", "Who", "Name", "Telephone"],
+    results.map((r) => [
+      r.display_name,
+      CHOIRS.find((ch) => ch.value === r.choir)?.label ?? r.choir,
+      schoolYearLabel(r.school_year),
+      r.label,
+      r.name,
+      r.phone,
+    ])
+  );
+
+  const hash = await sha256Hex(csv);
+  await logAdminAction(
+    c,
+    "export.contacts",
+    "app_setting",
+    null,
+    `parents' contact details for ${results.length} children, sha256 ${hash.slice(0, 16)}`
+  );
+  return csvResponse(csv, `contacts-${today()}.csv`);
+});
+
+app.get("/admin/safeguarding/export.csv", async (c) => {
+  const rows = await c.env.DB
+    .prepare(
+      `SELECT s.service_date, s.service_time, s.title, s.designation,
+              COALESCE(s.event_type,'regular') AS event_type,
+              d.role, d.is_backup, p.display_name, p.dbs_valid_until,
+              d.all_collected_at, d.all_collected_by
+         FROM duty d
+         JOIN service s ON s.id = d.service_id
+         JOIN person p ON p.id = d.person_id
+        ORDER BY s.service_date, COALESCE(s.service_time,'00:00'), d.role, d.is_backup`
+    )
+    .all<Record<string, unknown>>();
+  const results = rows.results ?? [];
+
+  const csv = toCsv(
+    ["Date", "Time", "Event", "Designation", "Kind", "Duty", "Backup", "Who", "DBS valid until",
+     "All collected at", "Ticked by"],
+    results.map((r) => [
+      r.service_date, r.service_time, r.title, r.designation, r.event_type,
+      r.role, r.is_backup ? "yes" : "", r.display_name, r.dbs_valid_until,
+      r.all_collected_at, r.all_collected_by,
+    ])
+  );
+
+  await logAdminAction(c, "export.duty", "app_setting", null, `${results.length} duties`);
+  return csvResponse(csv, `duty-rota-${today()}.csv`);
+});
 
 // ---------------------------------------------------------------------------
 // Attendance, rates and pay (Addendum A, A4)

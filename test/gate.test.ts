@@ -10,7 +10,7 @@
  * `src/index.ts` and insists every one of them is accounted for.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -343,6 +343,56 @@ describe("every admin route the app declares", () => {
       const module = moduleForPath(concrete(route))!;
       expect(defaultModuleState()[module], `${route} is on by default`).toBe(false);
     }
+  });
+
+  /**
+   * One export carries telephone numbers, and it is not the same permission as
+   * the per-child reveal.
+   *
+   * `/admin/people/contact/:id` is one number, revealed deliberately and
+   * audited, and safeguarding may do it — somebody on dismissal duty with an
+   * uncollected child needs it. `/admin/people/contacts.csv` is every child's
+   * number in one file, and that is music staff only.
+   */
+  it("keeps the contacts export a narrower permission than a single reveal", () => {
+    expect(permits(["safeguarding"], requiredRolesFor("/admin/people/contact/4"))).toBe(true);
+    expect(permits(["safeguarding"], requiredRolesFor("/admin/people/contacts.csv"))).toBe(false);
+    expect(permits(["librarian"], requiredRolesFor("/admin/people/contacts.csv"))).toBe(false);
+    expect(permits(["music_staff"], requiredRolesFor("/admin/people/contacts.csv"))).toBe(true);
+  });
+
+  /**
+   * A telephone number is selected out of `parent_contact` in exactly two
+   * places in the whole app.
+   *
+   * `revealContacts` in `src/people.ts`, which audits before it reads, and the
+   * contacts export in `src/index.ts`. Counting rows is not reading a number
+   * and does not count here; everything else that produces a file or a screen
+   * reads `person`, which has no column that could carry one. A third reader is
+   * a third way for a number to leave the building, so the count is the test.
+   */
+  it("selects a telephone number in exactly two places", () => {
+    const srcDir = join(import.meta.dirname, "..", "src");
+    const readers: string[] = [];
+
+    for (const file of readdirSync(srcDir).filter((f) => f.endsWith(".ts"))) {
+      const source = readFileSync(join(srcDir, file), "utf8");
+      // Comments quote the table name constantly; only real SQL counts, and
+      // only SQL that actually asks for the number.
+      for (const match of source.matchAll(/SELECT[^;`]*FROM parent_contact[^;`]*/gi)) {
+        if (/\bphone\b/i.test(match[0])) readers.push(file);
+      }
+    }
+
+    expect(readers.sort()).toEqual(["index.ts", "people.ts"]);
+  });
+
+  // The reveal audits before it reads, so a look that cannot be recorded does
+  // not happen. If the order is ever swapped, it can.
+  it("writes the audit line before it reads a contact", () => {
+    const people = readFileSync(join(import.meta.dirname, "..", "src", "people.ts"), "utf8");
+    const body = people.slice(people.indexOf("export async function revealContacts"));
+    expect(body.indexOf("audit_log")).toBeLessThan(body.indexOf("FROM parent_contact"));
   });
 
   // The register was at /admin/register before Addendum A. If it ever comes
