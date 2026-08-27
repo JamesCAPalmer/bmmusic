@@ -13,6 +13,7 @@ import {
   formatSeasons,
   parseAccession,
 } from "./normalise";
+import { singersFor } from "./choirsize";
 
 /** A piece as the choir sees it, with its current holding folded in. */
 export interface PieceRow {
@@ -686,22 +687,38 @@ export async function choirProfiles(db: D1Database): Promise<ChoirProfileRow[]> 
 /**
  * How many singers a designation usually means.
  *
- * Matched case-insensitively on the whole string. The music list publishes
- * designations we have never seen — "Symbel choir", "Liturgy Singers", and at
- * least once "RCSM" for the RSCM — and the right answer for those is NULL,
- * which the RAG renders grey. Guessing at a near match would be worse: it would
- * put a confident green tick against a number nobody has recorded.
+ * Two sources, in this order:
+ *
+ *   1. **A number recorded against that exact designation** in `choir_profile`.
+ *      This is the admin's override, and it wins — a term where half the
+ *      trebles have gone down with something is a fact the arithmetic cannot
+ *      know.
+ *   2. **Worked out from the designation itself** (`src/choirsize.ts`), by
+ *      reading "Boys and SATB" as the boys plus the adults and adding up the
+ *      section sizes in `church.config`.
+ *
+ * Falling back to the calculation rather than requiring a row is what lets the
+ * music list publish a combination nobody has seen before — "Boys, Consort and
+ * Girls" turned up once in four months — and still get a number.
+ *
+ * Where the designation names a choir we cannot count ("Liturgy Singers",
+ * "Symbel choir", or a Minster combination "with Young Voices"), both sources
+ * come back null and the RAG shows grey. That is the honest answer: guessing
+ * would put a confident green against a number that is certainly too low.
  */
 export async function typicalSingersFor(
   db: D1Database,
   designation: string | null
 ): Promise<number | null> {
   if (!designation) return null;
+
   const row = await db
     .prepare(`SELECT typical_singers FROM choir_profile WHERE LOWER(designation) = LOWER(?)`)
     .bind(designation.trim())
     .first<{ typical_singers: number | null }>();
-  return row?.typical_singers ?? null;
+
+  if (row?.typical_singers != null) return row.typical_singers;
+  return singersFor(designation);
 }
 
 // ---------------------------------------------------------------------------

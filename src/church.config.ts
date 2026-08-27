@@ -72,6 +72,71 @@ export interface VoicePart {
   label: string;
 }
 
+/** One adult team, by voice part. The teams alternate through the term. */
+export interface AdultTeam {
+  soprano: number;
+  alto: number;
+  tenor: number;
+  bass: number;
+}
+
+/**
+ * The size of every part of the choir.
+ *
+ * Children first, then the two adult teams. "SATB" on a music list means the
+ * adults as a body (both teams); "Team A" or "Team B" names one of them.
+ */
+export interface ChoirSections {
+  /** Boys' choir. */
+  boys: number;
+  /** Girls' choir — the younger girls. */
+  girls: number;
+  /** Consort — the older girls. */
+  consort: number;
+  teamA: AdultTeam;
+  teamB: AdultTeam;
+}
+
+/** A sheet of labels, measured in millimetres from the top-left of the page. */
+export interface LabelGrid {
+  /** What is printed on the box, for the admin screen to name it. */
+  stock: string;
+  pageWidth: number;
+  pageHeight: number;
+  /** One die-cut label. */
+  labelWidth: number;
+  labelHeight: number;
+  /** Distance from the left edge of the sheet to the left edge of column 1. */
+  marginLeft: number;
+  /** Distance from the top edge of the sheet to the top edge of row 1. */
+  marginTop: number;
+  columns: number;
+  rows: number;
+  /** Gap between columns and between rows. Zero on a butt-cut sheet. */
+  columnGap: number;
+  rowGap: number;
+  /**
+   * Ink kept clear of the die-cut edge.
+   *
+   * Sheet-fed printers wander by a millimetre or two, and a title that runs to
+   * the cut looks like a mistake even when the alignment is perfect.
+   */
+  safeMargin: number;
+}
+
+export interface LabelStocks {
+  /**
+   * The volunteer sheet (1A): Triplast A4 integrated sheets, one peel-off
+   * label, the rest of the sheet ordinary paper to write on.
+   *
+   * The die-cut position is measured, not derived: 110×60mm sitting 10mm from
+   * the left edge and 49mm from the top.
+   */
+  volunteerSheet: LabelGrid;
+  /** Reprints, face labels and combined labels (H10): Avery L7163. */
+  avery: LabelGrid;
+}
+
 export interface ChurchConfig {
   /** Full public name of the institution. */
   name: string;
@@ -110,6 +175,23 @@ export interface ChurchConfig {
   };
   /** Choir designations that appear on the music list. */
   choirs: ChoirProfile[];
+  /**
+   * How many people are actually in each part of the choir.
+   *
+   * The music list publishes designations as prose — "Boys and SATB",
+   * "Consort, Girls and SATB", "ATB" — and the copies RAG needs a number of
+   * singers behind each. `src/choirsize.ts` does that arithmetic; these are its
+   * inputs, and the only place the numbers live.
+   *
+   * They date from September 2026: the children's numbers from Rachel Dent
+   * (Director of Junior Choir), the adults counted off the Minster Choir teams
+   * list for the same month. They will drift, and updating them here is the
+   * whole maintenance job — nothing else needs to change.
+   *
+   * The Junior Choir (ages 5–8) is deliberately absent: they do not sing from
+   * copies, so they never affect whether there are enough.
+   */
+  choirSections: ChoirSections;
   /** Regular choral service patterns. */
   servicePatterns: ServicePattern[];
   /** The catalogue's categories, in the order they are offered. */
@@ -165,6 +247,19 @@ export interface ChurchConfig {
     yearsBetweenCounts: number;
     performancesBetweenCounts: number;
   };
+  /**
+   * The label stocks, in millimetres.
+   *
+   * Both stocks are physical things sitting in a box in Beverley, and the
+   * geometry below has to match them to a fraction of a millimetre or the print
+   * lands off the die-cut. They live in config precisely so that changing stock
+   * is an edit here rather than a hunt through PDF-drawing code.
+   *
+   * Millimetres throughout, because that is what the packaging says and what
+   * James will measure with. `src/labels.ts` converts to PDF points once, at
+   * the boundary, so no drawing code carries a conversion factor.
+   */
+  labels: LabelStocks;
   /** Prefix and width of an accession number: "BM-" + 4 digits → "BM-0001". */
   accession: {
     prefix: string;
@@ -207,14 +302,51 @@ export const CHURCH: ChurchConfig = {
     publisher: "Kevin Mayhew",
     year: 1996,
   },
-  // Typical singer counts to be filled in by the maintainer as they are
-  // confirmed — omit rather than guess. These seed the choir_profile table.
+  // The designations the music list actually publishes, taken from four months
+  // of the live feed. These seed `choir_profile`; the numbers beside them are
+  // worked out from `choirSections` below by `src/choirsize.ts`, so they are
+  // not repeated here — a row with no number falls back to that calculation,
+  // and an admin can still override any one of them by hand on the settings
+  // screen when a term turns out differently.
+  //
+  // Visiting choirs are listed without numbers on purpose. Nobody here knows
+  // how many singers the Liturgy Singers are bringing, and the RAG showing grey
+  // is the honest answer.
   choirs: [
-    { designation: "Boys and SATB" },
-    { designation: "Girls" },
+    { designation: "Full Choir" },
+    { designation: "SATB" },
     { designation: "ATB" },
+    { designation: "Boys" },
+    { designation: "Girls" },
     { designation: "Consort" },
+    { designation: "Boys and SATB" },
+    { designation: "Girls and SATB" },
+    { designation: "Consort and SATB" },
+    { designation: "Consort, Girls and SATB" },
+    { designation: "Boys, Consort and Girls" },
+    { designation: "Consort and Girls" },
+    { designation: "Consort and Sopranos" },
+    { designation: "Boys and Team A" },
+    { designation: "Boys and Team B" },
+    { designation: "Girls and Team A" },
+    { designation: "Girls and Team B" },
+    { designation: "Consort and Team A" },
+    { designation: "Consort and Team B" },
   ],
+  // September 2026. Children's numbers from Rachel Dent; adults counted off the
+  // Minster Choir teams list for the same month.
+  //
+  // The Junior Choir (ages 5–8) is deliberately not here: they do not sing from
+  // copies, so they can never make a parcel short.
+  choirSections: {
+    boys: 10,
+    girls: 19,
+    consort: 12,
+    // Team A — 16 adults.
+    teamA: { soprano: 2, alto: 5, tenor: 3, bass: 6 },
+    // Team B — 17 adults.
+    teamB: { soprano: 3, alto: 7, tenor: 4, bass: 3 },
+  },
   servicePatterns: [
     { name: "Choral Eucharist", rite: "CW Order One", usualTime: "11:00" },
     { name: "Choral Evensong", rite: "BCP 1662", usualTime: "17:30" },
@@ -283,6 +415,45 @@ export const CHURCH: ChurchConfig = {
   stocktake: {
     yearsBetweenCounts: 5,
     performancesBetweenCounts: 10,
+  },
+  labels: {
+    // Triplast A4 integrated label sheet: one 110×60mm peel-off label, placed
+    // 10mm in from the left and 49mm down from the top. Everything below that
+    // is plain paper for the volunteer to write on.
+    volunteerSheet: {
+      stock: "Triplast A4 integrated, 1 label 110×60mm",
+      pageWidth: 210,
+      pageHeight: 297,
+      labelWidth: 110,
+      labelHeight: 60,
+      marginLeft: 10,
+      marginTop: 49,
+      columns: 1,
+      rows: 1,
+      columnGap: 0,
+      rowGap: 0,
+      safeMargin: 3,
+    },
+    // Avery L7163: 14 per sheet, 99.1×38.1mm, two columns of seven.
+    //
+    // Horizontal pitch is 101.6mm (four inches), so the gap between the columns
+    // is 101.6 − 99.1 = 2.5mm. Vertical pitch is 38.1mm exactly, which is why
+    // the rows butt up with no gap: 7 × 38.1 = 266.7mm, leaving 15.15mm top and
+    // bottom on a 297mm page — matching Avery's published 15.1mm top margin.
+    avery: {
+      stock: "Avery L7163, 14 per sheet, 99.1×38.1mm",
+      pageWidth: 210,
+      pageHeight: 297,
+      labelWidth: 99.1,
+      labelHeight: 38.1,
+      marginLeft: 5,
+      marginTop: 15.1,
+      columns: 2,
+      rows: 7,
+      columnGap: 2.5,
+      rowGap: 0,
+      safeMargin: 3,
+    },
   },
   accession: {
     prefix: "BM-",

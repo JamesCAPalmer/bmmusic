@@ -37,9 +37,13 @@ page carries on working.
 - **Scan this with your phone** — a chorister photographs a copy; it is invisible
   to everybody else until an admin approves it.
 
-Not yet built: the label PDFs, people and attendance, reports, bulk edit, and
-the repertoire picker. The proper booklet builder with the Minster cover
-template stays a Phase 3 job.
+**Beta on the admin side:** people and the register — names only, admin-only,
+and nothing choir-side reads either table.
+
+Not yet built: the OCR bulk-update pipeline for returned volunteer sheets, the
+reference-scan campaigns, listen links (H2, waiting on the YouTube backfill),
+and the proper booklet builder with the Minster cover template, which stays a
+Phase 3 job.
 
 ## Layout
 
@@ -60,15 +64,23 @@ src/descants.ts        which binder holds a hymn descant (pure)
 src/submissions.ts     crowd scans, feedback and booklets
 src/workingcopy.ts     joining reference scans into one PDF
 src/audit.ts           who changed what
+src/reports.ts         coverage, what gets sung, the priority queues
+src/churchyear.ts      Easter, and which seasons are in play (pure)
+src/labels.ts          label geometry, category glyphs and the QR (pure)
+src/labelsheet.ts      drawing the two label stocks
+src/people.ts          the choir and the register (personal data — see below)
+src/password.ts        the self-service choir password
+src/ui-admin.ts        the librarian's screens
 migrations/            the D1 schema
 data/seed/             the committed draft index
 docs/PIPELINE.md       how music gets in, and the label-reading prompt
 docs/FEED.md           the music feed contract, and what the matcher achieves
 ```
 
-The pure modules — `feed`, `matcher`, `rag`, `descants` — hold no D1 and make no
-network calls, which is what lets them be tested directly against real feed
-lines rather than against tidied-up examples.
+The pure modules — `feed`, `matcher`, `rag`, `descants`, `churchyear`, `labels`
+— hold no D1 and make no network calls, which is what lets them be tested
+directly: the matcher against real feed lines rather than tidied-up examples,
+and the label geometry against the real stock dimensions.
 
 A fork of this app for another church edits `church.config.ts` and `theme.ts`
 and nothing else. If a third file needs touching, a fact has leaked out of

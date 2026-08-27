@@ -8,6 +8,8 @@
  */
 
 import { CHURCH } from "./church.config";
+import type { PieceWithHolding } from "./catalogue";
+import type { LabelContent } from "./labels";
 
 // ---------------------------------------------------------------------------
 // Coverage (H9)
@@ -454,4 +456,165 @@ export async function seasonReadiness(db: D1Database, seasons: string[]): Promis
     });
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Labels
+// ---------------------------------------------------------------------------
+
+/**
+ * Pieces a label could be printed for.
+ *
+ * **Reviewed only.** An accession number goes on a physical parcel in ink, and
+ * printing one for a row whose composer might still be wrong is the sort of
+ * mistake that outlives the person who made it.
+ */
+export async function labelCandidates(
+  db: D1Database,
+  filters: { door?: string; unlabelled?: boolean },
+  limit = 500
+): Promise<PieceWithHolding[]> {
+  const where = ["p.reviewed_at IS NOT NULL"];
+  const binds: unknown[] = [];
+
+  if (filters.door) {
+    where.push("p.location_door = ?");
+    binds.push(filters.door);
+  }
+  if (filters.unlabelled) {
+    where.push("NOT EXISTS (SELECT 1 FROM label_print lp WHERE lp.piece_id = p.id)");
+  }
+
+  const rows = await db
+    .prepare(
+      `SELECT p.*, lh.copies_total, lh.copies_usable, lh.condition, lh.last_counted
+         FROM piece p
+         LEFT JOIN (
+           SELECT h.* FROM holding h
+            WHERE h.id = (SELECT h2.id FROM holding h2 WHERE h2.piece_id = h.piece_id
+                           ORDER BY h2.last_counted DESC, h2.id DESC LIMIT 1)
+         ) lh ON lh.piece_id = p.id
+        WHERE ${where.join(" AND ")}
+        ORDER BY p.location_door, p.location_shelf, p.composer_canonical, p.title
+        LIMIT ?`
+    )
+    .bind(...binds, Math.min(Math.max(limit, 1), 1000))
+    .all<PieceWithHolding>();
+
+  return rows.results ?? [];
+}
+
+/** What goes on each label, in the order the ids were given. */
+export async function labelContentsFor(db: D1Database, ids: number[]): Promise<LabelContent[]> {
+  if (!ids.length) return [];
+
+  const contents: LabelContent[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    const placeholders = chunk.map(() => "?").join(",");
+    const rows = await db
+      .prepare(
+        `SELECT id, accession, composer, surname, title, category
+           FROM piece WHERE id IN (${placeholders})
+          ORDER BY composer_canonical, title`
+      )
+      .bind(...chunk)
+      .all<{
+        id: number;
+        accession: string | null;
+        composer: string;
+        surname: string | null;
+        title: string;
+        category: string;
+      }>();
+
+    for (const row of rows.results ?? []) {
+      contents.push({
+        pieceId: row.id,
+        accession: row.accession,
+        // Fall back to the shouted label when no surname was read: a label with
+        // no composer on it is worse than one with the label's own wording.
+        surname: row.surname ?? row.composer,
+        title: row.title,
+        category: row.category,
+      });
+    }
+  }
+  return contents;
+}
+
+/** Record that labels were printed, so a reprint is traceable (H10). */
+export async function recordLabelPrints(
+  db: D1Database,
+  pieceIds: number[],
+  kind: string,
+  who: string
+): Promise<void> {
+  const stmt = db.prepare(`INSERT INTO label_print (piece_id, kind, by_email) VALUES (?, ?, ?)`);
+  const statements = pieceIds.map((id) => stmt.bind(id, kind, who));
+  for (let i = 0; i < statements.length; i += 50) {
+    await db.batch(statements.slice(i, i + 50));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The repertoire picker (8A)
+// ---------------------------------------------------------------------------
+
+export interface SuggestionRow extends PieceWithHolding {
+  times_sung: number;
+  last_sung: string | null;
+  scanned: number;
+}
+
+/**
+ * Repertoire matching the filters, most-sung first.
+ *
+ * The filters are exact from day one. The **ordering** is the beta part: it
+ * rests on confirmed music-list matches, and there are very few of those until
+ * the lists have been worked through. Sorting by a count that is mostly zero is
+ * harmless — it degrades to alphabetical, which is a reasonable second-best —
+ * but it is why the screen says beta rather than presenting the order as fact.
+ */
+export async function repertoireSuggestions(
+  db: D1Database,
+  filters: { season?: string; category?: string },
+  limit = 100
+): Promise<SuggestionRow[]> {
+  const where = ["p.reviewed_at IS NOT NULL"];
+  const binds: unknown[] = [];
+
+  if (filters.season) {
+    where.push("p.season LIKE ?");
+    binds.push(`%${filters.season}%`);
+  }
+  if (filters.category) {
+    where.push("p.category = ?");
+    binds.push(filters.category);
+  }
+
+  const rows = await db
+    .prepare(
+      `SELECT p.*,
+              lh.copies_total, lh.copies_usable, lh.condition, lh.last_counted,
+              (SELECT COUNT(*) FROM service_music sm
+                WHERE sm.piece_id = p.id AND sm.match_state = 'confirmed') AS times_sung,
+              (SELECT MAX(s.service_date) FROM service_music sm
+                 JOIN service s ON s.id = sm.service_id
+                WHERE sm.piece_id = p.id AND sm.match_state = 'confirmed') AS last_sung,
+              (SELECT COUNT(*) FROM file f WHERE f.piece_id = p.id AND f.kind = 'reference_scan') AS scanned
+         FROM piece p
+         LEFT JOIN (
+           SELECT h.* FROM holding h
+            WHERE h.id = (SELECT h2.id FROM holding h2 WHERE h2.piece_id = h.piece_id
+                           ORDER BY h2.last_counted DESC, h2.id DESC LIMIT 1)
+         ) lh ON lh.piece_id = p.id
+        WHERE ${where.join(" AND ")}
+        ORDER BY times_sung DESC, p.composer_canonical, p.title
+        LIMIT ?`
+    )
+    .bind(...binds, Math.min(Math.max(limit, 1), 300))
+    .all<SuggestionRow>();
+
+  return rows.results ?? [];
 }
