@@ -7,6 +7,61 @@ diff.
 
 ---
 
+## Session 2 — Build 2
+
+### Milestone 1 — schema migration 2
+
+`migrations/0002_build2.sql`, additive only. Nothing dropped, nothing
+rewritten: 0001 has already run against `minster-data`, and what is in it
+is the product of somebody's afternoons in a cold song school.
+
+**New columns on `piece`.** `composer_full` and `surname` come from
+index v2; `location_door` (A–H), `location_shelf` and `spine_state`
+('ok' / 'none' / 'combined') are what the volunteer sheets will collect.
+Door and shelf are two columns rather than one string because "what is
+on door C?" is a question the sheet run answers by sorting, and the free
+text `location` column from 0001 cannot be sorted usefully.
+
+**Eleven new tables.** `service` and `service_music` take the
+bmserviceapp feed; `match_alias` is the matcher's memory. `app_setting`
+holds the hashed choir password and small knobs; `audit_log` takes a row
+for every admin mutation. `person` and `attendance` are the register;
+`feedback` the widget's store; `scan_submission` the crowd-scan approval
+queue; `label_print` and `booklet` the paper trail for printed labels and
+produced PDFs; `loan` the out/back register (H5).
+
+**`piece.season` becomes a controlled vocabulary** — 19 tags in church-year
+order, in `src/church.config.ts`. Deliberately *not* a database CHECK: the
+column holds a semicolon-joined list, so a constraint could only match the
+whole string, and a rejected write tells nobody anything. `readSeasons()`
+in `src/normalise.ts` folds case, spacing, commas and the synonyms the
+choir actually uses ("Whitsun" → `pentecost`), and hands back anything it
+does not recognise **verbatim** rather than dropping it. The importer turns
+that into a review flag naming the word somebody actually wrote. Every one
+of the 19 tags in the committed index falls inside the vocabulary, and a
+test asserts it stays that way.
+
+**The importer reads the v2 columns.** `composer_full`, `surname` and
+`season` now land on the piece, and the planner compares them — without
+that they would import once and then never update, because a row with a
+corrected season would be called "unchanged". A v1 cut with none of these
+columns still imports, storing NULL rather than empty string.
+
+Tests: 108, up from 66. New coverage on the season vocabulary, the v2
+columns, and every constraint in 0002 that carries a decision — including
+that SQLite would accept each `ALTER TABLE ADD COLUMN` (no UNIQUE, no
+PRIMARY KEY, a default behind any NOT NULL), which otherwise fails at
+migrate time against the live database rather than in CI.
+
+### Milestone 0 — CI green against index v2
+
+Index v2 landed on `main` in 79b3930 with 410 rows where v1 had 324, and
+69 multi-title parcels where v1 had 65; the seed tests hard-coded both.
+The counts now sit in two named constants, so the next re-cut is a
+two-line edit. Three committed `.DS_Store` files removed and gitignored.
+
+---
+
 ## Session 1 — Phase 0: scaffold, schema, seed, portal
 
 The first working session. bmmusic starts as an empty repository holding

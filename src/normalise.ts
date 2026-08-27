@@ -17,6 +17,8 @@
  * `composer` / `title` / `alt_name` columns; these are only ever the key.
  */
 
+import { CHURCH } from "./church.config";
+
 /** Strip accents so "Fauré" and "Faure" fold together. */
 function stripDiacritics(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -67,6 +69,76 @@ export function splitTitles(joined: string): string[] {
     .split(";")
     .map((t) => t.trim())
     .filter((t) => t.length > 0);
+}
+
+// ---------------------------------------------------------------------------
+// Season tags
+// ---------------------------------------------------------------------------
+
+const SEASON_VALUES = new Set(CHURCH.seasons.map((s) => s.value));
+
+/**
+ * Common spellings that mean a tag in the vocabulary.
+ *
+ * The draft index is tidy, but the admin bulk-edit box and the photo intake
+ * both let somebody type a season by hand, and "Whitsun" is what half the
+ * choir calls Pentecost. Folding those in here beats rejecting them.
+ */
+const SEASON_SYNONYMS: Record<string, string> = {
+  whitsun: "pentecost",
+  whitsunday: "pentecost",
+  pentecoste: "pentecost",
+  passion: "passiontide",
+  "holy week": "holyweek",
+  "all saints": "allsaints",
+  allsouls: "allsaints",
+  "all souls": "allsaints",
+  bvm: "marian",
+  mary: "marian",
+  saint: "saints",
+  purification: "candlemas",
+  presentation: "candlemas",
+  ordinary: "general",
+  "ordinary time": "general",
+};
+
+export interface SeasonReading {
+  /** Recognised tags, deduplicated and in the church-year order of the config. */
+  tags: string[];
+  /** Anything that was not a tag, kept verbatim so a human can see what it was. */
+  unknown: string[];
+}
+
+/**
+ * Read a semicolon-joined season string against the controlled vocabulary.
+ *
+ * Unrecognised tags are returned rather than dropped or coerced. The importer
+ * turns them into a review flag; the database has no CHECK on the column
+ * precisely so that this can happen where somebody will read about it, rather
+ * than as a failed write nobody sees.
+ */
+export function readSeasons(raw: string | null | undefined): SeasonReading {
+  const tags = new Set<string>();
+  const unknown: string[] = [];
+
+  for (const part of (raw ?? "").split(/[;,]/)) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const folded = trimmed.toLowerCase().replace(/\s+/g, " ");
+    const candidate = SEASON_SYNONYMS[folded] ?? folded.replace(/\s+/g, "");
+    if (SEASON_VALUES.has(candidate)) tags.add(candidate);
+    else unknown.push(trimmed);
+  }
+
+  // Church-year order, not the order somebody happened to type them in, so two
+  // rows tagged the same way always render the same way.
+  return { tags: CHURCH.seasons.map((s) => s.value).filter((v) => tags.has(v)), unknown };
+}
+
+/** The stored form of a season list: recognised tags, joined with ";". */
+export function formatSeasons(raw: string | null | undefined): string | null {
+  const { tags } = readSeasons(raw);
+  return tags.length ? tags.join(";") : null;
 }
 
 /** Format an accession number: 1 → "BM-0001". */
