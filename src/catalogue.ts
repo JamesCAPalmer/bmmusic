@@ -36,7 +36,7 @@ export interface PieceRow {
   location_door: string | null;
   /** Shelf within that door. */
   location_shelf: number | null;
-  /** 'ok' | 'none' | 'combined' — whether the parcel has a usable spine label. */
+  /** 'ok' | 'none' | 'combined' — whether the box has a usable spine label. */
   spine_state: string | null;
   legacy_ref: string | null;
   notes: string | null;
@@ -99,7 +99,7 @@ export interface PieceWithHolding extends PieceRow {
  * The most recent holding per piece.
  *
  * `holding` keeps every count rather than overwriting, so "how many are there"
- * means "what did the last person to open the parcel find". Ordering by date
+ * means "what did the last person to open the box find". Ordering by date
  * then id breaks the tie when two counts share a day.
  */
 const LATEST_HOLDING = `
@@ -137,7 +137,7 @@ export interface SearchResult {
  *
  * Free text is matched three ways — the composer's folded name, the title's
  * folded form, and any alias — because somebody looking for "O sing joyfully"
- * is looking for the Batten parcel whose title is
+ * is looking for the Batten box whose title is
  * "O sing joyfully; Deliver us O Lord; O praise the Lord", and somebody looking
  * for "Faure" should find "FAURÉ" without knowing where the accent is.
  *
@@ -370,9 +370,9 @@ export async function confirmPiece(db: D1Database, id: number, who: string): Pro
  * Merge one piece into another: the loser's aliases and holdings move across,
  * its title is kept as an alias, and the row itself is deleted.
  *
- * The draft index has genuine duplicates in it — the same parcel photographed
+ * The draft index has genuine duplicates in it — the same box photographed
  * from two angles, or "see also REDFORD D-172" written on a label — so the
- * review queue needs a way to say "these two are one parcel".
+ * review queue needs a way to say "these two are one box".
  */
 export async function mergePieces(db: D1Database, keepId: number, mergeId: number): Promise<void> {
   if (keepId === mergeId) throw new Error("A piece cannot be merged into itself.");
@@ -382,7 +382,7 @@ export async function mergePieces(db: D1Database, keepId: number, mergeId: numbe
 
   await db.batch([
     // The losing title becomes an alias of the survivor, so a music list naming
-    // it still finds the parcel.
+    // it still finds the box.
     db
       .prepare(
         `INSERT INTO alias (piece_id, alt_name, alt_canonical, source) VALUES (?, ?, ?, 'merge')
@@ -432,10 +432,10 @@ export interface AccessionResult {
  * Catalogue order is composer then title — the order somebody walking the
  * shelves with a pen would work in. Numbering continues from the highest
  * already assigned and never renumbers an existing one: an accession number is
- * written on a physical parcel, so once it is out in the world it is fixed.
+ * written on a physical box, so once it is out in the world it is fixed.
  *
  * Only reviewed pieces are numbered. Numbering a draft row would mean writing a
- * number on a parcel whose composer might still be wrong.
+ * number on a box whose composer might still be wrong.
  */
 export async function assignAccessions(db: D1Database): Promise<AccessionResult> {
   const { prefix, digits } = CHURCH.accession;

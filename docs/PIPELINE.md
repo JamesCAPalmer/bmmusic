@@ -6,7 +6,7 @@ Three ways in, in the order they matter:
    catalogue got its first 324 rows.
 2. **Photo intake** — photograph a label, have it read, check it, add it. This
    is how the rest of the library gets in, and how mistakes in the draft index
-   get corrected against the actual parcel.
+   get corrected against the actual box.
 3. **By hand** — the same intake form with nothing filled in. Always available,
    and the fallback whenever reading a label is switched off or fails.
 
@@ -86,7 +86,7 @@ back to the piece it corrects.
 `/admin/intake`, following the estate's upload → extract → review → confirm
 pattern (the same shape as vestry's scanned-document intake).
 
-1. **Upload.** A photo of one parcel label, taken on a phone. JPG, PNG, WebP or
+1. **Upload.** A photo of one box label, taken on a phone. JPG, PNG, WebP or
    a PDF.
 2. **Extract.** `POST /admin/api/read-label` sends the image to the Anthropic
    Messages API (`claude-sonnet-5`) with the prompt below and a strict JSON
@@ -96,7 +96,7 @@ pattern (the same shape as vestry's scanned-document intake).
    sure the reading was. Anything below 0.80 is shown in red, and is added to
    the row's review flags automatically — so a shaky reading cannot be confirmed
    into the catalogue just by pressing the button.
-4. **Confirm.** Nothing is written until the button is pressed. A parcel holding
+4. **Confirm.** Nothing is written until the button is pressed. A box holding
    several pieces keeps the joined title and gains one alias per piece, the same
    rule the seed importer follows.
 
@@ -104,7 +104,7 @@ pattern (the same shape as vestry's scanned-document intake).
 
 With `ANTHROPIC_API_KEY` unset the upload step is not offered at all. The screen
 says so plainly and shows the manual form instead. A volunteer standing in a
-cold song school holding a parcel should never meet an error page, and a missing
+cold song school holding a box should never meet an error page, and a missing
 key is a configuration fact, not a fault.
 
 The same applies when the call fails: a network error, a rate limit or an
@@ -118,7 +118,7 @@ Kept in step with `LABEL_PROMPT` in `src/extract.ts`, which is what actually
 runs. The category list is generated from `church.config` so the two cannot
 drift.
 
-> You are reading a photograph of a label on a parcel or box of choral music in
+> You are reading a photograph of a label on a box of choral music in
 > the song school at Beverley Minster. Somebody will check everything you
 > return, so your job is to read accurately and to be honest about what you
 > cannot read — not to produce a tidy answer.
@@ -139,7 +139,7 @@ drift.
 > 4. Put the characters you actually see in "verbatim", before any tidying: keep
 >    the label's capitalisation, its abbreviations ("Mag & Nunc"), and its
 >    question marks.
-> 5. A parcel often holds several pieces. List every title separately, in the
+> 5. A box often holds several pieces. List every title separately, in the
 >    order written. Do not merge them and do not invent a collective title.
 > 6. Category must be one of these codes, or null when the label does not settle
 >    it: *(the eight codes and their blurbs, from `church.config`)*. Choose null
@@ -150,7 +150,7 @@ drift.
 >    deduce it from the composer or the piece.
 > 8. Season is only what is written (Advent, Lent, Easter, Christmas,
 >    Passiontide).
-> 9. Location is any shelf, box or parcel marking — "Box 4", "pencil 44 on box",
+> 9. Location is any shelf or box marking — "Box 4", "pencil 44 on box",
 >    a cupboard name.
 > 10. If the label gives a number of copies, put it in copiesTotal. A pencilled
 >     number that might be a copy count or might be a box number goes in
@@ -159,7 +159,7 @@ drift.
 >     references, "see also" notes, publisher names, donors' names.
 > 12. Use "concerns" for anything a human should look at: an unreadable word,
 >     two possible readings, a damaged label, a cross-reference to another
->     parcel, the reason a category was a guess.
+>     box, the reason a category was a guess.
 >
 > If the photograph shows no readable label at all, return nulls with confidence
 > 0 and say so in "concerns". Do not describe the photograph.
@@ -167,7 +167,7 @@ drift.
 Rules 2 and 10 are the ones earning their keep. A model that knows the
 repertoire will happily supply "Byrd" for an unattributed *Ave verum corpus*,
 and it will be right often enough to be dangerous — the catalogue would fill
-with confident attributions nobody ever checked against the parcel. And the
+with confident attributions nobody ever checked against the box. And the
 pencilled numbers on these boxes are genuinely ambiguous: `pencil 44 on box`
 appears in the draft index precisely because the cataloguer could not tell a
 copy count from a box number either.
@@ -179,11 +179,11 @@ copy count from a box number either.
 Not an intake route — the piece already exists — but it writes to the catalogue,
 so it belongs here.
 
-A volunteer at `/portal` finds a parcel by accession number, composer or title,
+A volunteer at `/portal` finds a box by accession number, composer or title,
 opens it, and records: copies total, copies usable, condition, the voicing
 printed on the copies, and a note. That writes a `holding` row. Counts are
 **never** overwritten: each one is a new row, and "how many are there" means
-"what did the last person to open the parcel find".
+"what did the last person to open the box find".
 
 Three things follow from a count:
 
@@ -196,8 +196,8 @@ Three things follow from a count:
   already set.
 
 The confirmation screen asks for one copy to be set aside for scanning. That is
-the whole point of getting the parcels open: the scanning backlog is Phase 1,
-and it is far cheaper to pull a copy while the parcel is already open than to
+the whole point of getting the boxes open: the scanning backlog is Phase 1,
+and it is far cheaper to pull a copy while the box is already open than to
 find it again later.
 
 ---

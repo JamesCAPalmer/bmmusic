@@ -41,7 +41,7 @@ describe("the copies RAG", () => {
     expect(verdict.shortfall).toBeNull();
   });
 
-  it("is grey, not red, when nobody has counted the parcel", () => {
+  it("is grey, not red, when nobody has counted the box", () => {
     const verdict = copiesRag({ copiesUsable: null, typicalSingers: 20 });
     expect(verdict.state).toBe("grey");
     expect(verdict.reason).toContain("counted");

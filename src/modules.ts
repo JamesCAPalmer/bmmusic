@@ -59,7 +59,7 @@ export const MODULES: readonly ModuleInfo[] = [
   {
     key: "services",
     label: "Services and music lists",
-    blurb: "The month's services from the service app, and matching their music to parcels.",
+    blurb: "The month's services from the service app, and matching their music to boxes.",
     defaultOn: true,
     personal: false,
   },

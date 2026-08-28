@@ -5,7 +5,7 @@
  * have to match them to a fraction of a millimetre or the print lands off the
  * die-cut. The failure mode is expensive and slow to notice: a 410-sheet run
  * where every label is 5mm out and nobody sees it until the third sheet has
- * been stuck to a parcel.
+ * been stuck to a box.
  *
  * So this file tests the arithmetic rather than the PDF. Where a label *goes*
  * is the part most likely to be quietly wrong; whether pdf-lib can draw a
@@ -167,7 +167,7 @@ describe("category glyphs", () => {
 });
 
 describe("the QR target (H1)", () => {
-  // Domain-move-safe: the accession is written on the parcel in ink and is the
+  // Domain-move-safe: the accession is written on the box in ink and is the
   // one identifier that cannot go stale, so the QR encodes that rather than a
   // piece id that a re-import could renumber.
   it("encodes the accession, not the database id", () => {

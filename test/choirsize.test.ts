@@ -45,7 +45,7 @@ describe("the sections add up", () => {
   });
 
   // The Junior Choir (5–8) does not sing from copies, so it can never make a
-  // parcel short and is deliberately not counted anywhere.
+  // box short and is deliberately not counted anywhere.
   it("leaves the Junior Choir out of the full choir", () => {
     expect(FULL_CHOIR_TOTAL).toBe(boys + girls + consort + ADULT_TOTAL);
     expect(FULL_CHOIR_TOTAL).toBe(74);

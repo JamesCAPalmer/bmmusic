@@ -4,7 +4,7 @@
  * Two separate jobs, deliberately kept apart:
  *
  *   - `canonicalComposer` — for sorting the catalogue and grouping a composer's
- *     parcels together. The labels were written by hand over decades, so the
+ *     boxes together. The labels were written by hand over decades, so the
  *     same composer appears as "BAIRSTOW", "Bairstow", "MAWBY?" and
  *     "ANON (16th c.)". A trailing "?" is somebody's uncertainty, not part of
  *     the name; a parenthetical is a note, not part of the name.
@@ -59,9 +59,9 @@ export function canonicalTitle(raw: string): string {
 /**
  * Split a joined title into its parts.
  *
- * The draft index joins the titles on one parcel with ";" — 69 of its 410 rows
+ * The draft index joins the titles on one box with ";" — 69 of its 410 rows
  * are multi-title. The joined string stays the piece's title verbatim, because
- * that is what is written on the parcel; the parts become aliases so that a
+ * that is what is written on the box; the parts become aliases so that a
  * music list naming only one of them still finds it.
  */
 export function splitTitles(joined: string): string[] {

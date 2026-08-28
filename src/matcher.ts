@@ -1,5 +1,5 @@
 /**
- * Matching a music-list line to a parcel in the library.
+ * Matching a music-list line to a box in the library.
  *
  * The feed gives us what the Minster published, in the shape a human wrote it:
  *
@@ -8,7 +8,7 @@
  *     responses: "Bernard Rose"
  *     psalm:     "80 vv1-8"
  *
- * The catalogue holds what is written on the parcel, which was read off a
+ * The catalogue holds what is written on the box, which was read off a
  * photograph of a handwritten label. Neither side is clean — note the "Wiliam"
  * above, which is in the real feed — so this is a fuzzy match, and the whole
  * design follows from admitting that:
@@ -24,7 +24,7 @@
  *
  *   - **A near-miss is not a match.** Where two Stanford settings score alike,
  *     the answer is "I don't know" and a line in the admin queue — not a coin
- *     toss that quietly puts the wrong parcel on a chorister's service page.
+ *     toss that quietly puts the wrong box on a chorister's service page.
  *
  *   - **What a human confirms is remembered.** A confirmed pair is written to
  *     `match_alias` keyed on the normalised raw text and reused outright from
@@ -48,12 +48,12 @@ export type Slot =
   | "other";
 
 /**
- * Slots worth matching against the parcel library.
+ * Slots worth matching against the box library.
  *
  * A psalm is a number and a pointing, a hymn is a number in the hymn book, and
  * a voluntary is organ repertoire that lives on the organ loft rather than in
  * the song school. All three are recorded and shown, none is matched: offering
- * a parcel for "80 vv1-8" would be noise in the review queue every week.
+ * a box for "80 vv1-8" would be noise in the review queue every week.
  */
 const MATCHABLE: ReadonlySet<Slot> = new Set<Slot>([
   "responses",
@@ -78,7 +78,7 @@ export function isMatchable(slot: Slot): boolean {
  *
  * Deliberately blunter than `canonicalTitle`: it folds the *whole* line,
  * composer and all, because what is being remembered is "this exact phrasing,
- * however the list wrote it, means that parcel". Keeping the composer in is
+ * however the list wrote it, means that box". Keeping the composer in is
  * what stops "in C (Stanford)" and "in C (Wood)" collapsing onto one key.
  */
 export function normaliseMatchKey(raw: string): string {
@@ -175,7 +175,7 @@ export function parseMusicLine(raw: string, slot: Slot): ParsedLine {
 /** One catalogue entry, flattened into the forms the matcher compares. */
 export interface CorpusPiece {
   id: number;
-  /** Every title this parcel is known by: its own, plus its aliases. */
+  /** Every title this box is known by: its own, plus its aliases. */
   titles: string[];
   /** Composer as printed, written out, and surname — whichever exist. */
   composers: string[];
@@ -204,7 +204,7 @@ const SCORE_THRESHOLD = 0.55;
  *
  * The library holds several Stanford evening services. When two of them score
  * alike the honest answer is "I don't know", and an unmatched line an admin
- * taps once is far cheaper than a wrong parcel on a chorister's service page
+ * taps once is far cheaper than a wrong box on a chorister's service page
  * that nobody notices until the rehearsal.
  */
 const CLEAR_MARGIN = 0.08;
@@ -223,17 +223,17 @@ function tokens(text: string): Set<string> {
 }
 
 /**
- * How much of what the music list said this parcel accounts for.
+ * How much of what the music list said this box accounts for.
  *
  * Directional on purpose, and the direction was wrong first time round. Scoring
  * against the *shorter* of the two sides let a three-word line match a two-word
- * parcel on one shared word — which is how "Lord, I trust thee (Handel)" came
- * to point at a different Handel parcel entirely in a dry run over four real
+ * box on one shared word — which is how "Lord, I trust thee (Handel)" came
+ * to point at a different Handel box entirely in a dry run over four real
  * months of the feed.
  *
  * Measuring against the line's own words instead asks the question that
- * matters: is everything the list named actually in this parcel's title? That
- * keeps "Abendlied" matching a parcel catalogued "Abendlied (Op. 69 No. 3)",
+ * matters: is everything the list named actually in this box's title? That
+ * keeps "Abendlied" matching a box catalogued "Abendlied (Op. 69 No. 3)",
  * where the extra words are the library's cataloguing rather than a different
  * piece, while a line sharing one word out of four falls well short.
  */
@@ -248,9 +248,9 @@ function overlap(line: Set<string>, candidate: Set<string>): number {
  * Does this piece's composer appear in the line's composer?
  *
  * One-directional containment on purpose. The feed writes composers out
- * ("Charles Villiers Stanford"); the parcel label shouts a surname
+ * ("Charles Villiers Stanford"); the box label shouts a surname
  * ("STANFORD"). The surname must appear in the feed's name, not the other way
- * about, or every parcel labelled with a common surname matches everything.
+ * about, or every box labelled with a common surname matches everything.
  */
 function composerMatches(lineComposer: string, pieceComposers: string[]): boolean {
   const line = canonicalComposer(lineComposer);
@@ -261,7 +261,7 @@ function composerMatches(lineComposer: string, pieceComposers: string[]): boolea
     const folded = canonicalComposer(candidate);
     if (!folded) continue;
     if (folded === line) return true;
-    // Every word of the parcel's composer appears somewhere in the feed's.
+    // Every word of the box's composer appears somewhere in the feed's.
     const parts = folded.split(" ").filter((p) => p.length > 1);
     if (parts.length && parts.every((p) => lineTokens.has(p))) return true;
   }
@@ -269,15 +269,15 @@ function composerMatches(lineComposer: string, pieceComposers: string[]): boolea
 }
 
 /**
- * Does this parcel's title carry the key the line asked for?
+ * Does this box's title carry the key the line asked for?
  *
  * A substring test is not good enough and was wrong here first time round: a
  * bare "C" appears inside "evening servi**c**e", so every setting matched every
  * key and the matcher declined every canticle it should have got right.
  *
- * So the comparison is on words. The parcel's key is whatever follows the last
+ * So the comparison is on words. The box's key is whatever follows the last
  * "in" in its title, and the line's key has to be that, or the start of it —
- * which lets "Stanford in C" match a parcel catalogued "…in C major" while
+ * which lets "Stanford in C" match a box catalogued "…in C major" while
  * still keeping "in C" clear of "in B flat".
  */
 function titleCarriesKey(title: string, key: string): boolean {
@@ -326,9 +326,9 @@ export function scoreCandidate(parsed: ParsedLine, piece: CorpusPiece): number {
   if (parsed.title && parsed.composer) {
     // Both known, so both have to agree. The composer alone is worth 0.30 —
     // real, but never enough on its own to clear the threshold, because the
-    // library holds several parcels by every composer the Minster sings often.
+    // library holds several boxes by every composer the Minster sings often.
     // That weighting is what stops "O for a closer walk with God (Stanford)"
-    // settling on whichever Stanford parcel shares a stray word.
+    // settling on whichever Stanford box shares a stray word.
     //
     // A composer that is published and does *not* match caps out at 0.50 and so
     // can never match at all: the right words by the wrong composer is a

@@ -100,10 +100,10 @@ Measured by running `src/matcher.ts` over four real months of the feed
 
 That number is deliberately not higher. An earlier scoring rule reached 61% and
 included real false positives: "O for a closer walk with God (Stanford)" landed
-on a different Stanford parcel that shared one word, and "Lord, I trust thee
-(Handel)" on a different Handel one. The library holds fifteen Stanford parcels;
+on a different Stanford box that shared one word, and "Lord, I trust thee
+(Handel)" on a different Handel one. The library holds fifteen Stanford boxes;
 an unmatched line costs a tap, and a wrongly matched one sends a chorister to
-the wrong parcel with nobody the wiser until the rehearsal. Both cases are now
+the wrong box with nobody the wiser until the rehearsal. Both cases are now
 regression tests in `test/matcher.test.ts`.
 
 The rate climbs on its own regardless, because **every confirmation is

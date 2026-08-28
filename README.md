@@ -1,8 +1,8 @@
 # bmmusic — the Minster music library
 
-A private catalogue of the physical music library at Beverley Minster: the
-anthems in wrapped parcels and the service settings in boxes in the song school,
-roughly 500–600 items. It records what we have, how many copies, and what state
+A private catalogue of the physical music library at Beverley Minster: roughly
+500–600 boxes of music in the song school, behind eight cupboards named after
+diesel locomotive classes. It records what we have, how many copies, and what state
 they are in — and gives the choir a way to look a piece up without opening a
 cupboard. Since Addendum A it also runs the choir: the register, attendance,
 quarterly pay and the safeguarding duty rota.
@@ -36,8 +36,8 @@ needs before there is a session and which reveal nothing about the library.
 
 | | |
 | --- | --- |
-| **Choir** | A home screen showing the next service with its music list and copies RAG; browse and search by composer, title, category and voicing; a piece page with copy counts, season, where the parcel lives, when we last sang it, and its reference scans. A descant finder. |
-| **Volunteers** | A phone-shaped portal for counting a parcel: totals, condition, voicing, notes. |
+| **Choir** | A home screen showing the next service with its music list and copies RAG; browse and search by composer, title, category and voicing; a piece page with copy counts, season, where the box lives, when we last sang it, and its reference scans. A descant finder. |
+| **Volunteers** | A phone-shaped portal for counting a box: totals, condition, voicing, notes. |
 | **Librarian** (`/admin`) | The review queue for draft entries, the music-list match queue, the crowd-scan approval queue, feedback, accession numbering, an item editor, photo intake, label printing, loans, reports and the draft-index importer. |
 | **Music staff** (`/admin`) | The choir list and each person's record, the register, attendance totals, the quarterly pay run, the safeguarding duty rota, exports, and the workbook importer. |
 
@@ -74,9 +74,10 @@ their routes 404 until there is something behind them.
 ```
 src/church.config.ts   every Minster-specific fact (estate pattern — pure data)
 src/theme.ts           design tokens, separate from layout (estate pattern)
+src/icons.ts           the glyph set, as inline SVG (pure, no dependency)
 src/env.ts             the Worker's bindings, and the shared Hono env type
 src/index.ts           routes, and the three cron handlers
-src/ui.ts              the choir-side pages
+src/ui.ts              the choir-side pages, the masthead and the tab strip
 src/ui-admin.ts        the admin pages
 src/assets.ts          the estate's logo, icons and type faces, served locally
 src/text-modules.d.ts  lets the draft index bundle as a text module
@@ -90,6 +91,7 @@ src/audit.ts           who changed what
 
   the library
 src/catalogue.ts       the catalogue's D1
+src/storage.ts         cupboards and shelves — how a box's address reads (pure)
 src/seed.ts            the draft-index importer
 src/normalise.ts       season vocabulary and canonical forms (pure)
 src/reports.ts         coverage, what gets sung, the priority queues
@@ -103,7 +105,7 @@ src/csv.ts             a small RFC 4180 reader and writer (pure)
 
   services and music lists
 src/feed.ts            reading bmserviceapp's music feed (pure)
-src/matcher.ts         matching a music-list line to a parcel (pure)
+src/matcher.ts         matching a music-list line to a box (pure)
 src/services.ts        services, music lists and the matcher's memory — the D1 half
 src/churchyear.ts      Easter, and which seasons are in play (pure)
 src/rag.ts             the copies RAG (pure)
@@ -132,6 +134,64 @@ coverage rules against every way a rota can be wrong.
 A fork of this app for another church edits `church.config.ts` and `theme.ts`
 and nothing else. If a third file needs touching, a fact has leaked out of
 config and should go back.
+
+## How it looks, and why
+
+It is meant to read as an app rather than as a printed document, because that
+is what it is: used one-handed, on a phone, in a cold song school, by children.
+Four decisions carry most of that, and each is enforced by a test rather than
+left to taste.
+
+**A tab strip, on every page.** Four destinations choir-side — Services,
+Library, Descants, Count a box — and nine on the admin side. The same row in
+the same place with the current one marked is the single thing that makes an
+app navigable without a map. It scrolls sideways rather than wrapping so the
+page below never shifts, and below 30rem the labels drop away from all but the
+current tab and the glyphs carry it. Which tab is current is derived from the
+path, so a new page gets it right without being told.
+
+**Glyphs, drawn here.** `src/icons.ts` is about thirty inline SVG paths on a
+24×24 grid. No icon font and no package: CDN assets are ruled out, and an icon
+that fetches anything is an icon that is sometimes a blank square on one bar of
+signal. Every glyph is `currentColor` and `aria-hidden`, because each one sits
+beside a label that already says the same thing.
+
+**Rounded corners, and the sans face on anything you tap.** The radius scale
+runs 6→16px by role — chip, input, button, card — rather than one value
+everywhere. Buttons name the sans face explicitly: a `<button>` does not
+inherit the page's font, so without that line every button in the app was set
+in the browser's own UI face. The display serif stays where it belongs, on the
+music: piece titles, composers, headings.
+
+**No blue.** Blue is not a Minster colour. The estate's focus ring was
+`#1A6FB5` and it was there for a good reason — a hue nobody else uses always
+reads as *the keyboard is here* — so removing it meant replacing it rather than
+deleting it. The ring is two-tone instead: dark with a light halo, reversed in
+the dark theme, legible on cream, on white, on a red button and on a dark page.
+`test/theme.test.ts` fails if a blue ever reappears in either palette. The one
+exception is the Marian season rule, which is liturgical rather than brand and
+is asserted as the *only* blue in the file.
+
+## Say "box", and the cupboards have names
+
+**Box.** The anthems are physically in wrapped parcels and the service settings
+are in boxes; the app used to say both, and now says *box* for everything. One
+word for one idea — a volunteer holding the thing should not have to work out
+which word the screen will use. Nothing in the database changed; this was
+always prose.
+
+**The cupboards are diesel locomotive classes** — Deltic, Western, Warship,
+Peak, Hymek, Whistler, Growler, Duff, one per door, in `CHURCH.storage.doors`.
+Robert's idea, and a good one: "it's in Deltic" survives being called across a
+song school in a way that "it's in D" does not, because a name is memorable
+exactly where a letter is confusable.
+
+The letter is what is stored, printed on every label and painted on the doors;
+the name is display only, and `src/storage.ts` is the one place that joins them
+(`A · Deltic`). So renaming a cupboard, or dropping the joke entirely, is an
+edit to that one array — no migration, no reprint, no recount.
+`test/storage.test.ts` holds that line: it asserts `isDoorLetter("Deltic")` is
+false, so a name can never become a stored value.
 
 ## Working on it
 

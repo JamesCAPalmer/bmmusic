@@ -5,7 +5,7 @@ import type { Env } from "../src/env";
 
 const env = {
   SESSION_SECRET: "test-session-secret",
-  CHOIR_PASSWORD: "michaelmas anthem parcel",
+  CHOIR_PASSWORD: "michaelmas anthem box",
 } as unknown as Env;
 
 describe("session cookie", () => {
@@ -99,30 +99,30 @@ describe("password generation invalidates sessions", () => {
 
 describe("hashing the choir password", () => {
   it("accepts the password it was made from", async () => {
-    const hash = await hashPassword("michaelmas anthem parcel");
-    expect(await verifyPassword("michaelmas anthem parcel", hash)).toBe(true);
+    const hash = await hashPassword("michaelmas anthem box");
+    expect(await verifyPassword("michaelmas anthem box", hash)).toBe(true);
   });
 
   it("rejects a wrong password", async () => {
-    const hash = await hashPassword("michaelmas anthem parcel");
-    expect(await verifyPassword("lent anthem parcel", hash)).toBe(false);
+    const hash = await hashPassword("michaelmas anthem box");
+    expect(await verifyPassword("lent anthem box", hash)).toBe(false);
     expect(await verifyPassword("", hash)).toBe(false);
   });
 
   // A shared password in a shared database must not be readable by anybody who
   // can read the database.
   it("stores no trace of the password itself", async () => {
-    const hash = await hashPassword("michaelmas anthem parcel");
+    const hash = await hashPassword("michaelmas anthem box");
     expect(hash).not.toContain("michaelmas");
     expect(hash).not.toContain("anthem");
     expect(hash.startsWith("pbkdf2$")).toBe(true);
   });
 
   it("salts, so the same password twice gives two different hashes", async () => {
-    const a = await hashPassword("michaelmas anthem parcel");
-    const b = await hashPassword("michaelmas anthem parcel");
+    const a = await hashPassword("michaelmas anthem box");
+    const b = await hashPassword("michaelmas anthem box");
     expect(a).not.toBe(b);
-    expect(await verifyPassword("michaelmas anthem parcel", b)).toBe(true);
+    expect(await verifyPassword("michaelmas anthem box", b)).toBe(true);
   });
 
   // The iteration count travels with the hash, so raising it later does not

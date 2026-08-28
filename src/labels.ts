@@ -5,8 +5,8 @@
  *
  *   - **The volunteer sheet** — a Triplast A4 integrated sheet with one
  *     110×60mm peel-off label at the top and plain paper below it. The label
- *     goes on the parcel; the paper below is where a volunteer writes what they
- *     found. One sheet per parcel, and 410 of them for the whole library.
+ *     goes on the box; the paper below is where a volunteer writes what they
+ *     found. One sheet per box, and 410 of them for the whole library.
  *   - **Avery L7163** — 14 per sheet, for reprints, face labels and combined
  *     labels, with a selectable start position so a part-used sheet is not
  *     wasted.
@@ -153,9 +153,9 @@ export function glyphFor(category: string): Glyph {
  *
  * **Domain-move-safe by design.** When the app moves to
  * `music.beverleyminster.org.uk`, the old hostname keeps a Worker that 301s
- * everything — so a QR printed on a parcel today still works in ten years.
+ * everything — so a QR printed on a box today still works in ten years.
  * That is the whole reason for the short `/q/:accession` route rather than
- * encoding a `/piece/:id` link: the accession is written on the parcel in ink
+ * encoding a `/piece/:id` link: the accession is written on the box in ink
  * and is the one identifier that cannot go stale.
  */
 export function qrTargetFor(accession: string): string {
@@ -171,7 +171,7 @@ export interface QrMatrix {
 /**
  * Build the QR matrix for an accession.
  *
- * Error correction M: a label lives on a parcel handled by choristers in a cold
+ * Error correction M: a label lives on a box handled by choristers in a cold
  * room, so it will get creased and thumbed. M recovers from about 15% damage,
  * which is the usual choice for print and leaves the code small enough to sit
  * comfortably on a 38mm label.
@@ -201,7 +201,7 @@ export interface LabelContent {
   surname: string;
   title: string;
   category: string;
-  /** For a combined label: the other parcels sharing it. */
+  /** For a combined label: the other boxes sharing it. */
   boxmates?: string[];
 }
 

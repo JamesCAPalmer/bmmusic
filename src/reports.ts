@@ -107,7 +107,7 @@ export async function mostSung(db: D1Database, since: string, limit = 20): Promi
  * Reviewed pieces nobody has sung in the window, least recently sung first.
  *
  * Reviewed only: a draft row nobody has checked is not "neglected repertoire",
- * it is a row that may not describe a real parcel.
+ * it is a row that may not describe a real box.
  */
 export async function leastSung(db: D1Database, since: string, limit = 20): Promise<SungCount[]> {
   const rows = await db
@@ -237,7 +237,7 @@ export async function scanningPriority(
 /**
  * What to repair next: urgent, then poor, then anything with no usable spine.
  *
- * The spine tick auto-nominates (13A): a parcel nobody can read the spine of is
+ * The spine tick auto-nominates (13A): a box nobody can read the spine of is
  * effectively lost on the shelf, whatever state the paper inside is in.
  */
 export async function repairPriority(db: D1Database, limit = 40): Promise<PriorityPiece[]> {
@@ -284,7 +284,7 @@ export interface RecountRow {
 }
 
 /**
- * Parcels due a recount: not counted in five years, **or** sung ten times since
+ * Boxes due a recount: not counted in five years, **or** sung ten times since
  * the last count, whichever comes first.
  *
  * Deliberately a list James can look at rather than a nag. It feeds the
@@ -465,7 +465,7 @@ export async function seasonReadiness(db: D1Database, seasons: string[]): Promis
 /**
  * Pieces a label could be printed for.
  *
- * **Reviewed only.** An accession number goes on a physical parcel in ink, and
+ * **Reviewed only.** An accession number goes on a physical box in ink, and
  * printing one for a row whose composer might still be wrong is the sort of
  * mistake that outlives the person who made it.
  */

@@ -24,20 +24,46 @@
  *     red #c83734 · red-accent #E1251B · red-deep #5C0A18 · cream #e9dbc6
  *     paper #FBF8F3 · ink #2C2C2C · ink-soft #555856 · grey-soft #929491
  *     line/card-edge #E5E1D8 · card #FFFFFF · accent (gold) #C8A24B
- *     focus #1A6FB5
  *
- * Three consequences worth naming, because they are visible changes from what
- * this app looked like before:
+ * Three consequences worth naming:
  *
- *   - **Corners are nearly sharp.** The estate sets one radius, `2px`, and uses
- *     it everywhere. This app previously ran 6–12px with fully-round pills.
- *     Sharp reads as printed matter, which is the right register for a church.
- *   - **Red is the brand, gold is the accent.** Previously a single claret did
- *     both jobs. Red carries identity — the masthead rule, the crest — and gold
- *     marks the things that want a second glance.
- *   - **There is a dark theme.** The estate has one; this app did not. The full
- *     dark palette is below, and every token has a counterpart, so nothing
+ *   - **Red is the brand, gold is the accent.** Red carries identity — the
+ *     masthead rule, the crest — and gold marks the things that want a second
+ *     glance.
+ *   - **There is a dark theme.** Every token has a counterpart, so nothing
  *     falls back to a light value in the dark and glares.
+ *   - **There is no blue.** See below.
+ *
+ * ---
+ *
+ * **Two deliberate departures from the estate, both at James's direction.**
+ *
+ * **1. Corners are rounded, not square.** The estate sets one radius, `2px`,
+ * everywhere, and this app followed it: sharp corners read as printed matter,
+ * which is a defensible register for a church. But this is not a printed thing
+ * — it is used one-handed, on a phone, in a cold song school, by children — and
+ * it should look like an app, because that is what it is. So the scale below
+ * runs 6–16px and is applied by role: small controls, then inputs, then
+ * buttons, then cards. Pills stay fully round.
+ *
+ * **2. There is no blue in the palette.** Blue is not a Beverley Minster brand
+ * colour. The estate's focus ring was `#1A6FB5`, chosen precisely because a
+ * blue "is nobody else's colour" and so always reads as *the keyboard is here*
+ * rather than as part of the design. Removing it means finding another way to
+ * be unmistakable, and a second brand hue would not be it — every colour in a
+ * church app is spoken for by something (red is the brand, gold the accent,
+ * green and violet the seasons).
+ *
+ * So the ring is **two-tone rather than coloured**: a dark ring with a light
+ * halo outside it in the light theme, and the reverse in the dark one. That is
+ * legible against the cream canvas, a white card, a red button and a dark page
+ * alike — which no single hue manages — and it belongs to no season, no
+ * status and no brand, so it cannot be mistaken for meaning anything.
+ *
+ * The one blue left in this file is `SEASON_COLOURS.marian`, and it is not
+ * brand: it is the liturgical colour for feasts of Our Lady, it is shared with
+ * bmserviceapp so the two apps agree on the same day, and it appears as a 2px
+ * rule a few days a year. See the note there.
  */
 
 export interface Theme {
@@ -79,8 +105,16 @@ export interface Theme {
     warningTint: string;
     danger: string;
     dangerTint: string;
-    /** Keyboard focus ring. The estate's blue, which is nobody else's colour. */
+    /**
+     * Keyboard focus ring — the inner, darker half.
+     *
+     * Not a hue: blue is not ours, and every other colour in here already means
+     * something. Paired with `focusHalo` below to make a two-tone ring that
+     * reads on any background.
+     */
     focus: string;
+    /** The outer half of the focus ring, in the opposite tone to `focus`. */
+    focusHalo: string;
     /** Status pills, as background/ink pairs. */
     pillGreenBg: string;
     pillGreenInk: string;
@@ -163,7 +197,8 @@ export const THEME: Theme = {
     warningTint: "#FBF7EE",
     danger: "#c83734",
     dangerTint: "#FBF1EF",
-    focus: "#1A6FB5",
+    focus: "#2C2C2C",
+    focusHalo: "#FFFFFF",
     pillGreenBg: "#E3F0E7",
     pillGreenInk: "#175C2E",
     pillAmberBg: "#F7EFDC",
@@ -185,19 +220,25 @@ export const THEME: Theme = {
     measure: "62rem",
     measureReading: "42rem",
   },
-  // The estate uses one radius, 2px, everywhere. Kept as five names so the
-  // layout rules do not have to change, but they all resolve to the same
-  // near-square corner — which is what makes the app read as printed matter.
+  // Five radii, applied by role rather than all resolving to the same value.
+  // The gradient is the point: a chip is rounder than an input, an input than a
+  // card, and the eye reads that as a hierarchy of objects without being told.
   radius: {
-    sm: "2px",
-    md: "2px",
-    lg: "2px",
-    xl: "2px",
-    // Pills stay round: a status chip is a different object from a panel.
+    /** Chips, the focus ring, tight controls. */
+    sm: "6px",
+    /** Inputs, selects, text areas. */
+    md: "10px",
+    /** Buttons and anything you tap. */
+    lg: "12px",
+    /** Cards, tiles, panels, sheets. */
+    xl: "16px",
+    // Pills stay fully round: a status chip is a different object from a panel.
     pill: "999px",
   },
+  // Soft and low. A shadow here is depth, not drama: the card should look like
+  // it is resting on the page rather than hovering over it.
   shadow: {
-    card: "0 1px 2px rgba(44,44,44,0.05)",
+    card: "0 1px 2px rgba(44,44,44,0.05), 0 6px 16px -10px rgba(44,44,44,0.14)",
     raised: "0 -2px 10px rgba(44,44,44,0.10)",
   },
 };
@@ -231,7 +272,8 @@ export const THEME_DARK: Theme["colour"] = {
   warningTint: "#262016",
   danger: "#F0796F",
   dangerTint: "#2A1A18",
-  focus: "#6FB8F2",
+  focus: "#F5EFE2",
+  focusHalo: "#16140F",
   pillGreenBg: "#1C3324",
   pillGreenInk: "#9BD6AF",
   pillAmberBg: "#332913",
@@ -338,6 +380,11 @@ export const SEASON_COLOURS: Record<string, string> = {
   harvest: "#1F7A3D",
   remembrance: "#C0392B",
   allsaints: "#D9B44A",
+  // The one blue in the app, and it is liturgical rather than brand: blue is
+  // the colour of feasts of Our Lady. It is bmserviceapp's exact value so the
+  // two apps paint the same rule on the same day, and it shows as 2px under the
+  // masthead on a handful of days a year. If it should go, this line is the
+  // whole change — but it would then differ from the hub.
   marian: "#1A6FB5",
   saints: "#C0392B",
   wedding: "#D9B44A",

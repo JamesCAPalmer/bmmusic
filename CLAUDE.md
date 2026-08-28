@@ -43,9 +43,22 @@ pinch-point warnings land (Phase 2), they read
 ## What this is
 
 **bmmusic** — a private, choir-facing catalogue of the Minster's *physical*
-music library: roughly 500–600 items, anthems in wrapped parcels and service
-settings in boxes, in the song school. Plus an admin side for cataloguing.
-Hosted as a single Cloudflare Worker at `bmmusic.james-palmer.com`.
+music library: roughly 500–600 items in boxes in the song school, behind a run
+of eight cupboards. Plus an admin side for cataloguing. Hosted as a single
+Cloudflare Worker at `bmmusic.james-palmer.com`.
+
+**Say "box".** The anthems are physically in wrapped parcels and the service
+settings are in boxes, and the app used to say both. It now says *box*
+throughout, for everything — one word for one idea, because a volunteer holding
+the thing does not care which it technically is and should not have to guess
+which word the screen will use. Nothing in the database changed: this was
+always prose.
+
+**The cupboards have names, and the names are diesel locomotive classes** —
+Deltic, Western, Warship and so on, one per door, Robert's idea. The letter
+`A`–`H` is what is stored, printed on labels and painted on the doors; the name
+is display only, so removing or renaming one is an edit to
+`CHURCH.storage.doors` and nothing else. See `src/storage.ts`.
 
 Users are the Minster choir (shared password, rotated each term), a handful of
 volunteers doing the physical count on their phones, and James (admin, behind
@@ -58,7 +71,7 @@ Cloudflare Access).
   an authenticated route — the bucket has no public access and no signed
   public object URLs.
 - **The draft index is a draft.** `data/seed/bm-music-draft-index.csv` was read
-  off photographs of parcel labels; its `confidence` and `flags` columns mean
+  off photographs of box labels; its `confidence` and `flags` columns mean
   what they say. Seed rows land as unreviewed pieces carrying a `review_flag`
   and are confirmed by a human in the admin review queue. Nothing in the seed
   is presented to the choir as settled fact without that.

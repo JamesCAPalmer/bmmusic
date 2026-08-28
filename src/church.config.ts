@@ -42,7 +42,7 @@ export interface CategoryDefinition {
 export interface ConditionGrade {
   value: string;
   label: string;
-  /** Plain-English guidance for the volunteer holding the parcel. */
+  /** Plain-English guidance for the volunteer holding the box. */
   guidance: string;
 }
 
@@ -137,13 +137,41 @@ export interface LabelStocks {
   avery: LabelGrid;
 }
 
+/** One cupboard in the song school: the letter on the door, and its name. */
+export interface StorageDoor {
+  /** The letter, "A"–"H". This is what is stored and printed. */
+  letter: string;
+  /** What everybody calls it. A diesel locomotive class. */
+  name: string;
+  /**
+   * The class number, for the caption under the name.
+   *
+   * Worth carrying: it turns a private joke into something a person who is not
+   * Robert can still follow, and it is the one fact that makes the names look
+   * deliberate rather than random.
+   */
+  loco: string;
+}
+
 export interface ChurchConfig {
   /** Full public name of the institution. */
   name: string;
   /** Short name used in running prose ("the Minster"). */
   shortName: string;
-  /** Name of this app, as it appears in the interface. */
+  /**
+   * Name of this app on the choir side, as it appears in the interface — the
+   * wordmark beside the crest, the page titles, the sign-in screen.
+   */
   appName: string;
+  /**
+   * Name of the admin side.
+   *
+   * Deliberately different from `appName` and deliberately abbreviated. Somebody
+   * with both open has two tabs that would otherwise look identical, and the
+   * one where a wrong click writes to the register should not be the one you
+   * have to read twice to identify.
+   */
+  adminAppName: string;
   /** Canonical domains — the church's own site and this app's host. */
   domains: {
     site: string;
@@ -161,7 +189,7 @@ export interface ChurchConfig {
   };
   /** Where the physical library lives, for the volunteers' benefit. */
   library: {
-    /** Room the parcels and boxes are kept in. */
+    /** Room the boxes are kept in. */
     location: string;
     /** Roughly how many items the catalogue is expected to hold. */
     approximateItems: number;
@@ -203,16 +231,29 @@ export interface ChurchConfig {
   /** Voice parts a chorister can be recorded as singing. */
   voiceParts: VoicePart[];
   /**
-   * How the physical library is laid out: doors, and shelves within a door.
+   * How the physical library is laid out: cupboards, and shelves within one.
    *
-   * The song school's music is behind a run of cupboard doors. A parcel's
-   * address is a door letter and a shelf number, which is what a volunteer can
-   * actually read off the front of a cupboard.
+   * The song school's music is behind a run of cupboard doors. A box's address
+   * is a door letter and a shelf number, which is what a volunteer can actually
+   * read off the front of a cupboard.
+   *
+   * **Each cupboard also has a name, and the names are diesel locomotive
+   * classes.** That is Robert's doing and it is a good idea: "it's in Deltic"
+   * is a thing a person says and remembers, where "it's in D" is a thing a
+   * person mishears as "in B" across a song school. The letters run in order
+   * and the names do not, which is the point — a name is memorable precisely
+   * because it is not derivable.
+   *
+   * **The letter is what is stored; the name is only ever displayed.** Every
+   * `holding.location_door` in D1, every label already printed and stuck to a
+   * spine, and every volunteer who has learned the wall carries the letter. So
+   * renaming a cupboard — or dropping the joke entirely — is an edit to this
+   * array and nothing else: no migration, no reprint, no re-count.
    */
   storage: {
-    /** Door letters, in the order they run along the wall. */
-    doors: string[];
-    /** Highest shelf number within a door. */
+    /** The cupboards, in the order they run along the wall. */
+    doors: StorageDoor[];
+    /** Highest shelf number within a cupboard. */
     maxShelf: number;
   };
   /** How the copies RAG (16A) decides between green, amber and red. */
@@ -242,7 +283,7 @@ export interface ChurchConfig {
     /** Binders with a name rather than a range on the spine. */
     namedBinders: string[];
   };
-  /** When a parcel is due a recount (H6). Whichever comes first. */
+  /** When a box is due a recount (H6). Whichever comes first. */
   stocktake: {
     yearsBetweenCounts: number;
     performancesBetweenCounts: number;
@@ -283,7 +324,8 @@ export interface ChurchConfig {
 export const CHURCH: ChurchConfig = {
   name: "Beverley Minster",
   shortName: "the Minster",
-  appName: "Minster Music Library",
+  appName: "Beverley Minster Music",
+  adminAppName: "BM Music Admin",
   domains: {
     site: "beverleyminster.org.uk",
     app: "bmmusic.james-palmer.com",
@@ -337,7 +379,7 @@ export const CHURCH: ChurchConfig = {
   // Minster Choir teams list for the same month.
   //
   // The Junior Choir (ages 5–8) is deliberately not here: they do not sing from
-  // copies, so they can never make a parcel short.
+  // copies, so they can never make a box short.
   choirSections: {
     boys: 10,
     girls: 19,
@@ -352,7 +394,7 @@ export const CHURCH: ChurchConfig = {
     { name: "Choral Evensong", rite: "BCP 1662", usualTime: "17:30" },
   ],
   categories: [
-    { code: "A", label: "Anthem", blurb: "Anthems and motets, kept in wrapped parcels." },
+    { code: "A", label: "Anthem", blurb: "Anthems and motets, kept in boxes." },
     { code: "E", label: "Evening canticles", blurb: "Magnificat and Nunc dimittis settings." },
     { code: "M", label: "Morning canticles", blurb: "Te Deum, Benedictus, Jubilate." },
     { code: "C", label: "Communion setting", blurb: "Mass and Eucharist settings." },
@@ -400,7 +442,19 @@ export const CHURCH: ChurchConfig = {
     { value: "bass2", label: "Bass 2" },
   ],
   storage: {
-    doors: ["A", "B", "C", "D", "E", "F", "G", "H"],
+    // Eight cupboards, eight British diesel classes, by the nicknames the
+    // enthusiasts actually use rather than the numbers. Deltic first because it
+    // is Robert's favourite and A is the cupboard you reach first.
+    doors: [
+      { letter: "A", name: "Deltic", loco: "Class 55" },
+      { letter: "B", name: "Western", loco: "Class 52" },
+      { letter: "C", name: "Warship", loco: "Class 42" },
+      { letter: "D", name: "Peak", loco: "Class 45" },
+      { letter: "E", name: "Hymek", loco: "Class 35" },
+      { letter: "F", name: "Whistler", loco: "Class 40" },
+      { letter: "G", name: "Growler", loco: "Class 37" },
+      { letter: "H", name: "Duff", loco: "Class 47" },
+    ],
     maxShelf: 12,
   },
   copiesRag: {

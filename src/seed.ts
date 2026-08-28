@@ -1,7 +1,7 @@
 /**
  * The seed importer: `data/seed/bm-music-draft-index.csv` → `piece` + `alias`.
  *
- * The CSV is a *draft index*, read off photographs of the parcel and box labels
+ * The CSV is a *draft index*, read off photographs of the box labels
  * in the song school. Its `confidence` and `flags` columns mean what they say,
  * and its `category` column uses loose words ("setting", "major work") rather
  * than the catalogue's codes. So the importer's job is not to produce a
@@ -64,13 +64,13 @@ export interface DraftPiece {
   surname: string | null;
   /** Recognised season tags, ";"-joined in church-year order. */
   season: string | null;
-  /** The joined title, verbatim as printed on the parcel. */
+  /** The joined title, verbatim as printed on the box. */
   title: string;
   category: string;
   notes: string | null;
   /** Semicolon-joined reasons a human should look, or null when settled. */
   reviewFlag: string | null;
-  /** One per title on a multi-title parcel. Empty when there is only one. */
+  /** One per title on a multi-title box. Empty when there is only one. */
   aliases: { altName: string; altCanonical: string }[];
 }
 
@@ -219,8 +219,8 @@ export function toDraftPiece(row: SeedRow): DraftPiece {
   if (row.handwritten.trim() === "yes") noteParts.push("handwritten label");
   else if (row.handwritten.trim() === "mixed") noteParts.push("part-printed, part-handwritten label");
 
-  // A multi-title parcel keeps its joined title (that is what is written on the
-  // parcel) and gains one alias per title, so a music list naming just one of
+  // A multi-title box keeps its joined title (that is what is written on the
+  // box) and gains one alias per title, so a music list naming just one of
   // them still finds it.
   const aliases =
     parts.length > 1
@@ -242,7 +242,7 @@ export function toDraftPiece(row: SeedRow): DraftPiece {
   };
 }
 
-/** Two parts of a parcel occasionally fold to the same key; keep the first. */
+/** Two parts of a box occasionally fold to the same key; keep the first. */
 function dedupeAliases(
   aliases: { altName: string; altCanonical: string }[]
 ): { altName: string; altCanonical: string }[] {
