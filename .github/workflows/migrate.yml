@@ -45,6 +45,28 @@ jobs:
   migrate:
     name: Apply pending migrations to minster-data
     runs-on: ubuntu-latest
+
+    # The credentials live in the `BM` environment, not as repository secrets.
+    #
+    # **The reason is the branch restriction.** A repository secret is readable
+    # by a workflow running on *any* branch. This is a private repository, so
+    # the usual "pull requests from forks get no secrets" protection does not
+    # apply — a workflow added on a branch could read a token that can write to
+    # the live database, before anybody had merged anything. An environment
+    # restricted to `main` simply does not hand its secrets to a job running
+    # anywhere else.
+    #
+    # It is defence in depth rather than a hole being closed: anybody who can
+    # push a branch here can already merge to `main` and migrate legitimately,
+    # and the token is scoped to D1 Edit alone — it cannot deploy the Worker,
+    # read R2 or touch account settings. But this token will, in time, be able
+    # to write to a database holding children's names, and the narrowest grant
+    # that works is the rule everywhere else in this repository.
+    #
+    # **The restriction is configured in GitHub, not here.** Settings →
+    # Environments → BM → Deployment branches and tags → Selected branches,
+    # with a rule for `main`. Left as "All branches", this line buys nothing.
+    environment: BM
     steps:
       - uses: actions/checkout@v7
 

@@ -24,18 +24,27 @@ on every merge to `main`, and then checks the expected tables are actually
 there. Cloudflare Workers Builds deploys the code; that workflow does the
 database. **You should not have to do anything.**
 
-It needs two repository secrets, and it fails loudly rather than quietly if
-either is missing:
+It needs two secrets, and it fails loudly rather than quietly if either is
+missing:
 
 | Secret | What |
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | An API token with **Account → D1 → Edit**. Nothing else. |
 | `CLOUDFLARE_ACCOUNT_ID` | `7b883be757953c02c9762a57f3090de8` |
 
+They live in the **`BM` environment**, not as repository secrets, and the job
+declares `environment: BM` to reach them.
+
+**That choice is only worth anything if the environment is restricted.** A
+repository secret is readable by a workflow on *any* branch — and because this
+repository is private, the usual "fork pull requests get no secrets" protection
+does not apply. So: **Settings → Environments → BM → Deployment branches and
+tags → Selected branches**, with a rule for `main`. Left on "All branches",
+the environment buys nothing over a repository secret.
+
 Create the token at **dash.cloudflare.com → My Profile → API Tokens → Create
 Token → Create Custom Token**, give it D1 Edit on your account and no other
-permission, then paste it into **GitHub → the bmmusic repo → Settings →
-Secrets and variables → Actions → New repository secret**.
+permission.
 
 Check it worked at **GitHub → Actions → Apply migrations**. A green run means
 the live database matches the code.
