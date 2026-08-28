@@ -24,9 +24,11 @@ needs before there is a session and which reveal nothing about the library.
 | **How music gets into the catalogue** | [docs/PIPELINE.md](./docs/PIPELINE.md) |
 | **The service feed contract** | [docs/FEED.md](./docs/FEED.md) |
 
-> **Migrations are not automatic.** Merging to `main` deploys the code; nothing
-> applies the database migrations. If the schema falls behind, every gated page
-> 500s. See [DEPLOY.md](./docs/DEPLOY.md#migrations-are-not-automatic).
+> **Merging to `main` deploys and migrates by itself.** Workers Builds ships
+> the code; `.github/workflows/migrate.yml` applies pending D1 migrations and
+> checks the tables landed. If the schema ever falls behind the code, every
+> gated page 500s — so if that workflow goes red, look at it first. See
+> [DEPLOY.md](./docs/DEPLOY.md#migrations-and-why-they-matter-more-than-they-look).
 
 ---
 

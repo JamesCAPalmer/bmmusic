@@ -6,22 +6,44 @@ want [Shipping a change](#shipping-a-change) at the bottom.
 
 ---
 
-## Migrations are not automatic
+## Migrations, and why they matter more than they look
 
-**Read this before anything else, because it is the one that bites.**
+**Read this before anything else.**
 
-Cloudflare Workers Builds deploys the code on every merge to `main`. **Nothing
-applies the database migrations.** That is a manual step, every time a
-migration is added.
+If the database schema is behind the code, the app does not degrade — it
+**500s on every gated page**, because `authMiddleware` reads `app_setting`
+before it does anything else. `/login` and `/robots.txt` keep working, which
+makes it look like a page-specific fault rather than a schema one. That is
+exactly what happened on 27 August 2026, and it is why the rest of this
+section exists.
 
-If the schema is behind the code, the app does not degrade — it **500s on every
-gated page**, because `authMiddleware` reads `app_setting` before it does
-anything else. `/login` and `/robots.txt` keep working, which makes it look
-like a page-specific fault rather than a schema one.
+### It is automatic now
 
-So: after any deploy that includes a new file in `migrations/`, run step 5 and
-then step 5a. It takes ten seconds and it is the difference between a working
-app and a white error page for the whole choir.
+`.github/workflows/migrate.yml` applies pending migrations to `minster-data`
+on every merge to `main`, and then checks the expected tables are actually
+there. Cloudflare Workers Builds deploys the code; that workflow does the
+database. **You should not have to do anything.**
+
+It needs two repository secrets, and it fails loudly rather than quietly if
+either is missing:
+
+| Secret | What |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | An API token with **Account → D1 → Edit**. Nothing else. |
+| `CLOUDFLARE_ACCOUNT_ID` | `7b883be757953c02c9762a57f3090de8` |
+
+Create the token at **dash.cloudflare.com → My Profile → API Tokens → Create
+Token → Create Custom Token**, give it D1 Edit on your account and no other
+permission, then paste it into **GitHub → the bmmusic repo → Settings →
+Secrets and variables → Actions → New repository secret**.
+
+Check it worked at **GitHub → Actions → Apply migrations**. A green run means
+the live database matches the code.
+
+### Doing it by hand
+
+Still worth knowing, for when something has gone wrong or you are setting up
+a new database — steps 5 and 5a below.
 
 ---
 
@@ -206,15 +228,20 @@ refreshes rows nobody has reviewed, and leaves confirmed rows alone. See
 
 ## Shipping a change
 
-Merging to `main` triggers a Workers Build, which deploys the code by itself.
-What it does **not** do:
+Merge to `main` and two things happen on their own:
 
-1. **Apply migrations.** If `migrations/` gained a file, run step 5 and 5a.
-2. **Register new cron schedules.** These come from `wrangler.toml` at deploy
-   time. A Workers Build deploy picks them up; if you are unsure, check
-   **Workers & Pages → bmmusic → Settings → Trigger Events**. There should be
-   three: `30 * * * *` (the feed), `15 2 * * *` (the backup) and `0 3 1 9 *`
-   (the September school-year rollover).
+1. **Workers Builds deploys the code.**
+2. **The `Apply migrations` workflow updates the database** and checks the
+   expected tables are there.
+
+Both report into the GitHub Actions tab. If the migrate workflow is red, the
+site may be down — that is the one to look at first.
+
+The remaining thing that is not automatic is **cron schedules**, which come
+from `wrangler.toml` at deploy time. A Workers Build picks them up; if you are
+unsure, check **Workers & Pages → bmmusic → Settings → Trigger Events**. There
+should be three: `30 * * * *` (the feed), `15 2 * * *` (the backup) and
+`0 3 1 9 *` (the September school-year rollover).
 
 ---
 
