@@ -173,7 +173,7 @@ export async function rejectScan(db: D1Database, id: number, who: string): Promi
 /**
  * The approved reference scans for a service's music, in service order.
  *
- * Confirmed matches only. An 'auto' guess would put a parcel in a rehearsal
+ * Confirmed matches only. An 'auto' guess would put a box in a rehearsal
  * booklet on the matcher's say-so, and a chorister turning to page four to find
  * the wrong anthem is exactly the failure the matcher's caution exists to
  * prevent — undoing it here would be perverse.

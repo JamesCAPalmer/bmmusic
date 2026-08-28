@@ -39,7 +39,7 @@
 -- for review rather than the database refusing the write.
 
 -- The composer as they would be written out in full ("Gregorio Allegri"). The
--- existing `composer` column keeps what is printed on the parcel, which is
+-- existing `composer` column keeps what is printed on the box, which is
 -- usually a surname in capitals, and is what a volunteer matches against.
 ALTER TABLE piece ADD COLUMN composer_full TEXT;
 
@@ -47,16 +47,16 @@ ALTER TABLE piece ADD COLUMN composer_full TEXT;
 -- is a THEME decision (src/theme.ts); the data stays in proper case.
 ALTER TABLE piece ADD COLUMN surname TEXT;
 
--- Where the parcel physically is. Door A–H, then the shelf within that door.
+-- Where the box physically is. Door A–H, then the shelf within that door.
 -- Deliberately two columns rather than one string: "is anything on door C?" is
 -- a question the volunteer-sheet run needs to answer by sorting, and the free
 -- text `location` column from 0001 cannot be sorted usefully.
 ALTER TABLE piece ADD COLUMN location_door TEXT;
 ALTER TABLE piece ADD COLUMN location_shelf INTEGER;
 
--- 'ok'       — the parcel has a usable spine label.
+-- 'ok'       — the box has a usable spine label.
 -- 'none'     — no usable spine; auto-nominates for the repair queue (13A).
--- 'combined' — this parcel shares a combined label with its boxmates.
+-- 'combined' — this box shares a combined label with its boxmates.
 ALTER TABLE piece ADD COLUMN spine_state TEXT
   CHECK (spine_state IN ('ok','none','combined')) DEFAULT 'ok';
 
@@ -275,7 +275,7 @@ CREATE INDEX IF NOT EXISTS scan_submission_piece_idx  ON scan_submission (piece_
 -- ---------------------------------------------------------------------------
 -- label_print — what has been printed, so a reprint is traceable.
 --
--- Matters for the combined-label runs especially: when several parcels share
+-- Matters for the combined-label runs especially: when several boxes share
 -- one label, knowing which run produced it is the only way to work out what to
 -- reprint when one of them moves.
 -- ---------------------------------------------------------------------------

@@ -11,6 +11,8 @@
  */
 
 import { CHURCH } from "./church.config";
+import { doorLabel, doorLabelLong, shelfAddress } from "./storage";
+import { icon } from "./icons";
 import { betaChip, categoryLabel, esc, flagPills, page, prettyDate } from "./ui";
 import type { CatalogueStats, ChoirProfileRow, PieceWithHolding, SearchQuery, SearchResult } from "./catalogue";
 import type { AuditRow } from "./audit";
@@ -108,19 +110,22 @@ export function adminHomePage(
   const stat = (n: number | string, label: string) =>
     `<div class="stat"><span class="n">${esc(n)}</span><span class="l">${esc(label)}</span></div>`;
 
-  const queue = (href: string, n: number, label: string, blurb: string) =>
+  const queue = (href: string, glyph: string, n: number, label: string, blurb: string) =>
     visible(href)
       ? `<a class="tile${n ? " has-work" : ""}" href="${href}">
-           <span class="n">${n}</span>
+           <span class="n">${n}${icon(glyph)}</span>
            <span class="t">${esc(label)}</span>
            <span class="b">${esc(blurb)}</span>
          </a>`
       : "";
 
-  const tile = (href: string, label: string, blurb: string, chip = "") =>
+  // The label and its chip are one flex child, not two. As siblings of the
+  // glyph they were laid out as three items in a row, so "Import a workbook"
+  // wrapped and left the chip stranded beside the second line.
+  const tile = (href: string, glyph: string, label: string, blurb: string, chip = "") =>
     visible(href)
       ? `<a class="tile" href="${href}">
-           <span class="t">${esc(label)}${chip}</span>
+           <span class="t">${icon(glyph)}<span>${esc(label)}${chip}</span></span>
            <span class="b">${esc(blurb)}</span>
          </a>`
       : "";
@@ -137,37 +142,41 @@ export function adminHomePage(
     `<h1>Librarian<span class="sub">${esc(CHURCH.name)} music library</span></h1>
 
      ${section("Waiting for you", [
-       queue("/admin/review", queues.toReview, "Draft entries", "read off label photographs, unchecked"),
-       queue("/admin/services", queues.musicLines, "Music list lines", "matched or waiting to be matched"),
-       queue("/admin/scans", queues.pendingScans, "Scans sent in", "photographed by choristers"),
-       queue("/admin/feedback", queues.openFeedback, "Feedback", "sent from the widget"),
-       queue("/admin/queues", queues.openRepairs, "Repairs", "poor, urgent, or no usable spine"),
-       queue("/admin/stocktake", queues.dueRecount, "Due a recount", "five years old, or sung a lot since"),
+       queue("/admin/review", "review", queues.toReview, "Draft entries", "read off label photographs, unchecked"),
+       queue("/admin/services", "calendar", queues.musicLines, "Music list lines", "matched or waiting to be matched"),
+       queue("/admin/scans", "camera", queues.pendingScans, "Scans sent in", "photographed by choristers"),
+       queue("/admin/feedback", "chat", queues.openFeedback, "Feedback", "sent from the widget"),
+       queue("/admin/queues", "repair", queues.openRepairs, "Repairs", "poor, urgent, or no usable spine"),
+       queue("/admin/stocktake", "count", queues.dueRecount, "Due a recount", "five years old, or sung a lot since"),
      ])}
 
      ${section("The library", [
-       tile("/admin/new", "New catalogue item", "parse a scan, or enter it by hand"),
-       tile("/admin/search", "Search and bulk edit", "filter, select, change many at once"),
-       tile("/admin/reports", "Reports", "what gets sung, condition, coverage"),
-       tile("/admin/queues", "What to do next", "scanning and repair, in priority order"),
-       tile("/admin/labels", "Print labels", "volunteer sheets, and reprints"),
-       tile("/admin/suggestions", "Choosing music", "by season, with copies and scans"),
-       tile("/admin/loans", "Out on loan", "who has what, and since when"),
+       tile("/admin/new", "plus", "New catalogue item", "parse a scan, or enter it by hand"),
+       tile("/admin/search", "search", "Search and bulk edit", "filter, select, change many at once"),
+       tile("/admin/reports", "report", "Reports", "what gets sung, condition, coverage"),
+       tile("/admin/queues", "list", "What to do next", "scanning and repair, in priority order"),
+       tile("/admin/labels", "label", "Print labels", "volunteer sheets, and reprints"),
+       tile("/admin/suggestions", "season", "Choosing music", "by season, with copies and scans"),
+       tile("/admin/loans", "loan", "Out on loan", "who has what, and since when"),
      ])}
 
      ${section("The choir", [
-       tile("/admin/people", "The choir", "people and the register", betaChip()),
-       tile("/admin/people/import", "Import a workbook", "read the department's register", betaChip()),
-       tile("/admin/people/attendance", "Attendance", "who sang, by month and quarter", betaChip()),
-       tile("/admin/people/pay", "Pay", "a quarter's figures, and the rates", betaChip()),
-       tile("/admin/safeguarding", "Duty rota", "robing, general and dismissal", betaChip()),
+       tile("/admin/people", "people", "The choir", "people and the register", betaChip()),
+       tile("/admin/people/import", "upload", "Import a workbook", "read the department's register", betaChip()),
+       tile("/admin/people/attendance", "register", "Attendance", "who sang, by month and quarter", betaChip()),
+       tile("/admin/people/pay", "pay", "Pay", "a quarter's figures, and the rates", betaChip()),
+       tile("/admin/safeguarding", "shield", "Duty rota", "robing, general and dismissal", betaChip()),
      ])}
 
      ${section("This app", [
-       tile("/admin/settings", "Settings", "choir password, choir sizes, activity"),
-       tile("/admin/export", "Exports", "take the data out as a spreadsheet", betaChip()),
-       tile("/admin/modules", "Modules", "what this app does at all", betaChip()),
-       tile("/admin/roles", "Roles", "who may do what in here", betaChip()),
+       tile("/admin/settings", "settings", "Settings", "choir password, choir sizes, activity"),
+       // Reachable from here and nowhere else now the old link row is gone. It
+       // is the route DEPLOY.md step 8 sends you to, and re-running it is the
+       // normal way a better cut of the draft index gets in.
+       tile("/admin/import", "upload", "Import the draft index", "re-read the committed CSV"),
+       tile("/admin/export", "download", "Exports", "take the data out as a spreadsheet", betaChip()),
+       tile("/admin/modules", "modules", "Modules", "what this app does at all", betaChip()),
+       tile("/admin/roles", "key", "Roles", "who may do what in here", betaChip()),
      ])}
 
      <div class="card">
@@ -176,7 +185,7 @@ export function adminHomePage(
          ${stat(stats.pieces, "pieces catalogued")}
          ${stat(unreviewed, "still to review")}
          ${stat(stats.withAccession, "with an accession number")}
-         ${stat(stats.counted, "parcels counted")}
+         ${stat(stats.counted, "boxes counted")}
          ${stat(stats.copiesUsable, "usable copies counted")}
          ${stat(stats.openRepairs, "repairs outstanding")}
        </div>
@@ -209,13 +218,25 @@ export function adminHomePage(
                 margin: 0.6rem 0 1.4rem; }
        .tile { display: block; padding: 0.85rem 1rem; border: 1px solid var(--colour-border);
                border-radius: var(--radius-xl); background: var(--colour-surface); text-decoration: none;
-               color: var(--colour-ink); }
+               color: var(--colour-ink); box-shadow: var(--shadow-card);
+               transition: background 0.12s ease, border-color 0.12s ease, transform 0.06s ease; }
        .tile:hover { background: var(--colour-accent-tint); border-color: var(--colour-accent); }
-       .tile .n { display: block; font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums;
+       .tile:active { transform: translateY(1px); }
+       /* The count and its glyph on one line, the glyph pushed right and held
+          back to the muted tone: the number is the thing being read, the glyph
+          only says which queue it belongs to. */
+       .tile .n { display: flex; align-items: center; justify-content: space-between;
+                  font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums;
                   line-height: 1.1; color: var(--colour-subtle); }
+       .tile .n .icon { width: 1.2rem; height: 1.2rem; color: var(--colour-subtle); opacity: 0.8; }
        .tile.has-work .n { color: var(--colour-accent); }
-       .tile .t { display: block; font-weight: 700; font-family: var(--type-family-display); }
-       .tile .b { display: block; font-size: 0.85rem; color: var(--colour-muted); }
+       /* Sans, not the display serif. The serif belongs to the music — a piece
+          title, a composer — and a tile is a control, not a work. */
+       .tile .t { display: flex; align-items: flex-start; gap: 0.5rem; font-weight: 700;
+                  font-family: var(--type-family-base); font-size: 0.98rem; line-height: 1.3; }
+       .tile .t .icon { color: var(--colour-accent); margin-top: 0.12em; }
+       .tile .b { display: block; font-size: 0.85rem; color: var(--colour-muted);
+                  margin-top: 0.15rem; }
      </style>`,
     { admin: true, nav: "admin", path: "/admin" }
   );
@@ -263,7 +284,7 @@ export function adminNewItemPage(extractionReady: boolean, formHtml: string): st
 
        <div class="card">
          <h2>Enter manually</h2>
-         <p class="muted">Everything the parcel label says. This is the same form the scan fills in, so
+         <p class="muted">Everything the box label says. This is the same form the scan fills in, so
             you can start on either side and finish on this one.</p>
          <div id="concerns"></div>
          ${formHtml}
@@ -310,7 +331,10 @@ export function adminSearchPage(
     .map((s) => `<option value="${esc(s.value)}"${filters.season === s.value ? " selected" : ""}>${esc(s.label)}</option>`)
     .join("");
   const doorOptions = CHURCH.storage.doors
-    .map((d) => `<option value="${esc(d)}"${filters.locationDoor === d ? " selected" : ""}>Door ${esc(d)}</option>`)
+    .map(
+      (d) =>
+        `<option value="${esc(d.letter)}"${filters.locationDoor === d.letter ? " selected" : ""}>${esc(doorLabel(d.letter))}</option>`
+    )
     .join("");
 
   const rows = result.pieces
@@ -322,7 +346,7 @@ export function adminSearchPage(
         <td>${esc(p.composer)}</td>
         <td>${esc(categoryLabel(p.category))}</td>
         <td>${p.season ? esc(p.season.replace(/;/g, ", ")) : ""}</td>
-        <td>${p.location_door ? `${esc(p.location_door)}${p.location_shelf ? `/${p.location_shelf}` : ""}` : esc(p.location ?? "")}</td>
+        <td>${p.location_door ? esc(shelfAddress(p.location_door, p.location_shelf) ?? "") : esc(p.location ?? "")}</td>
         <td class="num">${p.copies_usable ?? ""}</td>
       </tr>`
     )
@@ -402,10 +426,10 @@ export function adminSearchPage(
                     }</select>
                   </div>
                   <div class="field">
-                    <label for="b-door">Door</label>
-                    <select id="b-door" name="location_door"><option value="">Leave alone</option>${
-                      CHURCH.storage.doors.map((d) => `<option value="${esc(d)}">Door ${esc(d)}</option>`).join("")
-                    }</select>
+                    <label for="b-door">Cupboard</label>
+                    <select id="b-door" name="location_door"><option value="">Leave alone</option>${CHURCH.storage.doors
+                      .map((d) => `<option value="${esc(d.letter)}">${esc(doorLabelLong(d.letter))}</option>`)
+                      .join("")}</select>
                   </div>
                   <div class="field">
                     <label for="b-shelf">Shelf</label>
@@ -472,7 +496,7 @@ export function adminReportsPage(
      <div class="card">
        <h2>Condition</h2>
        <div class="scroll"><table>
-         <tr><th>Grade</th><th class="num">Parcels</th></tr>
+         <tr><th>Grade</th><th class="num">Boxes</th></tr>
          ${conditions
            .map(
              (c) => `<tr><td>${esc(conditionLabel.get(c.condition) ?? c.condition)}</td>
@@ -480,7 +504,7 @@ export function adminReportsPage(
            )
            .join("")}
        </table></div>
-       <p class="muted small">Each parcel counted once, at its most recent count.</p>
+       <p class="muted small">Each box counted once, at its most recent count.</p>
      </div>
 
      <div class="card">
@@ -588,9 +612,9 @@ export function adminQueuesPage(scanning: PriorityPiece[], repairs: PriorityPiec
 
      <div class="card">
        <h2>Repair these first</h2>
-       <p class="muted small">Urgent, then poor, then anything with no usable spine label — a parcel
+       <p class="muted small">Urgent, then poor, then anything with no usable spine label — a box
           nobody can read the spine of is lost on the shelf whatever state the paper is in.</p>
-       ${table(repairs, "Nothing in poor or urgent condition, and every parcel has a readable spine.")}
+       ${table(repairs, "Nothing in poor or urgent condition, and every box has a readable spine.")}
      </div>`,
     { admin: true, path: "/admin/queues" }
   );
@@ -599,7 +623,7 @@ export function adminQueuesPage(scanning: PriorityPiece[], repairs: PriorityPiec
 export function adminStocktakePage(due: RecountRow[]): string {
   return page(
     `Due a recount — ${CHURCH.appName}`,
-    `<h1>Due a recount<span class="sub">${due.length} ${due.length === 1 ? "parcel" : "parcels"}</span></h1>
+    `<h1>Due a recount<span class="sub">${due.length} ${due.length === 1 ? "box" : "boxes"}</span></h1>
      <p class="muted">Not counted for ${CHURCH.stocktake.yearsBetweenCounts} years, or sung
         ${CHURCH.stocktake.performancesBetweenCounts} times since the last count — whichever came first.
         This is a list to look at, not a nag: it feeds the volunteer sheet run.</p>
@@ -854,7 +878,7 @@ export { betaChip };
 /**
  * The label print screen.
  *
- * Two stocks, two jobs. The volunteer run is a sheet per parcel with the
+ * Two stocks, two jobs. The volunteer run is a sheet per box with the
  * hand-fill form below the label; the Avery run is reprints and combined
  * labels, with a start position so a part-used sheet is not wasted.
  *
@@ -867,7 +891,10 @@ export function adminLabelsPage(
   message?: string
 ): string {
   const doorOptions = CHURCH.storage.doors
-    .map((d) => `<option value="${esc(d)}"${filters.door === d ? " selected" : ""}>Door ${esc(d)}</option>`)
+    .map(
+      (d) =>
+        `<option value="${esc(d.letter)}"${filters.door === d.letter ? " selected" : ""}>${esc(doorLabel(d.letter))}</option>`
+    )
     .join("");
 
   const rows = candidates
@@ -903,7 +930,7 @@ export function adminLabelsPage(
              <select id="door" name="door"><option value="">Anywhere</option>${doorOptions}</select>
            </div>
            <div class="field">
-             <label for="unlabelled">Which parcels</label>
+             <label for="unlabelled">Which boxes</label>
              <select id="unlabelled" name="unlabelled">
                <option value="">All reviewed pieces</option>
                <option value="1"${filters.unlabelled ? " selected" : ""}>Only ones never printed</option>
@@ -924,8 +951,8 @@ export function adminLabelsPage(
             <form method="POST" action="/admin/labels/print" id="labels" target="_blank">
               <div class="card">
                 <h2>Volunteer sheets <span class="muted small">${esc(CHURCH.labels.volunteerSheet.stock)}</span></h2>
-                <p class="muted">One A4 sheet per parcel: the peel-off label at the top goes on the parcel,
-                   and the form below it is what the volunteer fills in with the parcel open. This is the
+                <p class="muted">One A4 sheet per box: the peel-off label at the top goes on the box,
+                   and the form below it is what the volunteer fills in with the box open. This is the
                    run for the volunteer day.</p>
                 <button type="submit" name="stock" value="volunteer">Make the volunteer sheets</button>
               </div>
@@ -960,7 +987,7 @@ export function adminLabelsPage(
               </div>
             </form>`
          : `<p class="muted">Nothing matches those filters. Labels are only offered for reviewed pieces —
-              an accession number goes on a physical parcel, so it should not go on a row whose composer
+              an accession number goes on a physical box, so it should not go on a row whose composer
               might still be wrong.</p>`
      }`,
     { admin: true, path: "/admin/labels" }

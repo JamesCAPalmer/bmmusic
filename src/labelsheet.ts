@@ -96,7 +96,7 @@ async function drawCalibrationPage(doc: PDFDocument, grid: LabelGrid, ink: Ink):
  * top-right in large type, surname in capitals, then the title. The QR sits
  * bottom-right where a thumb does not usually land.
  *
- * **No location is printed** (3A). Parcels move; a label that names a shelf
+ * **No location is printed** (3A). Boxes move; a label that names a shelf
  * becomes a lie the first time somebody tidies, and an accession number plus
  * the catalogue is a better answer to "where does this live?".
  */
@@ -343,11 +343,11 @@ export async function buildAverySheet(
 }
 
 /**
- * The volunteer sheets (1A): one parcel per A4 page.
+ * The volunteer sheets (1A): one box per A4 page.
  *
- * The peel-off label at the top goes on the parcel. Everything below it is the
- * form the volunteer fills in by hand while they have the parcel open — and it
- * is laid out for somebody standing in a cold room with the parcel in one hand,
+ * The peel-off label at the top goes on the box. Everything below it is the
+ * form the volunteer fills in by hand while they have the box open — and it
+ * is laid out for somebody standing in a cold room with the box in one hand,
  * which is why the tick-boxes are large and the guidance sits beside each grade
  * rather than in a paragraph at the top nobody reads (4A).
  */
@@ -402,7 +402,7 @@ export async function buildVolunteerSheets(labels: LabelContent[]): Promise<Uint
 /**
  * The hand-fill zone below the label.
  *
- * Everything a volunteer records with the parcel open: how many copies, what
+ * Everything a volunteer records with the box open: how many copies, what
  * state they are in, and the three ticks that raise work elsewhere in the app.
  */
 function drawVolunteerForm(
@@ -439,7 +439,7 @@ function drawVolunteerForm(
     });
   };
 
-  heading("How many copies are in this parcel?");
+  heading("How many copies are in this box?");
   page.drawText("Altogether", { x: mm(left), y: topDown(grid, y + 4), size: 9, font: ink.font });
   page.drawRectangle({ x: mm(left + 24), y: topDown(grid, y + 7), width: mm(20), height: mm(9), borderWidth: 0.6 });
   page.drawText("Usable — ones you would hand to a singer", {
@@ -515,7 +515,7 @@ function drawVolunteerForm(
   });
 
   // The accession again, bottom right and large, so a sheet that has been put
-  // down on a pile can be matched back to its parcel at a glance.
+  // down on a pile can be matched back to its box at a glance.
   if (content.accession) {
     const size = 22;
     const width = ink.bold.widthOfTextAtSize(content.accession, size);

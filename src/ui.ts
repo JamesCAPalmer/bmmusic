@@ -16,6 +16,8 @@
  */
 
 import { CHURCH } from "./church.config";
+import { shelfAddress } from "./storage";
+import { icon } from "./icons";
 import {
   FONT_CSS,
   SEASON_COLOURS,
@@ -129,20 +131,33 @@ const STYLES = `
          line-height: var(--type-line-height); background: var(--colour-canvas);
          -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
   main { display: block; max-width: var(--type-measure); margin: 0 auto;
-         padding: 1.25rem 1.5rem 4rem; }
+         padding: 1.25rem max(1rem, env(safe-area-inset-right)) max(4rem, env(safe-area-inset-bottom))
+                  max(1rem, env(safe-area-inset-left)); }
+  @media (min-width: 40rem) { main { padding-left: 1.5rem; padding-right: 1.5rem; } }
   main:focus { outline: none; }
   a { color: var(--colour-accent); }
 
-  /* The estate's focus ring: one blue that is nobody else's colour, so a
-     keyboard user always knows where they are. */
+  /* The focus ring, and there is no blue in it.
+     Blue is not a Minster colour, and every other hue in this app is spoken for
+     — red is the brand, gold the accent, green and violet the seasons — so a
+     coloured ring would read as meaning something. This one is two-tone
+     instead: a dark ring with a light halo outside it, reversed in the dark
+     theme. That is legible on the cream canvas, on a white card, on a red
+     button and on a dark page alike, which no single hue manages. */
   :focus-visible { outline: 3px solid var(--colour-focus); outline-offset: 2px;
+                   box-shadow: 0 0 0 6px var(--colour-focus-halo);
                    border-radius: var(--radius-sm); }
 
   /* Skip link — off-screen until focused, then the first thing you reach. */
   .skip { position: absolute; left: -999px; top: 0; background: var(--colour-surface);
-          color: var(--colour-ink); padding: 0.6rem 1rem; border: 2px solid var(--colour-focus);
-          z-index: 50; }
+          color: var(--colour-ink); padding: 0.6rem 1rem; border: 2px solid var(--colour-ink);
+          border-radius: var(--radius-md); z-index: 60; }
   .skip:focus { left: 0.5rem; top: 0.5rem; }
+
+  /* --- glyphs -------------------------------------------------------------
+     Sized in em so a glyph scales with whatever text it sits beside, and
+     never shrinks in a flex row — an icon squashed to 4px is worse than none. */
+  .icon { width: 1.15em; height: 1.15em; flex: 0 0 auto; vertical-align: -0.18em; }
 
   h1 { font-family: var(--type-family-display); font-size: var(--type-h1); margin: 0.5rem 0 0.45rem;
        font-weight: 600; line-height: 1.08; letter-spacing: 0.005em; }
@@ -152,14 +167,58 @@ const STYLES = `
   .muted { color: var(--colour-muted); }
   .small { font-size: 0.9rem; }
 
-  /* --- masthead, matching bmserviceapp ------------------------------------ */
-  .mast { background: var(--colour-surface); border-bottom: 3px solid var(--colour-accent); }
-  .mast-in { display: flex; align-items: center; gap: 0.5rem 0.9rem; flex-wrap: wrap;
-             max-width: var(--type-measure); margin: 0 auto; padding: 0.9rem 1.5rem 1rem; }
+  /* --- masthead ------------------------------------------------------------
+     Sticky, because an app has chrome that stays put. Sticky rather than fixed:
+     sticky keeps the header in the document's flow, so nothing underneath needs
+     a compensating top margin and nothing is ever hidden behind it.
+
+     The masthead, the season rule and the tabs travel as one block, and that
+     block is what sticks — sticking them separately would let the tabs slide up
+     under the masthead on the way down the page. */
+  .chrome { position: sticky; top: 0; z-index: 30; }
+  .mast { background: var(--colour-surface); padding-top: env(safe-area-inset-top); }
+  .mast-in { display: flex; align-items: center; gap: 0.4rem 0.75rem;
+             max-width: var(--type-measure); margin: 0 auto;
+             padding: 0.6rem max(1rem, env(safe-area-inset-left)) 0.6rem max(1rem, env(safe-area-inset-right)); }
   .mast-sp { flex: 1 1 auto; }
-  .mark { display: flex; align-items: center; gap: 0.7rem; text-decoration: none;
-          color: var(--colour-ink); min-height: 24px; }
-  .logo { display: block; height: 38px; width: auto; max-width: 100%; }
+  /* The wordmark claims the leftover width before the spacer does, so a long
+     name shortens the gap rather than shortening itself. */
+  .mark { display: flex; align-items: center; gap: 0.6rem; text-decoration: none;
+          color: var(--colour-ink); min-height: 24px; min-width: 0; flex: 1 1 auto; }
+  .logo { display: block; height: 32px; width: auto; max-width: 100%; }
+
+  /* The wordmark. This is the one place the app says what it is, and the choir
+     side and the admin side say different things on purpose — somebody with
+     both tabs open should be able to tell at a glance which one writes to the
+     register. */
+  .mark .name { font-family: var(--type-family-base); font-weight: 700; font-size: 0.98rem;
+                letter-spacing: -0.005em; line-height: 1.15; white-space: nowrap;
+                overflow: hidden; text-overflow: ellipsis; }
+  .mark .name .thin { font-weight: 400; color: var(--colour-muted); }
+
+  /* On a phone the crest gives way to the wordmark.
+     The masthead is a fixed budget — about 400px — and the crest is 100px of
+     it before a single control. Keeping both meant "Beverley Minster Music"
+     truncating to "B…", which identifies nothing. The words are the better
+     identifier at this size, the crest is still the first thing on the sign-in
+     page, and this is what every app on the phone already does. */
+  @media (max-width: 30rem) {
+    /* Three classes deep on purpose: the dark-theme rules that swap the two
+       crest images are two classes plus an element, and would otherwise win
+       and put the dark crest back. */
+    .mast .mark .logo { display: none; }
+    .ctl { width: 36px; height: 36px; min-height: 36px; }
+    /* The name wraps rather than truncates.
+       "Beverley Minster Music" does not fit on one line beside three controls
+       on a 360px phone in any size worth reading, and a truncated name —
+       "Beverley Minster …" — is a worse outcome than a name on two lines: it
+       loses the only word that says which Minster app this is. */
+    .mark .name { font-size: 0.82rem; line-height: 1.15; white-space: normal;
+                  overflow: visible; text-overflow: clip; }
+  }
+  /* Tighter still, and the search shortcut goes: the Library tab is directly
+     below it and the home screen leads with a search field. */
+  @media (max-width: 24rem) { .ctl.optional { display: none; } }
   .logo-dark { display: none; }
   html[data-theme="dark"] .logo-light { display: none; }
   html[data-theme="dark"] .logo-dark { display: block; }
@@ -167,10 +226,6 @@ const STYLES = `
     html:not([data-theme="light"]) .logo-light { display: none; }
     html:not([data-theme="light"]) .logo-dark { display: block; }
   }
-  .mark .where { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em;
-                 text-transform: uppercase; color: var(--colour-subtle); }
-  @media (max-width: 30rem) { .mark .where { display: none; } }
-
   /* The season rule: 2px in the colour of the church season. */
   .season-rule { height: 2px; }
 
@@ -178,36 +233,99 @@ const STYLES = `
   .login-mark { margin: 0.5rem 0 1.2rem; }
   .login-mark .logo { height: 46px; }
 
-  /* The estate's small control button. */
-  .ctl { appearance: none; border: 1px solid var(--colour-border); background: var(--colour-surface);
-         color: var(--colour-muted); font-family: var(--type-family-base); font-size: 0.78rem;
-         font-weight: 600; letter-spacing: 0.02em; padding: 0.42rem 0.7rem;
-         border-radius: var(--radius-sm); cursor: pointer; line-height: 1; min-height: 32px; }
-  .ctl:hover { border-color: var(--colour-accent); color: var(--colour-accent); background: var(--colour-surface); }
+  /* A round icon-only control: the theme toggle, the search shortcut, the
+     padlock through to the admin side. 40px square because that is the
+     smallest thing a thumb hits reliably, and this app is used one-handed. */
+  .ctl { appearance: none; display: inline-flex; align-items: center; justify-content: center;
+         gap: 0.4rem; border: 1px solid transparent; background: transparent;
+         color: var(--colour-muted); font-family: var(--type-family-base); font-size: 0.82rem;
+         font-weight: 600; letter-spacing: 0.01em; padding: 0; border-radius: var(--radius-pill);
+         cursor: pointer; line-height: 1; width: 40px; height: 40px; min-height: 40px; flex: 0 0 auto;
+         text-decoration: none; transition: background 0.12s ease, color 0.12s ease; }
+  .ctl:hover { background: var(--colour-surface-alt); color: var(--colour-accent); }
+  .ctl:active { transform: scale(0.94); }
+  .ctl .icon { width: 1.25rem; height: 1.25rem; }
 
-  .nav-actions { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; font-size: 0.86rem; }
-  .nav-actions a { display: inline-flex; align-items: center; padding: 0.35rem 0.65rem;
-                   border-radius: var(--radius-sm); border: 1px solid transparent;
-                   text-decoration: none; color: var(--colour-muted); }
-  .nav-actions a:hover { border-color: var(--colour-border); color: var(--colour-accent); }
-  .nav-actions a.current { color: var(--colour-accent); border-color: var(--colour-accent); font-weight: 600; }
+  /* --- the tab strip -------------------------------------------------------
+     The main navigation, and the single biggest reason this reads as an app
+     rather than a website: the same row of destinations in the same place on
+     every screen, with the current one marked.
+
+     It scrolls sideways rather than wrapping. A wrapping nav changes height
+     between pages, which shifts the content under it every time you navigate;
+     a scrolling one is always exactly one row tall. Scroll-snap makes the
+     sideways drag land on a tab rather than half-way across one. */
+  .tabs { background: var(--colour-surface); border-bottom: 1px solid var(--colour-border); }
+  .tabs-in { display: flex; gap: 0.15rem; overflow-x: auto; scrollbar-width: none;
+             scroll-snap-type: x proximity; max-width: var(--type-measure); margin: 0 auto;
+             padding: 0 max(0.5rem, env(safe-area-inset-left)) 0 max(0.5rem, env(safe-area-inset-right)); }
+  .tabs-in::-webkit-scrollbar { display: none; }
+  .tabs a { display: inline-flex; align-items: center; gap: 0.42rem; flex: 0 0 auto;
+            scroll-snap-align: start; padding: 0.7rem 0.85rem 0.6rem; text-decoration: none;
+            color: var(--colour-muted); font-size: 0.9rem; font-weight: 600; white-space: nowrap;
+            border-bottom: 3px solid transparent; transition: color 0.12s ease; }
+  .tabs a:hover { color: var(--colour-ink); }
+  .tabs a.current { color: var(--colour-accent); border-bottom-color: var(--colour-accent); }
+  /* Below this the labels would wrap or truncate, so the glyph carries it and
+     only the current tab keeps its word — which is the one you need to read. */
+  @media (max-width: 30rem) {
+    .tabs a { padding: 0.62rem 0.7rem 0.52rem; }
+    .tabs a .lbl { display: none; }
+    .tabs a.current .lbl { display: inline; }
+    .tabs .icon { width: 1.3em; height: 1.3em; }
+  }
+
   .card { background: var(--colour-surface); border: 1px solid var(--colour-border);
-          border-radius: var(--radius-xl); padding: 1.1rem 1.3rem; margin: 1rem 0; }
+          border-radius: var(--radius-xl); padding: 1.1rem 1.3rem; margin: 1rem 0;
+          box-shadow: var(--shadow-card); }
   .card h2:first-child, .card h3:first-child { margin-top: 0; }
-  button, .btn { font-size: 1.02rem; padding: 0.65rem 1.2rem; border-radius: var(--radius-lg);
+
+  /* Buttons are set in the sans face, explicitly.
+     A <button> does not inherit the page's font — browsers give it their own UI
+     face unless told otherwise — so without this line every button in the app
+     was set in something other than the type the rest of it is set in, which is
+     exactly the sort of thing that makes a page look untended without anybody
+     being able to say why. Laid out as inline-flex so a glyph sits beside the label
+     and stay centred with it. */
+  button, .btn { font-family: var(--type-family-base); font-size: 1rem; font-weight: 600;
+          letter-spacing: 0.005em; padding: 0.68rem 1.15rem; border-radius: var(--radius-lg);
           border: 1px solid var(--colour-accent); background: var(--colour-accent);
-          color: var(--colour-on-accent); cursor: pointer; text-decoration: none; display: inline-block; }
-  button:hover, .btn:hover { background: var(--colour-accent-dark); }
+          color: var(--colour-on-accent); cursor: pointer; text-decoration: none;
+          display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+          min-height: 44px; line-height: 1.2;
+          transition: background 0.12s ease, border-color 0.12s ease, transform 0.06s ease; }
+  button:hover, .btn:hover { background: var(--colour-accent-dark); border-color: var(--colour-accent-dark); }
+  /* The press. A control that moves under the thumb is the difference between
+     a page and an app, and it costs one line. */
+  button:active, .btn:active { transform: translateY(1px); }
   button.secondary, .btn.secondary { background: var(--colour-surface); color: var(--colour-accent); }
-  button.secondary:hover, .btn.secondary:hover { background: var(--colour-accent-tint); }
+  button.secondary:hover, .btn.secondary:hover { background: var(--colour-accent-tint); border-color: var(--colour-accent); }
+  button.quiet, .btn.quiet { background: var(--colour-surface); color: var(--colour-ink);
+          border-color: var(--colour-border); font-weight: 600; }
+  button.quiet:hover, .btn.quiet:hover { background: var(--colour-surface-alt); border-color: var(--colour-border); }
   button.confirm { background: var(--colour-confirm); border-color: var(--colour-confirm); }
-  button.confirm:hover { background: var(--colour-confirm-dark); }
-  button:disabled { opacity: 0.5; cursor: default; }
+  button.confirm:hover { background: var(--colour-confirm-dark); border-color: var(--colour-confirm-dark); }
+  button:disabled { opacity: 0.5; cursor: default; transform: none; }
   input[type=text], input[type=password], input[type=number], input[type=search], select, textarea {
-          font-size: 1.02rem; padding: 0.55rem; width: 100%; border: 1px solid var(--colour-border);
+          font-size: 1.02rem; padding: 0.65rem 0.7rem; width: 100%; border: 1px solid var(--colour-border);
           border-radius: var(--radius-md); background: var(--colour-surface); color: var(--colour-ink);
           font-family: inherit; }
+  /* 16px minimum on the controls a phone can focus, or iOS zooms the whole page
+     in when the keyboard opens and the volunteer loses their place. */
+  @media (max-width: 40rem) {
+    input[type=text], input[type=password], input[type=number], input[type=search], select, textarea {
+      font-size: max(1.02rem, 16px); }
+  }
   input[type=file] { font-size: 1rem; }
+  /* A search field with the glyph inside it. The input keeps its own focus ring
+     rather than the wrapper taking one, so the ring lands on the thing that is
+     actually focused. */
+  .searchbox { position: relative; display: block; }
+  .searchbox .icon { position: absolute; left: 0.7rem; top: 50%; transform: translateY(-50%);
+                     width: 1.15rem; height: 1.15rem; color: var(--colour-subtle);
+                     pointer-events: none; }
+  .searchbox input[type=search] { padding-left: 2.4rem; }
+
   label { font-weight: 600; display: block; margin-bottom: 0.3rem; }
   .field { margin-bottom: 0.9rem; }
   .field .hint { font-weight: 400; color: var(--colour-muted); font-size: 0.88rem; }
@@ -265,7 +383,7 @@ const STYLES = `
   .portal .choice input { width: auto; margin-top: 0.25rem; flex: none; }
   .portal .choice .g { display: block; font-size: 0.88rem; color: var(--colour-muted); }
   .portal .choice strong { font-weight: 700; }
-  @media print { .mast, .season-rule, .no-print { display: none !important; }
+  @media print { .mast, .tabs, .season-rule, .no-print { display: none !important; }
     body { background: #fff; color: var(--colour-print-ink); }
     main { padding-top: 0; max-width: none; } }
 
@@ -316,8 +434,28 @@ const STYLES = `
 `;
 
 export interface PageOptions {
-  /** Which nav item to highlight. */
-  nav?: "browse" | "portal" | "admin" | "home";
+  /**
+   * Which tab to mark as current.
+   *
+   * A page that is not itself a tab simply passes nothing and no tab lights up,
+   * which is honest: `/piece/412` is under the library but it is not the
+   * library, and marking a tab you did not choose is how a person loses track
+   * of where they are.
+   */
+  nav?:
+    | "home"
+    | "browse"
+    | "descants"
+    | "portal"
+    | "admin"
+    | "review"
+    | "services"
+    | "search"
+    | "scans"
+    | "labels"
+    | "queues"
+    | "reports"
+    | "feedback";
   /** Admin pages get the admin nav instead of the choir one. */
   admin?: boolean;
   /** Login page has no nav at all. */
@@ -338,10 +476,10 @@ export function page(title: string, bodyHtml: string, opts: PageOptions = {}): s
   // report but that, and there is no session to attach it to anyway.
   const feedback = chrome ? feedbackWidget(opts.path ?? "") : "";
 
-  // The season rule — a 2px line in the colour of the church season, the same
-  // colour bmserviceapp paints on the same day. Cheap, and it quietly tells
-  // somebody where in the year they are.
-  const season = seasonRule();
+  // With no chrome (the sign-in page) the season rule still belongs at the top
+  // of the page. With chrome it is inside the sticky block, between the
+  // masthead and the tabs, so it travels with them.
+  const season = chrome ? "" : seasonRule();
 
   return `<!doctype html>
 <html lang="en-GB">
@@ -407,20 +545,29 @@ const THEME_SCRIPT = String.raw`
 `;
 
 /** The toggle's behaviour, loaded once per page alongside the nav. */
-const THEME_TOGGLE_SCRIPT = String.raw`
+const THEME_TOGGLE_SCRIPT = `
 (function () {
   var btn = document.getElementById('theme-toggle');
   if (!btn) return;
+
+  // The two glyphs, rendered server-side and handed to the script as strings.
+  // The alternative is drawing SVG paths in JavaScript, which puts the icon set
+  // in two places and guarantees they drift.
+  var MOON = ${JSON.stringify(icon("moon"))};
+  var SUN = ${JSON.stringify(icon("sun"))};
 
   function current() {
     var set = document.documentElement.getAttribute('data-theme');
     if (set) return set;
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
+  // The button shows what you would be switching *to*, not what you are in —
+  // a sun means "make it light", which is what somebody in the dark wants.
   function label() {
     var dark = current() === 'dark';
-    btn.textContent = dark ? 'Light' : 'Dark';
+    btn.innerHTML = dark ? SUN : MOON;
     btn.setAttribute('aria-label', dark ? 'Switch to the light theme' : 'Switch to the dark theme');
+    btn.setAttribute('title', dark ? 'Light theme' : 'Dark theme');
   }
   label();
 
@@ -533,45 +680,159 @@ const FEEDBACK_SCRIPT = String.raw`
  * somebody tapping a crest in the top-left expects to go to the front of the
  * thing they are in.
  */
-function navFor(opts: PageOptions): string {
-  const item = (href: string, label: string, key: string) =>
-    `<a href="${href}"${opts.nav === key ? ' class="current"' : ""}>${esc(label)}</a>`;
+/**
+ * The tab strip: where you can go from here.
+ *
+ * One row, the same row on every page, with the current destination marked.
+ * That is what the phone's own apps do and it is why they feel navigable
+ * without a map — you learn the row once and it never moves.
+ *
+ * The choir side gets four, which is a whole app: what is being sung, the
+ * catalogue, the descant binders, and counting a box. The admin side gets more
+ * because it genuinely is more, and the strip scrolls sideways rather than
+ * wrapping so the page below never shifts.
+ */
+interface Tab {
+  href: string;
+  glyph: string;
+  label: string;
+  /** What a page passes as `nav` when it wants this tab marked explicitly. */
+  key: string;
+}
 
+const CHOIR_TABS: readonly Tab[] = [
+  { href: "/", glyph: "calendar", label: "Services", key: "home" },
+  { href: "/music", glyph: "music", label: "Library", key: "browse" },
+  { href: "/descants", glyph: "list", label: "Descants", key: "descants" },
+  { href: "/portal", glyph: "box", label: "Count a box", key: "portal" },
+];
+
+const ADMIN_TABS: readonly Tab[] = [
+  { href: "/admin", glyph: "home", label: "Overview", key: "admin" },
+  { href: "/admin/review", glyph: "review", label: "Review", key: "review" },
+  { href: "/admin/services", glyph: "calendar", label: "Music lists", key: "services" },
+  { href: "/admin/search", glyph: "search", label: "Search", key: "search" },
+  { href: "/admin/scans", glyph: "camera", label: "Scans", key: "scans" },
+  { href: "/admin/labels", glyph: "label", label: "Labels", key: "labels" },
+  { href: "/admin/queues", glyph: "list", label: "What to do", key: "queues" },
+  { href: "/admin/reports", glyph: "report", label: "Reports", key: "reports" },
+  { href: "/admin/feedback", glyph: "chat", label: "Feedback", key: "feedback" },
+];
+
+/**
+ * Which tab is the current one.
+ *
+ * Two ways in, and the order matters. An explicit `nav` always wins, because a
+ * page that knows which section it belongs to is a better authority than a
+ * string match. Failing that the tab is derived from the path the page is
+ * already passing, which is what saves nearly forty call sites from carrying a
+ * `nav` key that would only ever go stale: `/admin/services/2026-09` marks
+ * Music lists without being told to.
+ *
+ * Longest prefix wins, so a tab added later at a deeper path takes precedence
+ * over the shallower one it sits inside. The two roots — `/` and `/admin` — are
+ * matched exactly, since otherwise `/` would claim every page on the site.
+ */
+function currentTab(opts: PageOptions, tabs: readonly Tab[]): string | null {
+  if (opts.nav) {
+    const named = tabs.find((t) => t.key === opts.nav);
+    if (named) return named.href;
+  }
+
+  const path = opts.path;
+  if (!path) return null;
+
+  let best: Tab | null = null;
+  for (const tab of tabs) {
+    const root = tab.href === "/" || tab.href === "/admin";
+    const hit = root ? path === tab.href : path === tab.href || path.startsWith(`${tab.href}/`);
+    if (hit && (!best || tab.href.length > best.href.length)) best = tab;
+  }
+  return best ? best.href : null;
+}
+
+function tabsFor(opts: PageOptions): string {
+  const tabs = opts.admin ? ADMIN_TABS : CHOIR_TABS;
+  const current = currentTab(opts, tabs);
+
+  const links = tabs
+    .map(
+      (t) =>
+        `<a href="${t.href}"${t.href === current ? ' class="current" aria-current="page"' : ""}>${icon(
+          t.glyph
+        )}<span class="lbl">${esc(t.label)}</span></a>`
+    )
+    .join("");
+
+  return `<nav class="tabs" aria-label="${opts.admin ? "Librarian sections" : "Choir sections"}">
+    <div class="tabs-in">${links}</div>
+  </nav>`;
+}
+
+/**
+ * The masthead: the crest, what this app is, and the handful of controls that
+ * belong to the app rather than to the page.
+ *
+ * **The two sides are named differently on purpose.** The choir side says
+ * "Beverley Minster Music"; the admin side says "BM Music Admin". Somebody
+ * doing the cataloguing has both open, and the tab where a wrong click writes
+ * to the register should be identifiable without reading twice.
+ */
+function masthead(opts: PageOptions): string {
   const home = opts.admin ? "/admin" : "/";
-  const where = opts.admin ? "Librarian" : CHURCH.library.location;
+  const name = opts.admin ? CHURCH.adminAppName : CHURCH.appName;
 
-  const mark = `<a class="mark" href="${home}" aria-label="${esc(CHURCH.appName)} — ${esc(CHURCH.name)}">
-      <img class="logo logo-light" src="/asset/minster-logo-light.png" alt="${esc(CHURCH.name)}" width="281" height="88">
+  const mark = `<a class="mark" href="${home}" aria-label="${esc(name)} — ${esc(CHURCH.name)}">
+      <img class="logo logo-light" src="/asset/minster-logo-light.png" alt="" aria-hidden="true" width="281" height="88">
       <img class="logo logo-dark" src="/asset/minster-logo-dark.png" alt="" aria-hidden="true" width="281" height="88">
-      <span class="where">${esc(where)}</span>
+      <span class="name">${esc(name)}</span>
     </a>`;
 
-  const themeToggle = `<button type="button" class="ctl" id="theme-toggle">Dark</button>`;
+  const search = opts.admin
+    ? `<a class="ctl optional" href="/admin/search" title="Search and bulk edit" aria-label="Search the catalogue">${icon(
+        "search"
+      )}</a>`
+    : `<a class="ctl optional" href="/music" title="Find a piece" aria-label="Find a piece">${icon("search")}</a>`;
 
-  const links = opts.admin
-    ? `<a href="/admin/review">Review queue</a>
-       <a href="/admin/services">Music lists</a>
-       <a href="/admin/scans">Scans</a>
-       <a href="/admin/labels">Labels</a>
-       <a href="/admin/feedback">Feedback</a>
-       <a href="/admin/intake">Photo intake</a>
-       <a href="/admin/import">Import</a>
-       <a href="/">Choir view</a>`
-    : `${item("/", "Home", "home")}
-       ${item("/music", "Browse", "browse")}
-       ${item("/portal", "Count a parcel", "portal")}
-       <a href="/logout">Sign out</a>`;
+  // The way through to the librarian's side, and back.
+  //
+  // A padlock rather than a word, and muted rather than accented, because for
+  // almost everybody holding a phone this is not a door they can open: /admin
+  // sits behind Cloudflare Access and a chorister has no account there. Showing
+  // it costs nothing — the gate is the gate whether or not there is a sign on
+  // it — and it saves the one person who does have an account from typing the
+  // path in by hand every time.
+  const crossLink = opts.admin
+    ? `<a class="ctl" href="/" title="The choir's view of the app" aria-label="Switch to the choir view">${icon("eye")}</a>`
+    : `<a class="ctl" href="/admin" title="Librarian — needs a Minster sign-in" aria-label="Librarian sign-in">${icon(
+        "lock"
+      )}</a>`;
 
-  return `<header class="mast no-print">
+  const themeToggle = `<button type="button" class="ctl" id="theme-toggle" aria-label="Switch theme">${icon("moon")}</button>`;
+
+  const out = opts.admin
+    ? ""
+    : `<a class="ctl" href="/logout" title="Sign out" aria-label="Sign out">${icon("logout")}</a>`;
+
+  return `<header class="mast">
     <div class="mast-in">
       ${mark}
       <span class="mast-sp"></span>
-      <nav class="nav-actions" aria-label="${opts.admin ? "Librarian" : "Choir"}">
-        ${links}
-        ${themeToggle}
-      </nav>
+      ${search}
+      ${crossLink}
+      ${themeToggle}
+      ${out}
     </div>
-  </header>
+  </header>`;
+}
+
+/** The masthead, the season rule and the tabs, as the one block that sticks. */
+function navFor(opts: PageOptions): string {
+  return `<div class="chrome no-print">
+    ${masthead(opts)}
+    ${seasonRule()}
+    ${tabsFor(opts)}
+  </div>
   <script>${THEME_TOGGLE_SCRIPT}</script>`;
 }
 
@@ -650,7 +911,9 @@ export function homePage(
              : ""
          }
          ${musicList(next.music, next.typicalSingers, next.service.designation)}
-         <p style="margin-bottom:0"><a class="btn secondary" href="/service/${next.service.id}">Open this service</a></p>
+         <p style="margin-bottom:0"><a class="btn secondary" href="/service/${next.service.id}">${icon(
+           "calendar"
+         )}Open this service</a></p>
        </div>`
     : `<div class="card">
          <h2>Nothing coming up yet</h2>
@@ -700,7 +963,13 @@ export function homePage(
        <form method="GET" action="/music">
          <div class="field" style="margin:0">
            <label for="q">Find a piece</label>
-           <input type="search" id="q" name="q" placeholder="Composer, title or accession number">
+           <!-- The glyph sits inside the field rather than beside it: on a phone
+                this is the first thing on the page, and a magnifying glass in
+                the box says "type here to search" without a word of label. -->
+           <div class="searchbox">
+             ${icon("search")}
+             <input type="search" id="q" name="q" placeholder="Composer, title or accession number">
+           </div>
          </div>
          <p class="small muted" style="margin:0.5rem 0 0">
            <a href="/music">Browse everything</a> · <a href="/descants">Find a descant</a>
@@ -722,7 +991,7 @@ export function homePage(
  * A Eucharist has four or five hymns, and one full row each pushed the anthem
  * off the bottom of a phone screen — four rows saying "HYMN" and a number is
  * a list of numbers pretending to be a list of pieces. They are numbers in the
- * hymn book, they are never matched to a parcel, and a chorister reads them as
+ * hymn book, they are never matched to a box, and a chorister reads them as
  * a group. So they render as one row: "HYMNS 46 · 73 · 533 · 235".
  *
  * Nothing else is collapsed. Two anthems are two pieces.
@@ -757,7 +1026,7 @@ function collapseHymns(music: ServiceMusicWithPiece[]): ServiceMusicWithPiece[] 
  *
  * Every line shows what the music list actually said, whether or not we matched
  * it. That is deliberate: the list is the truth about what is being sung, and a
- * line we could not find a parcel for still needs to be on the page.
+ * line we could not find a box for still needs to be on the page.
  */
 function musicList(
   music: ServiceMusicWithPiece[],
@@ -776,7 +1045,7 @@ function musicList(
             : "";
 
           // Only matched, matchable lines get a RAG. A psalm number has no
-          // copies to count, and an unmatched line has no parcel to count them
+          // copies to count, and an unmatched line has no box to count them
           // in — a pill on either would be a number about nothing.
           const rag =
             line.piece_id && isMatchable(line.slot as Slot)
@@ -926,7 +1195,7 @@ export function descantPage(query: string, result: DescantResult | null): string
           indexed by hymn number.</p>
        <p>${allBinders().map((b) => `<span class="pill grey">${esc(b)}</span>`).join(" ")}</p>
      </div>`,
-    { nav: "home", path: "/descants" }
+    { nav: "descants", path: "/descants" }
   );
 }
 
@@ -1049,11 +1318,11 @@ function seasonChips(season: string | null): string {
   return chips.length ? chips.join(" ") : '<span class="muted">Not recorded</span>';
 }
 
-/** Where the parcel physically is: door and shelf, falling back to free text. */
+/** Where the box physically is: cupboard and shelf, falling back to free text. */
 function whereItLives(piece: PieceWithHolding): string {
   if (piece.location_door) {
-    const shelf = piece.location_shelf ? `, shelf ${piece.location_shelf}` : "";
-    return `Door ${esc(piece.location_door)}${esc(shelf)}`;
+    const address = shelfAddress(piece.location_door, piece.location_shelf);
+    if (address) return `${icon("loco")} ${esc(address)}`;
   }
   if (piece.location) return esc(piece.location);
   return `<span class="muted">Not recorded — ${esc(CHURCH.library.location)}</span>`;
@@ -1069,14 +1338,14 @@ export function itemPage(
   const draftNotice = !piece.reviewed_at
     ? `<div class="notice">
          <p><strong>This entry has not been checked yet.</strong> It was read off a photograph of the
-            parcel label, so the composer or title may be wrong. ${
+            box label, so the composer or title may be wrong. ${
               piece.review_flag ? "The specific doubts are listed below." : ""
             }</p>
          ${piece.review_flag ? `<p>${flagPills(piece.review_flag)}</p>` : ""}
        </div>`
     : "";
 
-  // The composer written out, where we have it — the parcel label shouts a
+  // The composer written out, where we have it — the box label shouts a
   // surname, and "STANFORD" is not what anybody calls him.
   const composerLine = piece.composer_full && piece.composer_full !== piece.composer
     ? `${esc(piece.composer_full)}`
@@ -1107,7 +1376,7 @@ export function itemPage(
      ${sungAtSection(sung)}
      ${performanceSection(performances)}
 
-     <p class="no-print"><a class="btn secondary" href="/portal/count/${piece.id}">Count this parcel</a></p>`,
+     <p class="no-print"><a class="btn secondary" href="/portal/count/${piece.id}">Count this box</a></p>`,
     { nav: "browse", path: `/piece/${piece.id}` }
   );
 }
@@ -1178,7 +1447,7 @@ function holdingsSection(holdings: HoldingRow[], piece: PieceWithHolding): strin
   if (!holdings.length) {
     return `<div class="card">
         <h2>Copies</h2>
-        <p class="muted">Nobody has counted this parcel yet.
+        <p class="muted">Nobody has counted this box yet.
            <a href="/portal/count/${piece.id}">Count it now</a> if you have it open in front of you.</p>
       </div>`;
   }
@@ -1220,7 +1489,7 @@ function filesSection(files: FileRow[]): string {
         <h2>Reference scan</h2>
         <div class="placeholder">
           <span class="tag">Coming in Phase 1</span>
-          <p style="margin:0">No scan yet. Once one copy of each parcel has been scanned, it will be readable
+          <p style="margin:0">No scan yet. Once one copy of each box has been scanned, it will be readable
              here — signed in only, never a public link.</p>
         </div>
       </div>`;
@@ -1292,14 +1561,14 @@ export function portalPage(searched?: { q: string; results: PieceWithHolding[] }
       : `<div class="notice">
            <p>Nothing matched “${esc(searched.q)}”.</p>
            <p>Try just the composer's surname, or one word of the title. The labels were written by hand,
-              so the spelling in here may not be the spelling on the parcel.</p>
+              so the spelling in here may not be the spelling on the box.</p>
          </div>`
     : "";
 
   return page(
-    `Count a parcel — ${CHURCH.appName}`,
+    `Count a box — ${CHURCH.appName}`,
     `<div class="portal">
-       <h1>Count a parcel<span class="sub">Find it first, then tell us what is in it</span></h1>
+       <h1>Count a box<span class="sub">Find it first, then tell us what is in it</span></h1>
        <div class="card">
          <form method="GET" action="/portal">
            <div class="field">
@@ -1307,7 +1576,7 @@ export function portalPage(searched?: { q: string; results: PieceWithHolding[] }
              <input type="search" id="q" name="q" value="${esc(searched?.q ?? "")}"
                     placeholder="BM-0042, or Stanford, or O sing joyfully"
                     autocomplete="off" autocapitalize="none" autofocus>
-             <span class="hint">The accession number is the ${esc(CHURCH.accession.prefix)} number written on the parcel,
+             <span class="hint">The accession number is the ${esc(CHURCH.accession.prefix)} number written on the box,
                if it has one yet.</span>
            </div>
            <button type="submit">Find it</button>
@@ -1334,12 +1603,12 @@ export function portalCountPage(piece: PieceWithHolding, error?: string): string
       ? `<p class="muted small">Last counted ${esc(prettyDate(piece.last_counted))}:
          ${piece.copies_usable} usable of ${piece.copies_total}. If you find something different, that is
          useful — put down what you actually see.</p>`
-      : `<p class="muted small">This parcel has never been counted.</p>`;
+      : `<p class="muted small">This box has never been counted.</p>`;
 
   return page(
     `Counting ${piece.title} — ${CHURCH.appName}`,
     `<div class="portal">
-       <p class="crumb"><a href="/portal">← Find a different parcel</a></p>
+       <p class="crumb"><a href="/portal">← Find a different box</a></p>
        <h1>${esc(piece.title)}<span class="sub">${esc(piece.composer)}${
          piece.accession ? ` · ${esc(piece.accession)}` : ""
        }</span></h1>
@@ -1376,7 +1645,7 @@ export function portalCountPage(piece: PieceWithHolding, error?: string): string
            <div class="field">
              <label for="note">Anything else worth knowing?</label>
              <textarea id="note" name="note" rows="3"
-               placeholder="e.g. two parcels tied together, pages missing from three copies, damp on the wrapper"></textarea>
+               placeholder="e.g. two boxes tied together, pages missing from three copies, damp on the wrapper"></textarea>
            </div>
            <div class="field">
              <label for="counted_by">Your name</label>
@@ -1401,7 +1670,7 @@ export function portalDonePage(piece: PieceWithHolding, outcome: CountOutcome): 
     : "";
 
   const repair = outcome.repairRaised
-    ? `<div class="notice">A repair job has been raised for this parcel.</div>`
+    ? `<div class="notice">A repair job has been raised for this box.</div>`
     : "";
 
   return page(
@@ -1414,10 +1683,10 @@ export function portalDonePage(piece: PieceWithHolding, outcome: CountOutcome): 
        <div class="card">
          <h2>Before you wrap it back up</h2>
          <p style="font-size:1.1rem"><strong>Please set one copy aside for scanning.</strong></p>
-         <p class="muted">Put it in the scanning tray rather than back in the parcel. One good copy of each
-            piece is all we need, and it is much easier to do now than to find the parcel again later.</p>
+         <p class="muted">Put it in the scanning tray rather than back in the box. One good copy of each
+            piece is all we need, and it is much easier to do now than to find the box again later.</p>
        </div>
-       <p><a class="btn" href="/portal">Count another parcel</a></p>
+       <p><a class="btn" href="/portal">Count another box</a></p>
        <p><a href="/piece/${piece.id}">See this piece in the catalogue</a></p>
      </div>`,
     { nav: "portal" }
@@ -1480,7 +1749,7 @@ function reviewRow(p: PieceWithHolding): string {
         <div class="field">
           <label for="title-${p.id}">Title</label>
           <input type="text" id="title-${p.id}" name="title" value="${esc(p.title)}" required>
-          <span class="hint">A parcel holding several pieces keeps them all here, joined with semicolons —
+          <span class="hint">A box holding several pieces keeps them all here, joined with semicolons —
             each one is also kept as an alias so a music list can find it.</span>
         </div>
         <div class="row">
@@ -1500,7 +1769,7 @@ function reviewRow(p: PieceWithHolding): string {
         <div class="field">
           <label for="merge-${p.id}">Or merge into another piece</label>
           <input type="text" id="merge-${p.id}" name="merge_into" placeholder="Accession or draft ref, e.g. D-172">
-          <span class="hint">Use this when two draft rows are the same parcel. This row's title becomes an
+          <span class="hint">Use this when two draft rows are the same box. This row's title becomes an
             alias of the other, its counts and scans move across, and this row goes.</span>
         </div>
         <button type="submit" name="action" value="confirm" class="confirm">Save and confirm</button>
@@ -1597,7 +1866,7 @@ export function adminImportPage(summary: ImportSummary | null, error?: string): 
            <li>${summary.updated} draft ${summary.updated === 1 ? "row" : "rows"} refreshed</li>
            <li>${summary.unchanged} unchanged</li>
            <li>${summary.skippedReviewed} already confirmed by a human and left alone</li>
-           <li>${summary.aliasesWritten} aliases written from multi-title parcels</li>
+           <li>${summary.aliasesWritten} aliases written from multi-title boxes</li>
          </ul>
          <p class="small">${summary.total} rows read in total.</p>
        </div>
@@ -1667,7 +1936,7 @@ export function adminIntakePage(extractionReady: boolean): string {
          <h2>1. Photograph the label</h2>
          <form id="upload-form">
            <div class="field">
-             <label for="photo">Photo of the parcel label</label>
+             <label for="photo">Photo of the box label</label>
              <input type="file" id="photo" name="photo" accept="image/*,.pdf" capture="environment" required>
              <span class="hint">A straight-on photo in good light reads best. One label at a time.</span>
            </div>
@@ -1723,7 +1992,7 @@ export function manualForm(): string {
       <div class="field">
         <label for="i-title">Title</label>
         <input type="text" id="i-title" name="title" required>
-        <span class="hint" id="h-title">Several pieces in one parcel: join them with semicolons. Each becomes an alias.</span>
+        <span class="hint" id="h-title">Several pieces in one box: join them with semicolons. Each becomes an alias.</span>
       </div>
       <div class="row">
         <div class="field">

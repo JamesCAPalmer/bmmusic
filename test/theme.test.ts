@@ -62,7 +62,6 @@ describe("the palette is the estate's", () => {
     expect(THEME.colour.accent).toBe("#c83734");
     expect(THEME.colour.accentDark).toBe("#5C0A18");
     expect(THEME.colour.gold).toBe("#C8A24B");
-    expect(THEME.colour.focus).toBe("#1A6FB5");
   });
 
   it("uses the estate's dark values", () => {
@@ -71,16 +70,24 @@ describe("the palette is the estate's", () => {
     expect(THEME_DARK.ink).toBe("#ECE6D9");
     expect(THEME_DARK.accent).toBe("#F0796F");
     expect(THEME_DARK.gold).toBe("#D8B560");
-    expect(THEME_DARK.focus).toBe("#6FB8F2");
   });
 
-  // The estate sets one radius and uses it everywhere. Sharp corners are what
-  // make the app read as printed matter rather than as a web form.
-  it("keeps corners nearly square, as the estate does", () => {
-    for (const name of ["sm", "md", "lg", "xl"] as const) {
-      expect(THEME.radius[name], `radius.${name}`).toBe("2px");
-    }
-    // A status chip is a different object from a panel, and stays round.
+  // Corners are rounded, and they get rounder as the object gets bigger: chip,
+  // then input, then button, then card. The gradient is what the eye reads as a
+  // hierarchy of objects, so it is the gradient that is worth pinning rather
+  // than any one value — a later tweak from 12px to 14px is fine, a later
+  // flattening back to one radius everywhere is the thing this catches.
+  it("rounds corners, and rounds bigger things more", () => {
+    const px = (value: string): number => {
+      expect(value, `${value} is not a pixel value`).toMatch(/^\d+px$/);
+      return Number.parseInt(value, 10);
+    };
+    const [sm, md, lg, xl] = (["sm", "md", "lg", "xl"] as const).map((n) => px(THEME.radius[n]));
+    expect(sm, "small controls should still be visibly rounded").toBeGreaterThanOrEqual(4);
+    expect(md!).toBeGreaterThan(sm!);
+    expect(lg!).toBeGreaterThan(md!);
+    expect(xl!).toBeGreaterThan(lg!);
+    // A status chip is a different object from a panel, and stays fully round.
     expect(THEME.radius.pill).toBe("999px");
   });
 
@@ -90,11 +97,105 @@ describe("the palette is the estate's", () => {
   });
 });
 
+describe("there is no blue in the brand", () => {
+  /**
+   * Hue in degrees, and how saturated the colour is.
+   *
+   * A near-grey has a hue but it means nothing — `#E5E1D8` computes to 42°
+   * without being in any sense yellow — so the check below ignores anything
+   * washed out enough that a person would call it grey.
+   */
+  function hsl(hex: string): { hue: number; sat: number } {
+    const n = hex.replace("#", "");
+    const [r, g, b] = [0, 2, 4].map((i) => Number.parseInt(n.slice(i, i + 2), 16) / 255) as [
+      number,
+      number,
+      number,
+    ];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const light = (max + min) / 2;
+    if (max === min) return { hue: 0, sat: 0 };
+    const d = max - min;
+    const sat = d / (1 - Math.abs(2 * light - 1));
+    const hue =
+      max === r ? ((g - b) / d + (g < b ? 6 : 0)) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return { hue: hue * 60, sat };
+  }
+
+  /** Blue and cyan, broadly. Violet (266°+) is a liturgical colour and stays. */
+  const BLUE = (hex: string) => {
+    const { hue, sat } = hsl(hex);
+    return sat > 0.12 && hue >= 180 && hue <= 260;
+  };
+
+  /**
+   * James's rule, and the reason this test exists rather than a comment: blue
+   * is not a Beverley Minster colour. The estate's focus ring was `#1A6FB5`
+   * and it was in here for a good reason — a colour nobody else uses always
+   * reads as "the keyboard is here" — so the pull to reintroduce a blue the
+   * next time the focus ring is inconvenient is real. This fails when somebody
+   * does.
+   */
+  it("has no blue anywhere in either palette", () => {
+    for (const [token, value] of Object.entries(THEME.colour)) {
+      expect(BLUE(value), `light ${token} (${value}) is a blue`).toBe(false);
+    }
+    for (const [token, value] of Object.entries(THEME_DARK)) {
+      expect(BLUE(value), `dark ${token} (${value}) is a blue`).toBe(false);
+    }
+  });
+
+  /**
+   * The one exception, stated out loud so it cannot be mistaken for an
+   * oversight: blue is the liturgical colour of feasts of Our Lady. It is not
+   * brand, it is bmserviceapp's exact value so the two apps paint the same rule
+   * on the same day, and it shows as 2px under the masthead a few days a year.
+   */
+  it("keeps exactly one blue, and it is the liturgical one", () => {
+    const blues = Object.entries(SEASON_COLOURS)
+      .filter(([, value]) => BLUE(value))
+      .map(([season]) => season);
+    expect(blues).toEqual(["marian"]);
+  });
+
+  /**
+   * With no blue to reach for, the focus ring is two-tone instead: a dark ring
+   * with a light halo, reversed in the dark theme. What makes that work is the
+   * contrast between the two halves, so that is what is worth testing — if
+   * somebody ever sets them to similar tones the ring stops being visible on
+   * one background or another, and nothing else in the suite would notice.
+   */
+  it("builds a focus ring out of contrast rather than hue", () => {
+    const lightness = (hex: string): number => {
+      const n = hex.replace("#", "");
+      const [r, g, b] = [0, 2, 4].map((i) => Number.parseInt(n.slice(i, i + 2), 16) / 255) as [
+        number,
+        number,
+        number,
+      ];
+      return (Math.max(r, g, b) + Math.min(r, g, b)) / 2;
+    };
+    for (const [name, palette] of [
+      ["light", THEME.colour],
+      ["dark", THEME_DARK],
+    ] as const) {
+      const gap = Math.abs(lightness(palette.focus) - lightness(palette.focusHalo));
+      expect(gap, `${name}: the two halves of the focus ring are too close to tell apart`).toBeGreaterThan(0.5);
+    }
+    // And the two themes are the other way up from each other.
+    const lightRingIsDark = lightness(THEME.colour.focus) < lightness(THEME.colour.focusHalo);
+    const darkRingIsDark = lightness(THEME_DARK.focus) < lightness(THEME_DARK.focusHalo);
+    expect(lightRingIsDark).toBe(true);
+    expect(darkRingIsDark).toBe(false);
+  });
+});
+
 describe("the generated stylesheet", () => {
   it("declares the light palette on :root", () => {
     expect(THEME_CSS).toContain("--colour-accent: #c83734;");
     expect(THEME_CSS).toContain("--type-family-display:");
-    expect(THEME_CSS).toContain("--radius-sm: 2px;");
+    expect(THEME_CSS).toContain(`--radius-sm: ${THEME.radius.sm};`);
   });
 
   // Both routes into dark are needed. The media query honours a phone that is

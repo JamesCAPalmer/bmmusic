@@ -338,7 +338,7 @@ describe("constraints that carry a decision", () => {
   });
 
   // Deleting a piece must not take a service's music list with it: the raw text
-  // is what the music list said, and it is still true after the parcel is gone.
+  // is what the music list said, and it is still true after the box is gone.
   it("keeps a music-list line when its matched piece is deleted", () => {
     expect(tableBody("service_music")!).toMatch(/REFERENCES piece\(id\) ON DELETE SET NULL/i);
   });

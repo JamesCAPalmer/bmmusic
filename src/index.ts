@@ -17,6 +17,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import type { AppEnv, Env } from "./env";
 import { audit } from "./audit";
 import { CHURCH } from "./church.config";
+import { doorLetters, isDoorLetter } from "./storage";
 import {
   adminIdentity,
   authMiddleware,
@@ -570,7 +571,7 @@ function readAdminSearch(url: string): AdminSearchFilters {
     q: pick("q"),
     category: pick("category", CHURCH.categories.map((x) => x.code)),
     season: pick("season", CHURCH.seasons.map((s) => s.value)),
-    locationDoor: pick("door", CHURCH.storage.doors),
+    locationDoor: pick("door", doorLetters()),
     scanned: pick("scanned", ["yes", "no"]),
     flagged: pick("flagged", ["flagged", "unreviewed", "reviewed"]),
     limit: 100,
@@ -598,7 +599,7 @@ app.get("/portal", async (c) => {
   if (!q) return c.html(portalPage());
 
   // An accession number is an exact thing; jump straight there rather than
-  // making somebody holding a parcel pick their own parcel out of a list.
+  // making somebody holding a box pick their own box out of a list.
   const byAccession = await getPieceByAccession(c.env.DB, q);
   if (byAccession) return c.redirect(`/portal/count/${byAccession.id}`, 302);
 
@@ -842,7 +843,7 @@ app.post("/admin/search/bulk", async (c) => {
   const edit = {
     category: CHURCH.categories.some((x) => x.code === str(body.category)) ? str(body.category) : undefined,
     season: str(body.season) || undefined,
-    locationDoor: CHURCH.storage.doors.includes(str(body.location_door)) ? str(body.location_door) : undefined,
+    locationDoor: isDoorLetter(str(body.location_door)) ? str(body.location_door) : undefined,
     locationShelf: /^\d{1,3}$/.test(shelf) ? Number(shelf) : undefined,
     spineState: ["ok", "none", "combined"].includes(str(body.spine_state)) ? str(body.spine_state) : undefined,
   };
@@ -1106,7 +1107,7 @@ app.get("/admin/labels", async (c) => {
   const unlabelled = params.get("unlabelled") === "1";
 
   const candidates = await labelCandidates(c.env.DB, {
-    door: door && CHURCH.storage.doors.includes(door) ? door : undefined,
+    door: door && isDoorLetter(door) ? door : undefined,
     unlabelled,
   });
 
@@ -1179,10 +1180,10 @@ app.post("/admin/labels/print", async (c) => {
 /**
  * The QR route (H1): `/q/BM-0042` → the piece.
  *
- * Short and stable on purpose. The accession is written on the parcel in ink,
+ * Short and stable on purpose. The accession is written on the box in ink,
  * so it is the one identifier that cannot go stale — a `/piece/:id` link could
  * be renumbered by a re-import, and a printed QR cannot be reprinted on four
- * hundred parcels. When the app moves to music.beverleyminster.org.uk, the old
+ * hundred boxes. When the app moves to music.beverleyminster.org.uk, the old
  * hostname keeps a Worker that 301s everything here, and the printed codes go
  * on working.
  *
@@ -1195,7 +1196,7 @@ app.get("/q/:accession", async (c) => {
   if (!piece) {
     return c.html(
       errorPage(
-        `Nothing in the catalogue has the number ${accession}. If it is written on a parcel, ` +
+        `Nothing in the catalogue has the number ${accession}. If it is written on a box, ` +
           `tell ${CHURCH.contact.maintainer.shortName} — the label may be older than the catalogue.`
       ),
       404
@@ -2368,7 +2369,7 @@ app.post("/admin/intake", async (c) => {
 
   const id = await createPiece(c.env.DB, edit);
 
-  // A parcel holding several pieces keeps the joined title and gains one alias
+  // A box holding several pieces keeps the joined title and gains one alias
   // per piece — the same rule the seed importer follows.
   const parts = edit.title.split(";").map((t) => t.trim()).filter(Boolean);
   if (parts.length > 1) {

@@ -44,7 +44,7 @@ const SEED_CSV = readFileSync(SEED_PATH, "utf8");
  * failing tests into a one-line edit. Index v2: 410 rows, 69 multi-title.
  */
 const SEED_ROWS = 410;
-const SEED_MULTI_TITLE_PARCELS = 69;
+const SEED_MULTI_TITLE_BOXES = 69;
 
 // ---------------------------------------------------------------------------
 
@@ -216,7 +216,7 @@ describe("turning a draft row into a piece", () => {
     ]);
   });
 
-  it("adds no aliases to a single-title parcel", () => {
+  it("adds no aliases to a single-title box", () => {
     expect(toDraftPiece({ ...row, titles: "Ave verum" }).aliases).toEqual([]);
   });
 
@@ -385,9 +385,9 @@ describe("the real committed draft index", () => {
     }
   });
 
-  it("finds the multi-title parcels and splits them", () => {
+  it("finds the multi-title boxes and splits them", () => {
     const multi = drafts.filter((d) => d.aliases.length > 0);
-    expect(multi.length).toBe(SEED_MULTI_TITLE_PARCELS);
+    expect(multi.length).toBe(SEED_MULTI_TITLE_BOXES);
     const batten = drafts.find((d) => d.legacyRef === "D-026")!;
     expect(batten.aliases.map((a) => a.altName)).toEqual([
       "O sing joyfully",

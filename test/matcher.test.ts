@@ -105,7 +105,7 @@ describe("which slots are worth matching", () => {
   });
 
   // A psalm is a number and a pointing, a hymn is a number in the hymn book,
-  // and a voluntary lives on the organ loft. Offering parcels for those would
+  // and a voluntary lives on the organ loft. Offering boxes for those would
   // put three lines of noise in the review queue every week.
   it("leaves the psalm, the hymns and the voluntary alone", () => {
     for (const slot of ["psalm", "hymn", "voluntary"] as const) {
@@ -133,7 +133,7 @@ describe("the key a learned match is remembered under", () => {
 
 describe("matching against the catalogue", () => {
   // Shaped like the real thing: the label shouts a surname, the catalogue also
-  // holds the name written out, and a multi-title parcel carries its parts as
+  // holds the name written out, and a multi-title box carries its parts as
   // aliases.
   const corpus: CorpusPiece[] = [
     { id: 1, titles: ["Ave verum corpus"], composers: ["BYRD", "William Byrd", "Byrd"] },
@@ -161,7 +161,7 @@ describe("matching against the catalogue", () => {
     expect(matchLine("Ave verum corpus (Wiliam Byrd)", "anthem", corpus)?.pieceId).toBe(1);
   });
 
-  it("finds a multi-title parcel by one of its parts", () => {
+  it("finds a multi-title box by one of its parts", () => {
     expect(matchLine("O sing joyfully (Adrian Batten)", "introit", corpus)?.pieceId).toBe(5);
   });
 
@@ -185,7 +185,7 @@ describe("matching against the catalogue", () => {
     expect(matchLine("Charles Villiers Stanford in C", "canticles", inBFlatOnly)?.score).toBeLessThan(0.9);
   });
 
-  it("matches a key against a parcel catalogued with the mode spelled out", () => {
+  it("matches a key against a box catalogued with the mode spelled out", () => {
     const spelledOut: CorpusPiece[] = [
       { id: 21, titles: ["Magnificat and Nunc Dimittis in C major"], composers: ["WOOD", "Charles Wood"] },
       { id: 22, titles: ["Magnificat and Nunc Dimittis in D minor"], composers: ["WOOD", "Charles Wood"] },
@@ -193,7 +193,7 @@ describe("matching against the catalogue", () => {
     expect(matchLine("Charles Wood in C", "canticles", spelledOut)?.pieceId).toBe(21);
   });
 
-  // The property that keeps the wrong parcel off a chorister's service page:
+  // The property that keeps the wrong box off a chorister's service page:
   // where the matcher cannot tell two candidates apart, it says so.
   it("declines rather than guessing between two settings it cannot separate", () => {
     const ambiguous: CorpusPiece[] = [
@@ -210,13 +210,13 @@ describe("matching against the catalogue", () => {
   // Both of these are real false positives that a dry run over four months of
   // the live feed produced, and both came from the same flaw: scoring the
   // shared words against the *shorter* of the two titles, so a long line could
-  // match a short parcel on one word it happened to share.
+  // match a short box on one word it happened to share.
   //
-  // The library holds fifteen Stanford parcels and several Handel ones. Landing
+  // The library holds fifteen Stanford boxes and several Handel ones. Landing
   // on the wrong one is worse than landing on none: an unmatched line is a tap
   // in the admin queue, and a wrong one is a chorister sent to the wrong
-  // parcel with nobody any the wiser until the rehearsal.
-  it("does not settle on a parcel by the right composer that shares one stray word", () => {
+  // box with nobody any the wiser until the rehearsal.
+  it("does not settle on a box by the right composer that shares one stray word", () => {
     const stanford: CorpusPiece[] = [
       {
         id: 30,
@@ -238,9 +238,9 @@ describe("matching against the catalogue", () => {
     expect(matchLine("Lord, I trust thee (George Frederick Handel)", "introit", handel)).toBeNull();
   });
 
-  // The other side of that same measure: extra words in the parcel's title are
+  // The other side of that same measure: extra words in the box's title are
   // usually the library's own cataloguing, not a different piece.
-  it("still matches a parcel catalogued with an opus number after the title", () => {
+  it("still matches a box catalogued with an opus number after the title", () => {
     const rheinberger: CorpusPiece[] = [
       { id: 32, titles: ["Abendlied (Op. 69 No. 3)"], composers: ["RHEINBERGER", "Josef Rheinberger"] },
     ];
@@ -298,7 +298,7 @@ describe("scoring", () => {
   });
 
   // A different composer's setting of the same words must score below a match,
-  // not above it — this is the failure that would put the wrong parcel out.
+  // not above it — this is the failure that would put the wrong box out.
   it("scores the right words by the wrong composer below the threshold", () => {
     const wrong = scoreCandidate({ title: "Ave verum corpus", composer: "Edward Elgar", key: null }, byrd);
     const right = scoreCandidate({ title: "Ave verum corpus", composer: "William Byrd", key: null }, byrd);
@@ -309,7 +309,7 @@ describe("scoring", () => {
     expect(scoreCandidate({ title: null, composer: "Edward Elgar", key: null }, byrd)).toBe(0);
   });
 
-  // The parcel's shouted surname must appear inside the feed's written-out
+  // The box's shouted surname must appear inside the feed's written-out
   // name, not the other way about — otherwise a surname matches everything.
   it("matches a shouted surname inside a written-out name", () => {
     expect(scoreCandidate({ title: null, composer: "Charles Villiers Stanford", key: null }, {

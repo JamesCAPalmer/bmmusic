@@ -160,7 +160,7 @@ export async function sungAt(
 /**
  * The whole catalogue, flattened for matching.
  *
- * Loaded once per run rather than queried per line. Six hundred parcels is
+ * Loaded once per run rather than queried per line. Six hundred boxes is
  * nothing to hold in memory, and doing it this way keeps the matching itself
  * pure — which is what lets it be tested against real feed lines.
  */
@@ -253,7 +253,7 @@ export async function confirmMatch(
  * Say that a line matches nothing in the library.
  *
  * Not the same as leaving it alone: it clears a wrong proposal, so the line
- * stops claiming a parcel it is not. It stays in the queue, because "we do not
+ * stops claiming a box it is not. It stays in the queue, because "we do not
  * own this" is a fact about today's catalogue and may stop being true.
  */
 export async function rejectMatch(db: D1Database, lineId: number): Promise<void> {

@@ -11,6 +11,77 @@ that is the part worth reading.
 
 ---
 
+## 2026-08-28 — It should look like an app
+
+The interface reworked to read as an app rather than as a printed document,
+plus two vocabulary decisions.
+
+- **A tab strip is the navigation.** Four destinations choir-side, nine on the
+  admin side, in the same place on every page with the current one marked. It
+  **scrolls sideways rather than wrapping**, because a nav that wraps changes
+  height between pages and shifts the content under it every time you navigate.
+  The current tab is **derived from the path**, not passed by each page: that
+  is what stopped nearly forty call sites acquiring a `nav` key that would only
+  ever go stale.
+- **Glyphs are drawn in the repository** (`src/icons.ts`, ~30 inline SVG paths).
+  No icon font and no package — CDN assets are ruled out here, and an icon that
+  fetches anything is an icon that is sometimes a blank square in a song school
+  with one bar of signal. `currentColor` and `aria-hidden` throughout, so a
+  glyph is correct in the dark theme and inside a red button with no extra rule,
+  and a screen reader does not read the label beside it twice.
+- **Buttons name their font.** A `<button>` does not inherit the page's
+  typeface, so until this every button in the app was set in the browser's own
+  UI face rather than the one everything else is set in — the sort of thing
+  that makes a page look untended without anybody being able to say why.
+- **Corners are rounded, 6→16px by role**, against the estate's single 2px.
+  A deliberate departure: sharp corners read as printed matter, which is a
+  defensible register for a church and the wrong one for a thing used
+  one-handed on a phone by children.
+- **There is no blue.** Blue is not a Minster brand colour. The estate's focus
+  ring was `#1A6FB5`, and it was chosen well — a hue nobody else uses always
+  reads as *the keyboard is here* rather than as decoration — so it had to be
+  replaced rather than deleted. The ring is now **two-tone rather than
+  coloured**: dark with a light halo, reversed in the dark theme, which is
+  legible on cream, on white, on a red button and on a dark page alike. No
+  single hue manages that, and a second brand colour would not have been
+  available anyway — red, gold, green and violet are all spoken for. A test
+  fails if a blue reappears in either palette.
+  - The **one** blue left is the Marian season rule. It is liturgical, not
+    brand, it matches bmserviceapp so both apps paint the same rule on the
+    same day, and the test asserts it is the only one.
+- **The wordmark wraps rather than truncates on a phone.** "Beverley Minster
+  Music" beside three controls on a 360px screen truncated to "Beverley
+  Minster …", which loses the only word saying which Minster app this is. Below
+  30rem the crest gives way to the words and the words take two lines.
+- **The two sides are named differently**: `Beverley Minster Music` choir-side,
+  `BM Music Admin` behind Access. Somebody cataloguing has both open, and the
+  tab where a wrong click writes to the register should be identifiable without
+  reading twice.
+- **A padlock in the choir masthead leads to the admin side.** For almost
+  everybody it opens onto a Cloudflare Access screen they cannot pass, which is
+  the point: the gate is the gate whether or not there is a sign on it, and it
+  saves the one person who can from typing the path by hand.
+
+### Two vocabulary decisions
+
+- **"Box", for everything.** The anthems are in wrapped parcels and the service
+  settings are in boxes, and the app said both. It now says box throughout: one
+  word for one idea, because a volunteer holding the thing does not care which
+  it technically is and should not have to guess which word the screen will
+  use. Prose only — every `parcel` in the SQL was a comment, so no schema or
+  data changed.
+- **The cupboards are named after diesel locomotive classes** — Deltic,
+  Western, Warship, Peak, Hymek, Whistler, Growler, Duff. Robert's idea, and it
+  earns its place: "it's in Deltic" survives being called across a song school
+  where "it's in D" is heard as "in B".
+  - **The letter is stored; the name is only displayed.** Every
+    `holding.location_door`, every label already stuck to a spine and every
+    volunteer who has learned the wall carries the letter. So renaming a
+    cupboard — or removing the joke — is an edit to `CHURCH.storage.doors` and
+    nothing else: no migration, no reprint, no recount. `test/storage.test.ts`
+    asserts `isDoorLetter("Deltic")` is false, which is what stops a name ever
+    becoming a stored value.
+
 ## 2026-08-27 — Addendum A: modules, roles, the register ([#12](https://github.com/JamesCAPalmer/bmmusic/pull/12))
 
 The music department's register — attendance driving quarterly pay,

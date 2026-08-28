@@ -3,7 +3,7 @@
  * within the estate's "no dependencies beyond Hono and wrangler" rule, and to
  * keep the bundle small).
  *
- * Used by one thing: reading a photograph of a parcel label into fields a human
+ * Used by one thing: reading a photograph of a box label into fields a human
  * then checks (`src/extract.ts`).
  */
 

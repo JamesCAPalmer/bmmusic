@@ -15,7 +15,7 @@
 --     deleting a piece should not leave orphaned holdings or scans behind.
 
 -- ---------------------------------------------------------------------------
--- piece — the spine of the catalogue. One row per physical parcel or box.
+-- piece — the spine of the catalogue. One row per physical box.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS piece (
   id                 INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS piece (
   -- Folded form for sorting and matching (see src/normalise.ts).
   composer_canonical TEXT NOT NULL,
 
-  -- Title as printed. Multi-title parcels keep the joined title verbatim
+  -- Title as printed. Multi-title boxes keep the joined title verbatim
   -- ("O sing joyfully; Deliver us O Lord") and gain one alias per title.
   title              TEXT NOT NULL,
 
@@ -69,9 +69,9 @@ CREATE INDEX IF NOT EXISTS piece_review_idx    ON piece (reviewed_at, review_fla
 -- ---------------------------------------------------------------------------
 -- alias — alternative names for a piece.
 --
--- Two jobs: the individual titles of a multi-title parcel, and the variant
+-- Two jobs: the individual titles of a multi-title box, and the variant
 -- spellings a music list or a YouTube description might use. Matching an
--- upcoming music list to a parcel (Phase 2's pinch-point warnings) runs
+-- upcoming music list to a box (Phase 2's pinch-point warnings) runs
 -- through here.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS alias (
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS alias (
   alt_name   TEXT NOT NULL,
   -- Folded form for matching.
   alt_canonical TEXT NOT NULL,
-  -- 'seed-title' (split from a multi-title parcel), 'manual', 'music-list'.
+  -- 'seed-title' (split from a multi-title box), 'manual', 'music-list'.
   source     TEXT NOT NULL DEFAULT 'manual',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   UNIQUE (piece_id, alt_canonical)
@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS holding (
 
   condition     TEXT NOT NULL CHECK (condition IN ('fine','average','poor','urgent')),
 
-  -- "YYYY-MM-DD". The day the parcel was opened and counted.
+  -- "YYYY-MM-DD". The day the box was opened and counted.
   last_counted  TEXT NOT NULL,
   counted_by    TEXT,
 

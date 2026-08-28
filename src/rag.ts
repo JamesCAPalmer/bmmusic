@@ -2,7 +2,7 @@
  * The copies RAG (16A): have we enough usable copies to sing this?
  *
  * Two numbers meet here. Usable copies come from the last time somebody opened
- * the parcel and counted; the number of singers comes from the service's choir
+ * the box and counted; the number of singers comes from the service's choir
  * designation and `choir_profile`. Either can be missing, and the honest answer
  * when one is missing is **grey** — not green, and not red.
  *
@@ -28,7 +28,7 @@ export interface RagVerdict {
 }
 
 export interface RagInput {
-  /** Usable copies at the last count. NULL when nobody has counted the parcel. */
+  /** Usable copies at the last count. NULL when nobody has counted the box. */
   copiesUsable: number | null;
   /** Typical singers for the service's designation. NULL until Robert says. */
   typicalSingers: number | null;
@@ -59,7 +59,7 @@ export function copiesRag(input: RagInput): RagVerdict {
   if (copiesUsable === null) {
     return {
       state: "grey",
-      reason: "Nobody has counted this parcel yet.",
+      reason: "Nobody has counted this box yet.",
       shortfall: null,
     };
   }

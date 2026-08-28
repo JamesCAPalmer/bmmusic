@@ -1,5 +1,5 @@
 /**
- * Reading a photograph of a parcel label into fields a human then checks.
+ * Reading a photograph of a box label into fields a human then checks.
  *
  * This follows vestry's upload → extract → review → confirm shape, and it holds
  * to the same rule: **extraction never guesses silently**. Every field comes
@@ -13,7 +13,7 @@
  *
  * With `ANTHROPIC_API_KEY` unset the caller gets `NotConfiguredError` and the
  * intake screen falls back to a blank manual form, because a volunteer holding
- * a parcel in a cold song school should not meet an error page.
+ * a box in a cold song school should not meet an error page.
  */
 
 import { CHURCH } from "./church.config";
@@ -31,7 +31,7 @@ export interface ReadField<T> {
 
 export interface ExtractedLabel {
   composer: ReadField<string>;
-  /** Every title on the parcel, in the order they are written. */
+  /** Every title on the box, in the order they are written. */
   titles: { value: string; confidence: number }[];
   category: ReadField<string>;
   voicing: ReadField<string>;
@@ -49,13 +49,14 @@ const CATEGORY_CODES = CHURCH.categories.map((c) => c.code);
 /**
  * The label-reading prompt.
  *
- * Written against what the labels actually are: parcels wrapped decades ago,
+ * Written against what the labels actually are: boxes and parcels made up
+ * decades ago (the app calls them all boxes; the labels do not know that),
  * many labels handwritten, some in more than one hand, plenty with a pencilled
  * box number or an old reference that means nothing now. The three instructions
  * that matter are: read, do not interpret; leave a field null rather than
  * complete it from knowledge of the repertoire; and say when you are unsure.
  */
-export const LABEL_PROMPT = `You are reading a photograph of a label on a parcel or box of choral music in the song school at ${CHURCH.name}. Somebody will check everything you return, so your job is to read accurately and to be honest about what you cannot read — not to produce a tidy answer.
+export const LABEL_PROMPT = `You are reading a photograph of a label on a box of choral music in the song school at ${CHURCH.name}. Somebody will check everything you return, so your job is to read accurately and to be honest about what you cannot read — not to produce a tidy answer.
 
 Return what the label says, and only what the label says.
 
@@ -65,16 +66,16 @@ Rules:
 2. Never complete a field from your own knowledge of the repertoire. If the label gives a title but no composer, the composer is null — even when you are certain who wrote it. Somebody who knows this library will fill it in.
 3. Set every confidence honestly, 0 to 1. Handwritten, faded, or ambiguous readings should be well below 1. A confidence above 0.9 means you could read it as plainly as print.
 4. Put the characters you actually see in "verbatim", before any tidying: keep the label's capitalisation, its abbreviations ("Mag & Nunc"), and its question marks.
-5. A parcel often holds several pieces. List every title separately, in the order written. Do not merge them and do not invent a collective title.
+5. A box often holds several pieces. List every title separately, in the order written. Do not merge them and do not invent a collective title.
 6. Category must be one of these codes, or null when the label does not settle it:
 ${CHURCH.categories.map((c) => `   ${c.code} — ${c.label}: ${c.blurb}`).join("\n")}
    Choose null rather than guessing between two. A setting filed by key alone ("in E flat") is usually evening canticles (E), but say so in "concerns" if that is the only reason.
 7. Voicing is what is written (SATB, SS, ATB, unison, "Trebles"). Do not deduce it from the composer or the piece.
 8. Season is only what is written (Advent, Lent, Easter, Christmas, Passiontide).
-9. Location is any shelf, box or parcel marking — "Box 4", "pencil 44 on box", a cupboard name.
+9. Location is any shelf or box marking — "Box 4", "pencil 44 on box", a cupboard name.
 10. If the label gives a number of copies, put it in copiesTotal. A pencilled number that might be a copy count or might be a box number goes in otherText, with a note in "concerns" — do not guess which it is.
 11. Put anything else written on the label into otherText verbatim: old references, "see also" notes, publisher names, donors' names.
-12. Use "concerns" for anything a human should look at: an unreadable word, two possible readings, a damaged label, a cross-reference to another parcel, the reason a category was a guess.
+12. Use "concerns" for anything a human should look at: an unreadable word, two possible readings, a damaged label, a cross-reference to another box, the reason a category was a guess.
 
 If the photograph shows no readable label at all, return nulls with confidence 0 and say so in "concerns". Do not describe the photograph.`;
 
