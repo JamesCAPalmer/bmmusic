@@ -11,6 +11,86 @@ that is the part worth reading.
 
 ---
 
+## 2026-08-29 — Build 3: the term-one pilot
+
+Almost nothing added; a great deal moved. The app was not over-built, it was
+over-presented: twenty-three tiles in four sections above a strip of nine tabs,
+every one of them a decided need, and none of it usable without instruction by
+three non-technical music staff on the first Thursday of term. The levers —
+modules, roles, tile gating — all existed already. This build uses them harder.
+
+- **`/admin` is now Today.** The next event, its duty cover with the gaps named,
+  and one big button to the register; then the queues that actually have
+  something in them; then at most six things to do. Ordered that way because
+  that is the order somebody wants them in at half past four on a Thursday.
+- **Zero-count queue tiles vanish entirely, heading and all.** A tile reading
+  "0 scans sent in" is furniture, and furniture teaches people to stop reading
+  the section it is in. The old page drew all six whatever the counts were.
+- **`/admin/more` is a drawer, not a bin.** Everything the front page and the
+  tab strip stopped showing is filed there in the same groups, plus the
+  statistics and the accession run. **Nothing was deleted.** `test/pilot.test.ts`
+  reads every declared admin route out of `src/index.ts` and fails if one is
+  linked from nowhere — a route that answers but that nobody can click is a
+  feature deleted without anybody deciding to delete it.
+- **The tab strip is six at the outside, and filtered by the gate.** Today,
+  Review, Search, The choir, Duty rota, More. Nine was a menu rather than a
+  strip. The filter is `gateAllows()`, which asks `src/modules.ts` and
+  `src/roles.ts` rather than repeating them, so a rule changed there changes the
+  navigation too. A tab that answers 403 teaches somebody the app is broken; a
+  tab that is not there teaches them nothing at all, which is correct.
+- **The gate is threaded, not global.** Every admin page function now takes an
+  `AdminGate` as its first argument, handed to it by `chrome(c)` in
+  `src/index.ts` from the very facts the middleware admitted the request on.
+  Considered and rejected: a module-level "current reader". One Worker isolate
+  serves several requests at once, and a shared global there is how one person
+  ends up looking at another person's screen. The cost is a wider diff and a
+  parameter on thirty-nine functions; the compiler finds every call site, which
+  a global would not.
+- **The next-event card filters twice.** The route declines to *read* duty rows
+  or offer a register the reader may not have — not reading what you may not
+  show is the stronger half of the rule — and the page checks again, so it
+  cannot be made to render a door by being handed one. A test caught the page
+  trusting its caller.
+- **The door register rebuilt against the reality it is used in.** One-handed,
+  on an iPhone, at a vestry door, on the Minster's signal. The whole row is the
+  control at 56px; the three states carry a glyph and a word as well as a
+  colour, so they survive colour-blindness, bad light and a photocopy; a
+  "12 of 18 marked" counter; group tabs pre-picked from the designation; and
+  the dismissal tick moved onto the bottom of the same screen, because it is the
+  last thing that happens at the same door on the same phone.
+  - **The script is an accelerator over the form, never a second way of
+    marking.** One `fetch`, and on any failure at all it hands straight back to
+    the browser's own submit. Nothing is queued client-side, so a phone that
+    loses signal loses at most the tap in flight rather than an evening's
+    register. The JSON and the redirect do exactly the same thing to the
+    database, which is what makes the fallback honest.
+  - **Groups are pre-picked only when the designation names exactly one choir.**
+    "Boys and Girls" opens on everybody. Pre-picking one of two would hide half
+    a register from somebody who did not ask it to, and at a door that is how a
+    child goes unmarked.
+- **No screen presents a bare empty table.** One sentence and the one right
+  link, via `nothingYet()`. The two that matter for the pilot: an empty choir
+  list points at the workbook importer (and does not, when that module is off),
+  an empty rota at the form that adds the term's events.
+- **The label glyphs surfaced choir-side.** The eight shapes were already drawn
+  for the printer; piece lists and search results now carry them before the
+  title, from the same table, so screen and label cannot disagree. The cheapest
+  "this is an app" win available, and it cost one function.
+- **Pilot dressing.** A welcome card on Today, once per admin, dismissed against
+  that person's own email in `app_setting` — **no new table, and no migration**;
+  `app_setting` already holds every other one-off fact about this installation.
+  `/admin/guide` is one page with three jobs and three steps each. The beta chip
+  keeps its colour and loses its apology: *new this term — tell us what is wrong
+  with the feedback button*. A wrong choir password now says *that is not this
+  term's password — ask James or the Director of Music*, with a show-password
+  toggle that appears only once the script that powers it has run.
+- **"Count a box" kept its name.** The brief allowed renaming it to "Stock
+  check" if trivial, and it is trivial — one string. It was left alone anyway:
+  the app says *box* for one idea in one word throughout, and "Count a box" says
+  what you do with the thing you are holding. "Stock check" is warehouse
+  English, and buying two words of consistency with the wider world at the cost
+  of the vocabulary the volunteers have already learned is the wrong trade.
+
 ## 2026-08-28 — It should look like an app
 
 The interface reworked to read as an app rather than as a printed document,

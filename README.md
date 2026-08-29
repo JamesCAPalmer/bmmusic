@@ -38,7 +38,7 @@ needs before there is a session and which reveal nothing about the library.
 | --- | --- |
 | **Choir** | A home screen showing the next service with its music list and copies RAG; browse and search by composer, title, category and voicing; a piece page with copy counts, season, where the box lives, when we last sang it, and its reference scans. A descant finder. |
 | **Volunteers** | A phone-shaped portal for counting a box: totals, condition, voicing, notes. |
-| **Librarian** (`/admin`) | The review queue for draft entries, the music-list match queue, the crowd-scan approval queue, feedback, accession numbering, an item editor, photo intake, label printing, loans, reports and the draft-index importer. |
+| **Librarian** (`/admin`) | A date-aware **Today** front page, then the review queue for draft entries, the music-list match queue, the crowd-scan approval queue, feedback, accession numbering, an item editor, photo intake, label printing, loans, reports and the draft-index importer — all of it filed under **More**. |
 | **Music staff** (`/admin`) | The choir list and each person's record, the register, attendance totals, the quarterly pay run, the safeguarding duty rota, exports, and the workbook importer. |
 
 Everything in the last row is behind a [module switch that ships off](#modules).
@@ -62,6 +62,9 @@ cannot do its job it says so in a sentence and the rest of the page carries on.
   invisible to everybody else until an admin approves it.
 - **Everything the register brought with it** — the choir list, attendance,
   pay, the duty rota, exports and the workbook importer.
+
+The chip's tooltip says what to do about it: *new this term — tell us what is
+wrong with the feedback button*.
 
 Not yet built: the OCR bulk-update pipeline for returned volunteer sheets, the
 reference-scan campaigns, listen links (waiting on the YouTube backfill), the
@@ -143,12 +146,78 @@ Four decisions carry most of that, and each is enforced by a test rather than
 left to taste.
 
 **A tab strip, on every page.** Four destinations choir-side — Services,
-Library, Descants, Count a box — and nine on the admin side. The same row in
-the same place with the current one marked is the single thing that makes an
-app navigable without a map. It scrolls sideways rather than wrapping so the
-page below never shifts, and below 30rem the labels drop away from all but the
-current tab and the glyphs carry it. Which tab is current is derived from the
-path, so a new page gets it right without being told.
+Library, Descants, Count a box — and **at most six** on the admin side: Today,
+Review, Search, The choir, Duty rota, More. The same row in the same place with
+the current one marked is the single thing that makes an app navigable without a
+map. It scrolls sideways rather than wrapping so the page below never shifts,
+and below 30rem the labels drop away from all but the current tab and the glyphs
+carry it. Which tab is current is derived from the path, so a new page gets it
+right without being told.
+
+The admin strip is **filtered by the same gate the request came through**: a
+librarian is never shown a tab to the choir, and somebody on the safeguarding
+rota is never shown one to the catalogue. A tab that answers 403 teaches
+somebody the app is broken; a tab that is not there teaches them nothing at all,
+which is correct. See [Focus](#focus-today-and-more).
+
+## Focus: Today, and More
+
+The admin front page used to offer twenty-three tiles across four sections, plus
+a statistics grid, plus the accession run, above a strip of nine tabs. Every one
+of those was a decided need — but somebody opening the app for the first time on
+the first Thursday of term should see three things, not twenty-three.
+
+So `/admin` is now **Today**, and it answers one question in order:
+
+1. **The next event** — its date, its designation, who is covering each duty and
+   where the gaps are, and one big **Open the register** button. If it is today,
+   it says so loudly.
+2. **Waiting for you** — the same queue tiles as before, but only the ones with
+   a non-zero count. A tile reading "0 scans sent in" is furniture, and furniture
+   teaches people to stop reading the section it is in.
+3. **The usual things** — at most six: New item, Search, Print labels, The
+   choir, Duty rota, More.
+
+**`/admin/more` is where everything else was filed, and nothing was deleted.**
+The same groups, the same tiles, plus the four screens that used to be tabs
+(Music lists, Scans, What to do next, Reports) and the statistics and accession
+run that used to sit under the tiles. `test/pilot.test.ts` reads every declared
+admin route out of `src/index.ts` and fails if one of them is linked from
+nowhere — a route that answers but that nobody can click is a feature deleted
+without anybody deciding to delete it.
+
+**`/admin/guide`** is one page: the register, the rota and the library, with
+three steps each, written for the job rather than the person doing it. A welcome
+card on Today links to it once per admin and then goes away for good — dismissed
+against that person's own email in `app_setting`, so one person putting it away
+does not put it away for everybody.
+
+## The door register
+
+`/admin/people/register/:id` is the screen the pilot is judged on. It is used
+one-handed on an iPhone, at a vestry door, by a duty adult in a cassock, with
+the other hand holding a door open and the Minster's signal coming and going.
+Everything about it follows from that sentence:
+
+- **The whole row is the control** — 56px tall, edge to edge, not a small
+  control inside a row.
+- **Colour and shape, never colour alone.** Here, away and excused each carry a
+  glyph and a word as well as a colour, so the three are told apart by somebody
+  colour-blind, in bad light, and on a photocopy.
+- **"12 of 18 marked"**, at the top, updated as you go.
+- **It saves each tap and says so.** With script it is one tap and no page load;
+  without script — or the moment the fetch fails, which on that signal it will —
+  the same form posts the ordinary way and the page comes back. Nothing is
+  queued in the browser, so a phone that loses signal loses at most the tap in
+  flight.
+- **Group tabs** (Boys, Girls, …) pre-picked from the event's designation when
+  it names exactly one choir, and "everybody" when it names two — pre-picking
+  one of two would hide half a register from somebody who did not ask it to.
+  The sections are all present without script; the tabs appear only once the
+  script that gives them meaning has run.
+- **The dismissal tick is at the bottom of the same screen**, because it is the
+  last thing that happens at the same door on the same phone in the same five
+  minutes.
 
 **Glyphs, drawn here.** `src/icons.ts` is about thirty inline SVG paths on a
 24×24 grid. No icon font and no package: CDN assets are ruled out, and an icon
@@ -171,6 +240,21 @@ the dark theme, legible on cream, on white, on a red button and on a dark page.
 `test/theme.test.ts` fails if a blue ever reappears in either palette. The one
 exception is the Marian season rule, which is liturgical rather than brand and
 is asserted as the *only* blue in the file.
+
+**No bare empty tables.** Every list screen with no rows says what to do next in
+one sentence, with the one right link — an empty choir list points at the
+workbook importer, an empty rota at the form that adds the term's events. A
+table with no rows tells somebody opening the app on the first Thursday of term
+either that they have done something wrong or that the thing is broken, and both
+are worse than the truth. `nothingYet()` in `src/ui.ts` is the one shape they
+all take.
+
+**The category glyph, choir-side.** The eight shapes printed on the box labels —
+moon, sunrise, bread, voices, harp, star, quaver, book — now appear before the
+title in piece lists and search results, drawn from the same table in
+`src/labels.ts` that the printer draws from, so the screen and the label can
+never disagree. A piece with no category gets the fallback at reduced opacity
+rather than being told what it is.
 
 ## Say "box", and the cupboards have names
 
@@ -260,9 +344,13 @@ off until somebody deliberately turns it on.
 
 A switched-off module's routes answer **404, not 403**. A 403 says "there is
 something here and you may not have it", which is a fact about the choir worth
-not publishing — so dark means dark, and the front page draws no tile for a door
-that is not there. Switching a module off deletes nothing; the records stay and
-come back exactly as they were.
+not publishing — so dark means dark, and neither the front page, nor More, nor
+the tab strip draws a door that is not there. Switching a module off deletes
+nothing; the records stay and come back exactly as they were.
+
+`/admin/more`, `/admin/guide` and the welcome dismissal belong to no module:
+they are the app explaining itself, and each shows only what the reader may
+already reach.
 
 ## Roles
 

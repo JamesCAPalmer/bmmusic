@@ -216,9 +216,10 @@ and issues the certificate; give it a few minutes.
 
 ## 8. Load the catalogue
 
-Visit `https://bmmusic.james-palmer.com/admin/import` and press **Import now**.
-That reads the committed draft index — currently 410 rows — into the catalogue,
-and seeds the choir designations from `church.config`.
+Visit `https://bmmusic.james-palmer.com/admin/import` and press **Import now**
+— it is under **More → In and out → Import the draft index** if you would rather
+click than type. That reads the committed draft index — currently 410 rows —
+into the catalogue, and seeds the choir designations from `church.config`.
 
 Safe to run again whenever you replace the CSV: it is keyed on the draft ref,
 refreshes rows nobody has reviewed, and leaves confirmed rows alone. See
@@ -226,9 +227,16 @@ refreshes rows nobody has reviewed, and leaves confirmed rows alone. See
 
 ## 9. Check it
 
-- `https://bmmusic.james-palmer.com/` → the password screen.
-- Sign in → the catalogue, with the full piece count.
-- `/admin` → Cloudflare Access, then the librarian's page.
+- `https://bmmusic.james-palmer.com/` → the password screen. A wrong password
+  says so kindly and offers to show what you typed.
+- Sign in → the catalogue, with the full piece count and a category glyph
+  against each title.
+- `/admin` → Cloudflare Access, then **Today**: the next event at the top, the
+  welcome card once, and no more than six things to do. The tab strip has at
+  most six tabs, and fewer if the person signing in holds one role.
+- `/admin/more` → everything else, grouped. Every screen in the app is reachable
+  from here or from the strip.
+- `/admin/guide` → one page, three jobs.
 - `/admin/modules` → eight modules, six of them off.
 - `/robots.txt` → `Disallow: /`.
 - Sign out, then open `/piece/1` directly → back to the password screen.
