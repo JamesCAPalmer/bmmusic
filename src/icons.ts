@@ -124,6 +124,22 @@ const PATHS: Record<string, string> = {
   moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
   /** The light theme. */
   sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/>',
+  /** The guide: how to use this. An open book, lying flat. */
+  book: '<path d="M4 4.5h5a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5H4z"/><path d="M20 4.5h-5a3 3 0 0 0-3 3v12a2.5 2.5 0 0 1 2.5-2.5H20z"/>',
+
+  // --- the register, at the door -------------------------------------------
+  //
+  // These three are the register's states, and they are why the glyph set grew.
+  // Colour alone does not carry a state to somebody colour-blind, in low light
+  // in a vestry doorway, or on a photocopied page — so here, away and excused
+  // each get a shape as well, and the three shapes are told apart at a glance
+  // with no colour at all.
+  /** Here. */
+  tick: '<path d="M5 12.5l4.5 4.5L19 7"/>',
+  /** Away. */
+  cross: '<path d="M6 6l12 12M18 6L6 18"/>',
+  /** Excused — neither here nor absent without leave. */
+  minus: '<path d="M5 12h14"/>',
 };
 
 /** Every glyph name, for the test that checks each one is actually drawn. */

@@ -13,7 +13,17 @@
 import { CHURCH } from "./church.config";
 import { doorLabel, doorLabelLong, shelfAddress } from "./storage";
 import { icon } from "./icons";
-import { betaChip, categoryLabel, esc, flagPills, page, prettyDate } from "./ui";
+import {
+  betaChip,
+  categoryLabel,
+  esc,
+  flagPills,
+  gateAllows,
+  nothingYet,
+  page,
+  prettyDate,
+  type AdminGate,
+} from "./ui";
 import type { CatalogueStats, ChoirProfileRow, PieceWithHolding, SearchQuery, SearchResult } from "./catalogue";
 import type { AuditRow } from "./audit";
 import {
@@ -22,6 +32,7 @@ import {
   schoolYearLabel,
   type ParentContact,
   type PersonRow,
+  type RegisterGroup,
   type RegisterRow,
 } from "./people";
 import { MODULES, moduleForPath, type ModuleState } from "./modules";
@@ -63,7 +74,7 @@ import type {
 } from "./reports";
 
 // ---------------------------------------------------------------------------
-// Admin home — six tiles and the queues (5A)
+// Today — the admin front page (Build 3)
 // ---------------------------------------------------------------------------
 
 export interface AdminQueueCounts {
@@ -76,52 +87,284 @@ export interface AdminQueueCounts {
 }
 
 /**
- * The librarian's front page.
+ * The next thing in the diary, with whatever is known about who is covering it.
  *
- * Tiles for the things James goes looking for, and above them the queues — the
- * things waiting on him. Queues first because a number waiting is more urgent
- * than a door to walk through, and a tile with nothing behind it should not
- * look the same as one with forty items in it.
- *
- * **Every tile is filtered twice**, by the same two rules the gate applies to
- * the address behind it: the module has to be on, and the reader has to hold a
- * role that may reach it. A tile the reader could not walk through is not
- * drawn — an off module is dark rather than locked, and offering a librarian a
- * door to the register that answers "not for you" is a worse page than not
- * offering it. `visible()` asks `src/modules.ts` and `src/roles.ts` rather than
- * repeating their tables, so a rule changed there changes here too.
+ * Assembled in `src/index.ts` because it crosses three modules — the service,
+ * the duty rota and the register — and each of them may be switched off. The
+ * page is given only what the reader is allowed to know: `duty` is empty when
+ * the rota is off or the reader has no business with it, and `registerHref` is
+ * null when the register is off or not theirs.
  */
-export function adminHomePage(
-  stats: CatalogueStats,
+export interface TodayEvent {
+  service: {
+    id: number;
+    title: string;
+    service_date: string;
+    service_time: string | null;
+    designation: string | null;
+  };
+  /** Cover by duty, in rota order. Empty when the rota is off or not permitted. */
+  duty: ReadonlyArray<{ label: string; names: string[] }>;
+  /** Where the register for this event lives, or null when it is not on offer. */
+  registerHref: string | null;
+}
+
+/**
+ * The librarian's front page, rewritten for the term-one pilot.
+ *
+ * **What was wrong with it.** It offered twenty-three tiles in four sections,
+ * plus a statistics grid, plus the accession run. Every one of those was
+ * decided on and every one is still here — but a director of music opening the
+ * app for the first time on the first Thursday of term should see three things,
+ * not twenty-three, and the three should be the three she is about to do.
+ *
+ * So this page answers one question in order: what is next, what is waiting on
+ * you, and what do you normally do. Everything else is filed under More, one
+ * tap away and grouped exactly as it was. Nothing was deleted.
+ *
+ * Everything is filtered by the gate the request came through, so a librarian
+ * is never shown a door to the choir and somebody on the safeguarding rota is
+ * never shown one to the catalogue.
+ */
+export function adminTodayPage(
+  gate: AdminGate,
+  next: TodayEvent | null,
   queues: AdminQueueCounts,
   extractionReady: boolean,
-  modules: ModuleState,
-  roles: readonly Role[]
+  showWelcome: boolean,
+  todayIso: string
 ): string {
-  const unreviewed = stats.pieces - stats.reviewed;
-
-  /** Would the gate let this reader through to this address? */
-  const visible = (href: string): boolean => {
-    const module = moduleForPath(href);
-    if (module && !modules[module]) return false;
-    return permits(roles, requiredRolesFor(href));
-  };
-
-  const stat = (n: number | string, label: string) =>
-    `<div class="stat"><span class="n">${esc(n)}</span><span class="l">${esc(label)}</span></div>`;
+  const visible = (href: string) => gateAllows(gate, href);
 
   const queue = (href: string, glyph: string, n: number, label: string, blurb: string) =>
-    visible(href)
-      ? `<a class="tile${n ? " has-work" : ""}" href="${href}">
+    // **Zero-count queues vanish entirely.** A tile reading "0 scans sent in"
+    // is a row of furniture that teaches you to stop reading the section. What
+    // is left is a list of things that are genuinely waiting, and when nothing
+    // is waiting the whole heading goes with it.
+    n > 0 && visible(href)
+      ? `<a class="tile has-work" href="${href}">
            <span class="n">${n}${icon(glyph)}</span>
            <span class="t">${esc(label)}</span>
            <span class="b">${esc(blurb)}</span>
          </a>`
       : "";
 
-  // The label and its chip are one flex child, not two. As siblings of the
-  // glyph they were laid out as three items in a row, so "Import a workbook"
-  // wrapped and left the chip stranded beside the second line.
+  const action = (href: string, glyph: string, label: string) =>
+    visible(href)
+      ? `<a class="tile act" href="${href}">${icon(glyph)}<span>${esc(label)}</span></a>`
+      : "";
+
+  const waiting = [
+    queue("/admin/review", "review", queues.toReview, "Draft entries", "read off label photographs, unchecked"),
+    queue("/admin/services", "calendar", queues.musicLines, "Music list lines", "matched or waiting to be matched"),
+    queue("/admin/scans", "camera", queues.pendingScans, "Scans sent in", "photographed by choristers"),
+    queue("/admin/feedback", "chat", queues.openFeedback, "Feedback", "sent from the widget"),
+    queue("/admin/queues", "repair", queues.openRepairs, "Repairs", "poor, urgent, or no usable spine"),
+    queue("/admin/stocktake", "count", queues.dueRecount, "Due a recount", "five years old, or sung a lot since"),
+  ].filter(Boolean);
+
+  // Six at the outside, and More is always the last of them. The order is the
+  // order somebody reaches for them: make a thing, find a thing, print a thing,
+  // then the two person-shaped screens, then everything else.
+  const actions = [
+    action("/admin/new", "plus", "New item"),
+    action("/admin/search", "search", "Search"),
+    action("/admin/labels", "label", "Print labels"),
+    action("/admin/people", "people", "The choir"),
+    action("/admin/safeguarding", "shield", "Duty rota"),
+    action("/admin/more", "modules", "More"),
+  ].filter(Boolean);
+
+  return page(
+    `Today — ${CHURCH.adminAppName}`,
+    `<h1>Today<span class="sub">${esc(prettyDate(todayIso))}</span></h1>
+
+     ${showWelcome ? welcomeCard() : ""}
+
+     ${nextEventCard(gate, next, todayIso)}
+
+     ${
+       waiting.length
+         ? `<h2>Waiting for you</h2><div class="tiles">${waiting.join("")}</div>`
+         : ""
+     }
+
+     <h2>The usual things</h2>
+     <div class="tiles acts">${actions.join("")}</div>
+
+     ${
+       extractionReady
+         ? ""
+         : `<p class="muted small">Reading labels automatically is switched off — no
+              <code>ANTHROPIC_API_KEY</code> is set, so a new item is entered by hand.
+              Everything else works exactly as it does with the key set.</p>`
+     }
+
+     <style>${TILE_CSS}</style>`,
+    { admin: true, gate, nav: "admin", path: "/admin" }
+  );
+}
+
+/**
+ * The next event, at the top, because it is the reason the app is open.
+ *
+ * If it is today it says so loudly: a duty adult glancing at a phone on the way
+ * into the vestry needs to know in one look that this is the one, and a date in
+ * small grey text is not that. Everything else — who is covering it, and the
+ * way through to the register — hangs off it, so the whole of a Thursday
+ * evening is one tap from the front page.
+ */
+function nextEventCard(gate: AdminGate, next: TodayEvent | null, todayIso: string): string {
+  if (!next) {
+    return `<div class="card">
+      <h2>Nothing in the diary</h2>
+      <p class="muted">Services arrive from the Minster's service app by themselves and there is
+         nothing to do about that. Practices, weddings, concerts and tours are never on that list —
+         put them in yourself and they carry a rota and a register like anything else.</p>
+    </div>`;
+  }
+
+  // **Filtered twice, on purpose.** `src/index.ts` already declines to *read*
+  // the duty rows or offer the register to somebody who may not have them —
+  // not reading what you may not show is the stronger half of the rule. This
+  // second check is here so that the page cannot be made to render a door by
+  // being handed one, which is the failure mode a page that trusts its caller
+  // has. The two agree because they ask the same table.
+  const registerHref =
+    next.registerHref && gateAllows(gate, next.registerHref) ? next.registerHref : null;
+  const duty = gateAllows(gate, `/admin/safeguarding/${next.service.id}`) ? next.duty : [];
+
+  const isToday = next.service.service_date === todayIso;
+  const when = `${isToday ? `<span class="pill red today">Today</span>` : esc(prettyDate(next.service.service_date))}${
+    next.service.service_time ? ` · ${esc(next.service.service_time)}` : ""
+  }`;
+
+  const cover = duty.length
+    ? `<dl class="cover">
+         ${duty
+           .map(
+             (d) =>
+               `<dt>${esc(d.label)}</dt><dd>${
+                 d.names.length
+                   ? d.names.map((n) => esc(n)).join(", ")
+                   : `<span class="gap">nobody yet</span>`
+               }</dd>`
+           )
+           .join("")}
+       </dl>`
+    : "";
+
+  return `<div class="card next${isToday ? " is-today" : ""}">
+    <p class="when">${when}</p>
+    <h2>${esc(next.service.title)}</h2>
+    ${next.service.designation ? `<p class="muted" style="margin:0.1rem 0 0">${esc(next.service.designation)}</p>` : ""}
+    ${cover}
+    ${
+      registerHref
+        ? `<p style="margin-bottom:0"><a class="btn big" href="${registerHref}">${icon(
+            "register"
+          )}Open the register</a></p>`
+        : ""
+    }
+    <style>
+      .card.next .when { margin: 0; font-size: 0.9rem; color: var(--colour-muted);
+                         text-transform: uppercase; letter-spacing: 0.04em; }
+      .card.next h2 { margin: 0.15rem 0 0; }
+      .card.next.is-today { border-left: 4px solid var(--colour-accent); }
+      .pill.today { font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase; }
+      dl.cover { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.9rem;
+                 margin: 0.8rem 0 0; font-size: 0.95rem; }
+      dl.cover dt { color: var(--colour-muted); }
+      dl.cover dd { margin: 0; }
+      dl.cover .gap { color: var(--colour-pill-red-ink); font-weight: 600; }
+      .btn.big { font-size: 1.1rem; padding: 0.85rem 1.3rem; width: 100%; margin-top: 0.9rem; }
+      @media (min-width: 34rem) { .btn.big { width: auto; } }
+    </style>
+  </div>`;
+}
+
+/**
+ * The welcome card: two sentences, once, per person.
+ *
+ * Dismissed against the reader's own email in `app_setting`, so Rachel putting
+ * it away does not put it away for Robert. It is not a tour and it is not a
+ * modal — it is a card at the top of the page with a link to the guide and a
+ * button that makes it go away for good.
+ */
+function welcomeCard(): string {
+  return `<div class="card welcome">
+    <h2>Welcome to ${esc(CHURCH.adminAppName)}</h2>
+    <p>This is where the Minster's music library, the choir register and the duty rota live, in one
+       place, on whatever you have in your hand. Everything you do here saves as you go — there is
+       nothing to send and nothing to remember to close.</p>
+    <p class="muted"><strong>It replaces the register spreadsheet and the emailed rota.</strong></p>
+    <p style="margin-bottom:0">
+      <a class="btn secondary" href="/admin/guide">${icon("book")}How to use it</a>
+      <form method="POST" action="/admin/welcome" style="display:inline">
+        <button type="submit" class="quiet">Got it</button>
+      </form>
+    </p>
+    <style>
+      .card.welcome { border-left: 4px solid var(--colour-accent); }
+      .card.welcome form { margin: 0; }
+    </style>
+  </div>`;
+}
+
+/** Shared by Today and More: the tile grid, and the flatter action tile. */
+const TILE_CSS = `
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.7rem;
+           margin: 0.6rem 0 1.4rem; }
+  .tile { display: block; padding: 0.85rem 1rem; border: 1px solid var(--colour-border);
+          border-radius: var(--radius-xl); background: var(--colour-surface); text-decoration: none;
+          color: var(--colour-ink); box-shadow: var(--shadow-card);
+          transition: background 0.12s ease, border-color 0.12s ease, transform 0.06s ease; }
+  .tile:hover { background: var(--colour-accent-tint); border-color: var(--colour-accent); }
+  .tile:active { transform: translateY(1px); }
+  /* The count and its glyph on one line, the glyph pushed right and held
+     back to the muted tone: the number is the thing being read, the glyph
+     only says which queue it belongs to. */
+  .tile .n { display: flex; align-items: center; justify-content: space-between;
+             font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums;
+             line-height: 1.1; color: var(--colour-subtle); }
+  .tile .n .icon { width: 1.2rem; height: 1.2rem; color: var(--colour-subtle); opacity: 0.8; }
+  .tile.has-work .n { color: var(--colour-accent); }
+  /* Sans, not the display serif. The serif belongs to the music — a piece
+     title, a composer — and a tile is a control, not a work. */
+  .tile .t { display: flex; align-items: flex-start; gap: 0.5rem; font-weight: 700;
+             font-family: var(--type-family-base); font-size: 0.98rem; line-height: 1.3; }
+  .tile .t .icon { color: var(--colour-accent); margin-top: 0.12em; }
+  .tile .b { display: block; font-size: 0.85rem; color: var(--colour-muted);
+             margin-top: 0.15rem; }
+
+  /* The action row: a label and a glyph, nothing else, and a comfortable
+     target. These are pressed on a phone with one thumb, so they are wider
+     than they are tall and never smaller than 44px. */
+  .tiles.acts { grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
+  .tile.act { display: flex; align-items: center; gap: 0.6rem; min-height: 56px;
+              font-weight: 700; font-size: 0.98rem; }
+  .tile.act .icon { color: var(--colour-accent); width: 1.35em; height: 1.35em; }
+`;
+
+// ---------------------------------------------------------------------------
+// More — everything the front page no longer shouts about
+// ---------------------------------------------------------------------------
+
+/**
+ * The filing cabinet.
+ *
+ * Every door that used to be on the front page, grouped as it was grouped
+ * there, plus the four that used to be tabs and are not any more. **Nothing was
+ * removed in Build 3 — it was filed**, and this is the drawer it was filed in,
+ * so a link somebody bookmarked or a step in `docs/DEPLOY.md` still has a
+ * screen to be reached from.
+ *
+ * A heading with nothing under it is worse than no heading, so a section whose
+ * every tile is gated away does not draw at all.
+ */
+export function adminMorePage(gate: AdminGate, stats: CatalogueStats): string {
+  const visible = (href: string) => gateAllows(gate, href);
+
   const tile = (href: string, glyph: string, label: string, blurb: string, chip = "") =>
     visible(href)
       ? `<a class="tile" href="${href}">
@@ -130,34 +373,32 @@ export function adminHomePage(
          </a>`
       : "";
 
-  /** A heading with nothing under it is worse than no heading. */
   const section = (heading: string, tiles: string[]): string => {
     const drawn = tiles.filter(Boolean);
     if (!drawn.length) return "";
     return `<h2>${esc(heading)}</h2><div class="tiles">${drawn.join("")}</div>`;
   };
 
-  return page(
-    `Librarian — ${CHURCH.appName}`,
-    `<h1>Librarian<span class="sub">${esc(CHURCH.name)} music library</span></h1>
+  const unreviewed = stats.pieces - stats.reviewed;
+  const stat = (n: number | string, label: string) =>
+    `<div class="stat"><span class="n">${esc(n)}</span><span class="l">${esc(label)}</span></div>`;
 
-     ${section("Waiting for you", [
-       queue("/admin/review", "review", queues.toReview, "Draft entries", "read off label photographs, unchecked"),
-       queue("/admin/services", "calendar", queues.musicLines, "Music list lines", "matched or waiting to be matched"),
-       queue("/admin/scans", "camera", queues.pendingScans, "Scans sent in", "photographed by choristers"),
-       queue("/admin/feedback", "chat", queues.openFeedback, "Feedback", "sent from the widget"),
-       queue("/admin/queues", "repair", queues.openRepairs, "Repairs", "poor, urgent, or no usable spine"),
-       queue("/admin/stocktake", "count", queues.dueRecount, "Due a recount", "five years old, or sung a lot since"),
-     ])}
+  return page(
+    `More — ${CHURCH.adminAppName}`,
+    `<h1>More<span class="sub">Everything this app can do</span></h1>
 
      ${section("The library", [
        tile("/admin/new", "plus", "New catalogue item", "parse a scan, or enter it by hand"),
        tile("/admin/search", "search", "Search and bulk edit", "filter, select, change many at once"),
-       tile("/admin/reports", "report", "Reports", "what gets sung, condition, coverage"),
-       tile("/admin/queues", "list", "What to do next", "scanning and repair, in priority order"),
+       tile("/admin/review", "review", "Draft entries", "read off label photographs, unchecked"),
+       tile("/admin/services", "calendar", "Music lists", "the month's services, and matching their music"),
+       tile("/admin/scans", "camera", "Scans sent in", "photographed by choristers, waiting to be approved"),
        tile("/admin/labels", "label", "Print labels", "volunteer sheets, and reprints"),
+       tile("/admin/queues", "list", "What to do next", "scanning and repair, in priority order"),
        tile("/admin/suggestions", "season", "Choosing music", "by season, with copies and scans"),
        tile("/admin/loans", "loan", "Out on loan", "who has what, and since when"),
+       tile("/admin/stocktake", "count", "Stocktake", "boxes due a recount"),
+       tile("/admin/reports", "report", "Reports", "what gets sung, condition, coverage"),
      ])}
 
      ${section("The choir", [
@@ -168,77 +409,142 @@ export function adminHomePage(
        tile("/admin/safeguarding", "shield", "Duty rota", "robing, general and dismissal", betaChip()),
      ])}
 
-     ${section("This app", [
-       tile("/admin/settings", "settings", "Settings", "choir password, choir sizes, activity"),
-       // Reachable from here and nowhere else now the old link row is gone. It
-       // is the route DEPLOY.md step 8 sends you to, and re-running it is the
-       // normal way a better cut of the draft index gets in.
+     ${section("In and out", [
+       // Reachable from here and nowhere else. It is the route DEPLOY.md step 8
+       // sends you to, and re-running it is the normal way a better cut of the
+       // draft index gets in.
        tile("/admin/import", "upload", "Import the draft index", "re-read the committed CSV"),
        tile("/admin/export", "download", "Exports", "take the data out as a spreadsheet", betaChip()),
-       tile("/admin/modules", "modules", "Modules", "what this app does at all", betaChip()),
-       tile("/admin/roles", "key", "Roles", "who may do what in here", betaChip()),
      ])}
 
-     <div class="card">
-       <h2>Where things stand</h2>
-       <div class="stat-grid">
-         ${stat(stats.pieces, "pieces catalogued")}
-         ${stat(unreviewed, "still to review")}
-         ${stat(stats.withAccession, "with an accession number")}
-         ${stat(stats.counted, "boxes counted")}
-         ${stat(stats.copiesUsable, "usable copies counted")}
-         ${stat(stats.openRepairs, "repairs outstanding")}
-       </div>
-     </div>
-
-     <div class="card">
-       <h2>Accession numbers</h2>
-       <p>Assign ${esc(CHURCH.accession.prefix)} numbers to every reviewed piece that has none, in catalogue
-          order (composer, then title). Numbering continues from the highest already assigned and never
-          renumbers an existing one.</p>
-       <form method="POST" action="/admin/accessions">
-         <button type="submit" ${stats.reviewed === stats.withAccession ? "disabled" : ""}>
-           Assign the next numbers
-         </button>
-       </form>
-     </div>
+     ${section("This app", [
+       tile("/admin/guide", "book", "How to use this", "the register, the rota and the library, in three steps each"),
+       tile("/admin/settings", "settings", "Settings", "choir password, choir sizes"),
+       tile("/admin/modules", "modules", "Modules", "what this app does at all", betaChip()),
+       tile("/admin/roles", "key", "Roles", "who may do what in here", betaChip()),
+       tile("/admin/feedback", "chat", "Feedback", "sent from the widget"),
+       tile("/admin/activity", "list", "Activity", "what has been done in here, and by whom"),
+     ])}
 
      ${
-       extractionReady
-         ? ""
-         : `<div class="notice">
-              <p><strong>Reading labels automatically is switched off.</strong> No
-                 <code>ANTHROPIC_API_KEY</code> is set, so "New catalogue item" takes details by hand.
-                 Everything else works exactly as it does with the key set.</p>
+       visible("/admin/reports")
+         ? `<div class="card">
+              <h2>Where things stand</h2>
+              <div class="stat-grid">
+                ${stat(stats.pieces, "pieces catalogued")}
+                ${stat(unreviewed, "still to review")}
+                ${stat(stats.withAccession, "with an accession number")}
+                ${stat(stats.counted, "boxes counted")}
+                ${stat(stats.copiesUsable, "usable copies counted")}
+                ${stat(stats.openRepairs, "repairs outstanding")}
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>Accession numbers</h2>
+              <p>Assign ${esc(CHURCH.accession.prefix)} numbers to every reviewed piece that has none, in
+                 catalogue order (composer, then title). Numbering continues from the highest already
+                 assigned and never renumbers an existing one.</p>
+              <form method="POST" action="/admin/accessions">
+                <button type="submit" ${stats.reviewed === stats.withAccession ? "disabled" : ""}>
+                  Assign the next numbers
+                </button>
+              </form>
             </div>`
+         : ""
      }
 
+     <style>${TILE_CSS}</style>`,
+    { admin: true, gate, nav: "more", path: "/admin/more" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The guide
+// ---------------------------------------------------------------------------
+
+/**
+ * One page, three jobs, three steps each.
+ *
+ * Written for the people who will be holding the phone in September — whoever
+ * is taking the register, whoever is running the rota, whoever is looking after
+ * the library — and named by what they are doing rather than by who they are,
+ * because the person doing it changes and the job does not.
+ *
+ * Deliberately short. A guide nobody finishes is a guide nobody reads, and
+ * every screen in this app is meant to be usable without one.
+ */
+export function adminGuidePage(gate: AdminGate): string {
+  const steps = (items: string[]) =>
+    `<ol class="steps">${items.map((i) => `<li>${i}</li>`).join("")}</ol>`;
+
+  return page(
+    `How to use this — ${CHURCH.adminAppName}`,
+    `<p class="crumb"><a href="/admin/more">← More</a></p>
+     <h1>How to use this<span class="sub">Three things, three steps each</span></h1>
+
+     <p class="muted">Everything saves as you go. There is nothing to send, nothing to close, and
+        nothing you can break that ${esc(CHURCH.contact.maintainer.shortName)} cannot put back.</p>
+
+     <div class="card">
+       <h2>${icon("register")} Taking the register</h2>
+       <p class="muted">At the door, on a phone, one-handed. Whoever is on duty.</p>
+       ${steps([
+         `Open <strong>Today</strong>. The next service is at the top; tap <strong>Open the register</strong>.`,
+         `Tap a name to mark it. One tap is <strong>here</strong>, a second is <strong>away</strong>,
+          a third is <strong>excused</strong>, a fourth clears it. The counter at the top says how many
+          you have done.`,
+         `When the last child has gone, tap the collection button at the bottom. It records your name
+          and the time, and it cannot be un-ticked.`,
+       ])}
+       <p class="small muted">You do not have to mark everybody. What is left unmarked stays unmarked,
+          and you can come back to it afterwards.</p>
+     </div>
+
+     <div class="card">
+       <h2>${icon("shield")} The duty rota</h2>
+       <p class="muted">Who is covering what, weeks ahead. Whoever runs safeguarding.</p>
+       ${steps([
+         `Open <strong>Duty rota</strong>. Anything not covered is at the top and marked in red —
+          those are the ones worth ringing round about.`,
+         `Tap an event, then put somebody on <strong>robing</strong>, <strong>general</strong> or
+          <strong>dismissal</strong>. A backup is a second name, not the cover itself.`,
+         `Practices, weddings, concerts and tours are never on the Minster's music list. Add them at the
+          bottom of the rota screen and they carry a rota and a register like anything else.`,
+       ])}
+       <p class="small muted">A DBS check that has run out shows red against the name. One with no date
+          recorded shows amber — that means we do not know, which is not the same thing.</p>
+     </div>
+
+     <div class="card">
+       <h2>${icon("music")} The music library</h2>
+       <p class="muted">What is in the boxes in the ${esc(CHURCH.library.location.toLowerCase())}.
+          Whoever is cataloguing.</p>
+       ${steps([
+         `<strong>Search</strong> finds a piece by title, composer or accession number, and tells you
+          which cupboard and shelf the box is on.`,
+         `<strong>New item</strong> adds one — photograph the label and it reads it, or type it in. Either
+          way it lands as a draft for somebody to check.`,
+         `<strong>Draft entries</strong> is that queue. Confirm what is right, correct what is not, and the
+          piece stops being a draft.`,
+       ])}
+       <p class="small muted">Everything else — labels, repairs, loans, reports, the stocktake — is under
+          <a href="/admin/more">More</a>.</p>
+     </div>
+
+     <div class="card">
+       <h2>When something is wrong</h2>
+       <p>Use the <strong>Feedback</strong> button in the corner of any screen. It says which page you
+          were on and it goes straight to ${esc(CHURCH.contact.maintainer.shortName)}. Anything marked
+          <span class="beta">beta</span> is new this term and is exactly what that button is for.</p>
+     </div>
+
      <style>
-       .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.7rem;
-                margin: 0.6rem 0 1.4rem; }
-       .tile { display: block; padding: 0.85rem 1rem; border: 1px solid var(--colour-border);
-               border-radius: var(--radius-xl); background: var(--colour-surface); text-decoration: none;
-               color: var(--colour-ink); box-shadow: var(--shadow-card);
-               transition: background 0.12s ease, border-color 0.12s ease, transform 0.06s ease; }
-       .tile:hover { background: var(--colour-accent-tint); border-color: var(--colour-accent); }
-       .tile:active { transform: translateY(1px); }
-       /* The count and its glyph on one line, the glyph pushed right and held
-          back to the muted tone: the number is the thing being read, the glyph
-          only says which queue it belongs to. */
-       .tile .n { display: flex; align-items: center; justify-content: space-between;
-                  font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums;
-                  line-height: 1.1; color: var(--colour-subtle); }
-       .tile .n .icon { width: 1.2rem; height: 1.2rem; color: var(--colour-subtle); opacity: 0.8; }
-       .tile.has-work .n { color: var(--colour-accent); }
-       /* Sans, not the display serif. The serif belongs to the music — a piece
-          title, a composer — and a tile is a control, not a work. */
-       .tile .t { display: flex; align-items: flex-start; gap: 0.5rem; font-weight: 700;
-                  font-family: var(--type-family-base); font-size: 0.98rem; line-height: 1.3; }
-       .tile .t .icon { color: var(--colour-accent); margin-top: 0.12em; }
-       .tile .b { display: block; font-size: 0.85rem; color: var(--colour-muted);
-                  margin-top: 0.15rem; }
+       .steps { margin: 0.6rem 0 0.4rem; padding-left: 1.3rem; }
+       .steps li { margin-bottom: 0.5rem; }
+       .card h2 .icon { color: var(--colour-accent); margin-right: 0.35rem; }
      </style>`,
-    { admin: true, nav: "admin", path: "/admin" }
+    { admin: true, gate, nav: "more", path: "/admin/guide" }
   );
 }
 
@@ -254,7 +560,11 @@ export function adminHomePage(
  * starts by uploading a scan and finds the reading poor just carries on typing
  * into the same form, which is what actually happens in practice.
  */
-export function adminNewItemPage(extractionReady: boolean, formHtml: string): string {
+export function adminNewItemPage(
+  gate: AdminGate,
+  extractionReady: boolean,
+  formHtml: string,
+): string {
   return page(
     `New catalogue item — ${CHURCH.appName}`,
     `<h1>New catalogue item<span class="sub">Parse a scan, or type it in</span></h1>
@@ -296,7 +606,7 @@ export function adminNewItemPage(extractionReady: boolean, formHtml: string): st
        @media (max-width: 52rem) { .modes { grid-template-columns: 1fr; } }
        .modes .card { margin: 0; }
      </style>`,
-    { admin: true, path: "/admin/new" }
+    { admin: true, gate, path: "/admin/new" }
   );
 }
 
@@ -320,6 +630,7 @@ export interface AdminSearchFilters extends SearchQuery {
  * mistake that costs an afternoon and is not obviously recoverable.
  */
 export function adminSearchPage(
+  gate: AdminGate,
   filters: AdminSearchFilters,
   result: SearchResult,
   message?: string
@@ -452,7 +763,7 @@ export function adminSearchPage(
             </div>`
          : `<p class="muted">Nothing matched those filters.</p>`
      }`,
-    { admin: true, path: "/admin/search" }
+    { admin: true, gate, path: "/admin/search" }
   );
 }
 
@@ -461,6 +772,7 @@ export function adminSearchPage(
 // ---------------------------------------------------------------------------
 
 export function adminReportsPage(
+  gate: AdminGate,
   cover: Coverage,
   most: SungCount[],
   least: SungCount[],
@@ -572,7 +884,7 @@ export function adminReportsPage(
        .cov-t { background: var(--colour-surface-alt); border-radius: var(--radius-pill); height: 0.5rem; }
        .cov-f { background: var(--colour-accent); border-radius: var(--radius-pill); height: 100%; }
      </style>`,
-    { admin: true, path: "/admin/reports" }
+    { admin: true, gate, path: "/admin/reports" }
   );
 }
 
@@ -580,7 +892,11 @@ export function adminReportsPage(
 // Priority queues
 // ---------------------------------------------------------------------------
 
-export function adminQueuesPage(scanning: PriorityPiece[], repairs: PriorityPiece[]): string {
+export function adminQueuesPage(
+  gate: AdminGate,
+  scanning: PriorityPiece[],
+  repairs: PriorityPiece[],
+): string {
   const table = (rows: PriorityPiece[], empty: string) =>
     rows.length
       ? `<div class="scroll"><table>
@@ -616,11 +932,11 @@ export function adminQueuesPage(scanning: PriorityPiece[], repairs: PriorityPiec
           nobody can read the spine of is lost on the shelf whatever state the paper is in.</p>
        ${table(repairs, "Nothing in poor or urgent condition, and every box has a readable spine.")}
      </div>`,
-    { admin: true, path: "/admin/queues" }
+    { admin: true, gate, path: "/admin/queues" }
   );
 }
 
-export function adminStocktakePage(due: RecountRow[]): string {
+export function adminStocktakePage(gate: AdminGate, due: RecountRow[]): string {
   return page(
     `Due a recount — ${CHURCH.appName}`,
     `<h1>Due a recount<span class="sub">${due.length} ${due.length === 1 ? "box" : "boxes"}</span></h1>
@@ -646,7 +962,7 @@ export function adminStocktakePage(due: RecountRow[]): string {
             </table></div>`
          : `<div class="notice ok"><p>Nothing is due a recount.</p></div>`
      }`,
-    { admin: true, path: "/admin/stocktake" }
+    { admin: true, gate, path: "/admin/stocktake" }
   );
 }
 
@@ -654,7 +970,7 @@ export function adminStocktakePage(due: RecountRow[]): string {
 // Loans (H5)
 // ---------------------------------------------------------------------------
 
-export function adminLoansPage(open: LoanRow[], message?: string): string {
+export function adminLoansPage(gate: AdminGate, open: LoanRow[], message?: string): string {
   return page(
     `Out on loan — ${CHURCH.appName}`,
     `<h1>Out on loan<span class="sub">${open.length} ${open.length === 1 ? "loan" : "loans"} outstanding</span></h1>
@@ -714,7 +1030,7 @@ export function adminLoansPage(open: LoanRow[], message?: string): string {
          <button type="submit">Log it out</button>
        </form>
      </div>`,
-    { admin: true, path: "/admin/loans" }
+    { admin: true, gate, path: "/admin/loans" }
   );
 }
 
@@ -723,6 +1039,7 @@ export function adminLoansPage(open: LoanRow[], message?: string): string {
 // ---------------------------------------------------------------------------
 
 export function adminSettingsPage(
+  gate: AdminGate,
   profiles: ChoirProfileRow[],
   usingStoredPassword: boolean,
   generation: number,
@@ -826,7 +1143,7 @@ export function adminSettingsPage(
        <h2>Activity</h2>
        <p><a class="btn secondary" href="/admin/activity">See who did what</a></p>
      </div>`,
-    { admin: true, path: "/admin/settings" }
+    { admin: true, gate, path: "/admin/settings" }
   );
 }
 
@@ -837,7 +1154,7 @@ export function adminSettingsPage(
  * that made it. Six people hold the Librarian policy, and "who decided that?"
  * only has an honest answer if it was written down at the time.
  */
-export function adminActivityPage(rows: AuditRow[]): string {
+export function adminActivityPage(gate: AdminGate, rows: AuditRow[]): string {
   return page(
     `Activity — ${CHURCH.appName}`,
     `<h1>Activity<span class="sub">The last ${rows.length} things done here</span></h1>
@@ -865,7 +1182,7 @@ export function adminActivityPage(rows: AuditRow[]): string {
      <p class="muted small">Attendance is deliberately not in here: a register is personal data about a
         child, and it does not belong in a log admins read looking for a mistake. Each attendance row
         records who marked it, on the register itself.</p>`,
-    { admin: true, path: "/admin/activity" }
+    { admin: true, gate, path: "/admin/activity" }
   );
 }
 
@@ -886,6 +1203,7 @@ export { betaChip };
  * what James is holding when he uses this.
  */
 export function adminLabelsPage(
+  gate: AdminGate,
   candidates: PieceWithHolding[],
   filters: { door?: string; unlabelled?: boolean },
   message?: string
@@ -990,7 +1308,7 @@ export function adminLabelsPage(
               an accession number goes on a physical box, so it should not go on a row whose composer
               might still be wrong.</p>`
      }`,
-    { admin: true, path: "/admin/labels" }
+    { admin: true, gate, path: "/admin/labels" }
   );
 }
 
@@ -998,7 +1316,12 @@ export function adminLabelsPage(
 // People and the register (beta)
 // ---------------------------------------------------------------------------
 
-export function adminPeoplePage(people: PersonRow[], showingLeavers: boolean, message?: string): string {
+export function adminPeoplePage(
+  gate: AdminGate,
+  people: PersonRow[],
+  showingLeavers: boolean,
+  message?: string,
+): string {
   const choirOptions = CHOIRS.map((c) => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join("");
   const partOptions = CHURCH.voiceParts
     .map((v) => `<option value="${esc(v.value)}">${esc(v.label)}</option>`)
@@ -1057,7 +1380,13 @@ export function adminPeoplePage(people: PersonRow[], showingLeavers: boolean, me
                </div>`
              )
              .join("")
-         : `<p class="muted">Nobody on the list yet.</p>`
+         : nothingYet(
+             "Nobody is on the choir list yet. The quickest way in is the department's own register " +
+               "workbook — this reads it and shows you what it found before writing anything.",
+             gateAllows(gate, "/admin/people/import")
+               ? { href: "/admin/people/import", label: "Import the register workbook" }
+               : undefined
+           )
      }
 
      <p>
@@ -1102,80 +1431,348 @@ export function adminPeoplePage(people: PersonRow[], showingLeavers: boolean, me
          <button type="submit">Add</button>
        </form>
      </div>`,
-    { admin: true, path: "/admin/people" }
+    { admin: true, gate, path: "/admin/people" }
   );
 }
 
 /**
  * The register, taken at the door on a phone.
  *
- * Every name is one big tappable button that cycles unmarked → present →
- * absent → excused and saves as it goes. Big targets because this is used
- * one-handed on an iPhone in a doorway, with the other hand holding a door open.
+ * **This is the screen the pilot is judged on.** It is used one-handed on an
+ * iPhone, at a vestry door, by a duty adult in a cassock, with the other hand
+ * holding a door open and the Minster's signal coming and going. Everything
+ * about it is decided by that sentence:
+ *
+ *   - **The whole row is the control.** Not a radio button inside a row — the
+ *     row. Fifty-six pixels tall, edge to edge, so a thumb cannot miss it.
+ *   - **Colour and shape, never colour alone.** Here, away and excused each get
+ *     a glyph as well as a colour and a word, so the three states are told
+ *     apart by somebody colour-blind, in bad light, and on a photocopy.
+ *   - **A counter that says how far you have got.** "12 of 18 marked" is the
+ *     only progress anybody wants, and it is the thing you check before you
+ *     put the phone away.
+ *   - **It saves as you go, and says so.** With script it is one tap and no
+ *     page load; without script — or when the fetch fails, which on that signal
+ *     it will — the same form posts the ordinary way and the page comes back.
+ *     There is no state held in the browser that a lost connection can lose.
+ *   - **Groups, pre-picked.** A joint service is sixty names and the person at
+ *     the door wants eighteen of them. The tabs are added by script over
+ *     sections that are all present and correct without it.
+ *
+ * The dismissal tick lives at the bottom of this same screen rather than on the
+ * rota, because it is the last thing that happens at the same door on the same
+ * phone in the same five minutes.
  */
 export function adminRegisterPage(
+  gate: AdminGate,
   service: { id: number; title: string; service_date: string; designation: string | null },
-  rows: RegisterRow[],
-  tally: { present: number; absent: number; excused: number; unmarked: number }
+  groups: RegisterGroup[],
+  selected: string,
+  tally: { present: number; absent: number; excused: number; unmarked: number },
+  dismissal: { dutyId: number; collectedAt: string | null; collectedBy: string | null } | null
 ): string {
-  const statusPill = (status: string | null) => {
-    switch (status) {
-      case "present":
-        return `<span class="pill green">Here</span>`;
-      case "absent":
-        return `<span class="pill red">Away</span>`;
-      case "excused":
-        return `<span class="pill amber">Excused</span>`;
-      default:
-        return `<span class="pill grey">Tap to mark</span>`;
-    }
-  };
+  const total = tally.present + tally.absent + tally.excused + tally.unmarked;
+  const marked = total - tally.unmarked;
+
+  const row = (r: RegisterRow) => `<form method="POST" action="/admin/people/register/${service.id}/${
+    r.id
+  }" class="mark-form">
+      <button type="submit" class="who ${esc(stateClass(r.status))}" data-status="${esc(r.status ?? "")}">
+        <span class="mk">${icon(stateGlyph(r.status))}</span>
+        <span class="nm">${esc(r.display_name)}</span>
+        <span class="st">${esc(stateWord(r.status))}</span>
+      </button>
+    </form>`;
+
+  const sections = groups
+    .map(
+      (g) => `<section class="grp" data-grp="${esc(g.key)}">
+        ${groups.length > 1 ? `<h2 class="grp-h">${esc(g.label)}</h2>` : ""}
+        ${g.rows.map(row).join("")}
+      </section>`
+    )
+    .join("");
+
+  const tabs =
+    groups.length > 1
+      ? `<div class="grp-tabs hidden" id="grp-tabs" role="tablist" aria-label="Which choir">
+           <button type="button" role="tab" data-grp="">Everybody</button>
+           ${groups
+             .map(
+               (g) =>
+                 `<button type="button" role="tab" data-grp="${esc(g.key)}">${esc(g.label)} <span class="c">${
+                   g.rows.length
+                 }</span></button>`
+             )
+             .join("")}
+         </div>`
+      : "";
 
   return page(
-    `Register — ${CHURCH.appName}`,
-    `<p class="crumb"><a href="/admin/people">← The choir</a></p>
-     <h1>Register ${betaChip()}<span class="sub">${esc(service.title)} — ${esc(prettyDate(service.service_date))}</span></h1>
-
-     <p class="small">
-       <span class="pill green">${tally.present} here</span>
-       <span class="pill red">${tally.absent} away</span>
-       <span class="pill amber">${tally.excused} excused</span>
-       <span class="pill grey">${tally.unmarked} not marked</span>
-     </p>
+    `Register — ${CHURCH.adminAppName}`,
+    `<p class="crumb"><a href="/admin">← Today</a></p>
+     <h1>Register<span class="sub">${esc(service.title)} — ${esc(prettyDate(service.service_date))}${
+       service.designation ? ` · ${esc(service.designation)}` : ""
+     }</span></h1>
 
      ${
-       rows.length
-         ? `<div class="register">
-              ${rows
-                .map(
-                  (r) => `<form method="POST" action="/admin/people/register/${service.id}/${r.id}">
-                    <button type="submit" class="who">
-                      <span class="n">${esc(r.display_name)}</span>
-                      ${statusPill(r.status)}
-                    </button>
-                  </form>`
-                )
-                .join("")}
+       groups.length
+         ? `<div class="reg-bar">
+              <p class="reg-count" id="reg-count" data-total="${total}" role="status" aria-live="polite">
+                <strong><span id="reg-done">${marked}</span> of ${total}</strong> marked
+              </p>
+              <p class="reg-saved hidden" id="reg-saved">${icon("tick")}Saved</p>
             </div>
-            <p class="muted small">Each tap moves on: not marked → here → away → excused → not marked.
-               It saves as you go.</p>`
-         : `<p class="muted">Nobody is on the list for this service's choir yet.
-              <a href="/admin/people">Add the choir</a> first.</p>`
+
+            ${tabs}
+
+            <div class="register" id="register" data-selected="${esc(selected)}">${sections}</div>
+
+            <p class="muted small">Tap a name: <strong>here</strong>, then <strong>away</strong>, then
+               <strong>excused</strong>, then back to unmarked. It saves each tap as you go — there is
+               nothing to send.</p>
+
+            ${dismissalBlock(service.id, dismissal)}`
+         : `<div class="card">
+              <h2>Nobody is expected at this service</h2>
+              <p class="muted">The register lists whoever is in the choirs this service's designation
+                 names${service.designation ? ` — this one says "${esc(service.designation)}"` : ""}, and
+                 there is nobody on the list yet.</p>
+              <p style="margin-bottom:0"><a class="btn" href="/admin/people/import">${icon(
+                "upload"
+              )}Import the department's register workbook</a></p>
+            </div>`
      }
 
-     <style>
-       .register { display: grid; gap: 0.4rem; }
-       .register form { margin: 0; }
-       .register .who { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-                        width: 100%; text-align: left; font-size: 1.1rem; padding: 0.9rem 1rem;
-                        background: var(--colour-surface); color: var(--colour-ink);
-                        border: 1px solid var(--colour-border); }
-       .register .who:hover { background: var(--colour-accent-tint); }
-       .register .who .n { font-weight: 600; }
-     </style>`,
-    { admin: true, path: `/admin/people/register/${service.id}` }
+     <style>${REGISTER_CSS}</style>
+     ${groups.length ? `<script>${REGISTER_SCRIPT}</script>` : ""}`,
+    { admin: true, gate, path: `/admin/people/register/${service.id}` }
   );
 }
+
+/** The Thursday tick, at the bottom of the screen it actually happens on. */
+function dismissalBlock(
+  serviceId: number,
+  dismissal: { dutyId: number; collectedAt: string | null; collectedBy: string | null } | null
+): string {
+  if (!dismissal) return "";
+  if (dismissal.collectedAt !== null) {
+    return `<div class="notice ok">
+      <p style="margin:0"><strong>Every child under eighteen was collected.</strong>
+         Ticked by ${esc(dismissal.collectedBy ?? "somebody on duty")} at
+         ${esc(dismissal.collectedAt.slice(11, 16))}.</p>
+    </div>`;
+  }
+  return `<div class="card">
+    <h2>Before you go</h2>
+    <p class="muted small">Tick this once the last child has gone. It is recorded against your name and
+       the time, and it cannot be un-ticked.</p>
+    <form method="POST" action="/admin/safeguarding/collected">
+      <input type="hidden" name="duty_id" value="${dismissal.dutyId}">
+      <input type="hidden" name="back" value="register:${serviceId}">
+      <button type="submit" class="collected">Every child under 18 has been collected</button>
+    </form>
+  </div>`;
+}
+
+/** The three states, plus unmarked, as a class, a glyph and a word. */
+function stateClass(status: string | null): string {
+  switch (status) {
+    case "present":
+      return "is-present";
+    case "absent":
+      return "is-absent";
+    case "excused":
+      return "is-excused";
+    default:
+      return "is-none";
+  }
+}
+
+function stateGlyph(status: string | null): string {
+  switch (status) {
+    case "present":
+      return "tick";
+    case "absent":
+      return "cross";
+    case "excused":
+      return "minus";
+    default:
+      return "plus";
+  }
+}
+
+function stateWord(status: string | null): string {
+  switch (status) {
+    case "present":
+      return "Here";
+    case "absent":
+      return "Away";
+    case "excused":
+      return "Excused";
+    default:
+      return "Not marked";
+  }
+}
+
+const REGISTER_CSS = `
+  .reg-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+             margin: 0.6rem 0 0.5rem; }
+  .reg-count { margin: 0; font-size: 1.05rem; }
+  .reg-count strong { font-variant-numeric: tabular-nums; }
+  .reg-saved { margin: 0; font-size: 0.9rem; font-weight: 700; color: var(--colour-success);
+               display: inline-flex; align-items: center; gap: 0.3rem; }
+
+  /* The group tabs. Hidden until the script that gives them meaning has run —
+     a control that does nothing is worse than no control — and rendered as
+     ordinary buttons so a thumb gets a 44px target. */
+  .grp-tabs { display: flex; gap: 0.35rem; overflow-x: auto; scrollbar-width: none;
+              margin: 0 0 0.7rem; padding-bottom: 0.2rem; }
+  .grp-tabs::-webkit-scrollbar { display: none; }
+  .grp-tabs button { flex: 0 0 auto; min-height: 44px; padding: 0.5rem 0.9rem; font-size: 0.95rem;
+                     background: var(--colour-surface); color: var(--colour-ink);
+                     border-color: var(--colour-border); }
+  .grp-tabs button[aria-selected="true"] { background: var(--colour-accent);
+                     border-color: var(--colour-accent); color: var(--colour-on-accent); }
+  .grp-tabs button .c { font-variant-numeric: tabular-nums; opacity: 0.7; margin-left: 0.15rem; }
+
+  .register { display: grid; gap: 0.4rem; }
+  .register .mark-form { margin: 0; }
+  .register .grp-h { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;
+                     color: var(--colour-muted); font-family: var(--type-family-base);
+                     margin: 0.9rem 0 0.35rem; }
+  .register .grp:first-child .grp-h { margin-top: 0.2rem; }
+
+  /* The row *is* the control. Full width, 56px tall, and laid out glyph, name,
+     state — so the eye runs down a column of shapes on the left and a column of
+     words on the right, and neither depends on colour to be read. */
+  .register .who { display: flex; align-items: center; gap: 0.8rem; width: 100%; text-align: left;
+                   min-height: 56px; padding: 0.6rem 0.9rem; font-size: 1.1rem; font-weight: 600;
+                   background: var(--colour-surface); color: var(--colour-ink);
+                   border: 1px solid var(--colour-border); }
+  .register .who .nm { flex: 1 1 auto; }
+  .register .who .st { font-size: 0.8rem; font-weight: 700; text-transform: uppercase;
+                       letter-spacing: 0.04em; color: var(--colour-muted); white-space: nowrap; }
+  .register .who .mk { display: inline-flex; align-items: center; justify-content: center;
+                       width: 2rem; height: 2rem; flex: 0 0 auto; border-radius: var(--radius-pill);
+                       border: 2px solid var(--colour-border); color: var(--colour-muted); }
+  .register .who .mk .icon { width: 1.15rem; height: 1.15rem; }
+
+  .register .is-none .mk { opacity: 0.5; }
+  .register .is-present .mk { background: var(--colour-pill-green-bg); color: var(--colour-pill-green-ink);
+                              border-color: var(--colour-pill-green-ink); }
+  .register .is-present .st { color: var(--colour-pill-green-ink); }
+  .register .is-absent .mk { background: var(--colour-pill-red-bg); color: var(--colour-pill-red-ink);
+                             border-color: var(--colour-pill-red-ink); }
+  .register .is-absent .st { color: var(--colour-pill-red-ink); }
+  .register .is-excused .mk { background: var(--colour-pill-amber-bg); color: var(--colour-pill-amber-ink);
+                              border-color: var(--colour-pill-amber-ink); }
+  .register .is-excused .st { color: var(--colour-pill-amber-ink); }
+
+  /* The flash that says the tap landed. Half a second, then gone. */
+  .register .who.just-saved { border-color: var(--colour-accent); }
+
+  button.collected { font-size: 1.05rem; padding: 0.85rem 1.1rem; width: 100%; }
+`;
+
+/**
+ * One tap, no page load, and a plain form underneath when that fails.
+ *
+ * The form is the truth: the script only ever intercepts a submit it would have
+ * made anyway, and hands control straight back to the browser the moment
+ * anything goes wrong — a dead connection, a slow one, a response that is not
+ * what it expected. Nothing is queued and nothing is remembered, so a phone
+ * that loses signal mid-service loses at most the tap in flight, and the person
+ * sees the ordinary page come back rather than a screen that has quietly
+ * stopped saving.
+ */
+const REGISTER_SCRIPT = String.raw`
+(function () {
+  var reg = document.getElementById('register');
+  if (!reg || !window.fetch || !window.FormData) return;
+
+  var doneEl = document.getElementById('reg-done');
+  var savedEl = document.getElementById('reg-saved');
+  var savedTimer = null;
+
+  var GLYPH = {
+    present: ${JSON.stringify(icon("tick"))},
+    absent: ${JSON.stringify(icon("cross"))},
+    excused: ${JSON.stringify(icon("minus"))},
+    '': ${JSON.stringify(icon("plus"))}
+  };
+  var WORD = { present: 'Here', absent: 'Away', excused: 'Excused', '': 'Not marked' };
+  var CLASS = { present: 'is-present', absent: 'is-absent', excused: 'is-excused', '': 'is-none' };
+
+  function flash() {
+    if (!savedEl) return;
+    savedEl.classList.remove('hidden');
+    if (savedTimer) clearTimeout(savedTimer);
+    savedTimer = setTimeout(function () { savedEl.classList.add('hidden'); }, 1600);
+  }
+
+  function paint(btn, status) {
+    var key = status || '';
+    btn.className = 'who ' + CLASS[key];
+    btn.setAttribute('data-status', key);
+    btn.querySelector('.mk').innerHTML = GLYPH[key];
+    btn.querySelector('.st').textContent = WORD[key];
+    btn.classList.add('just-saved');
+    setTimeout(function () { btn.classList.remove('just-saved'); }, 700);
+  }
+
+  reg.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (!form || !form.classList.contains('mark-form')) return;
+    e.preventDefault();
+
+    var btn = form.querySelector('.who');
+    var data = new FormData();
+    data.append('js', '1');
+
+    fetch(form.getAttribute('action'), {
+      method: 'POST',
+      body: data,
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin'
+    }).then(function (r) {
+      if (!r.ok) throw new Error('rejected');
+      return r.json();
+    }).then(function (body) {
+      paint(btn, body.status);
+      if (doneEl && body.tally) {
+        doneEl.textContent = String(body.tally.present + body.tally.absent + body.tally.excused);
+      }
+      flash();
+    }).catch(function () {
+      // Whatever went wrong, the ordinary form still works. Submitting it
+      // natively skips this handler, so there is no loop to fall into.
+      form.submit();
+    });
+  });
+
+  // The group tabs, and the one the designation picked. Both live here rather
+  // than in the markup because without this script every group is visible,
+  // which is the right answer for somebody with no JavaScript at all.
+  var tabs = document.getElementById('grp-tabs');
+  if (!tabs) return;
+  var groups = [].slice.call(reg.querySelectorAll('.grp'));
+  var buttons = [].slice.call(tabs.querySelectorAll('button'));
+
+  function choose(key) {
+    groups.forEach(function (g) { g.hidden = key !== '' && g.getAttribute('data-grp') !== key; });
+    buttons.forEach(function (b) {
+      b.setAttribute('aria-selected', String(b.getAttribute('data-grp') === key));
+    });
+  }
+
+  buttons.forEach(function (b) {
+    b.addEventListener('click', function () { choose(b.getAttribute('data-grp') || ''); });
+  });
+  tabs.classList.remove('hidden');
+  choose(reg.getAttribute('data-selected') || '');
+})();
+`;
 
 // ---------------------------------------------------------------------------
 // The repertoire picker (8A)
@@ -1189,6 +1786,7 @@ export function adminRegisterPage(
  * very few of those until the music lists have been worked through.
  */
 export function adminSuggestionsPage(
+  gate: AdminGate,
   results: (PieceWithHolding & { times_sung: number; last_sung: string | null; scanned: number })[],
   filters: { season?: string; category?: string; designation?: string },
   typicalSingers: number | null,
@@ -1253,7 +1851,7 @@ export function adminSuggestionsPage(
             </table></div>`
          : `<p class="muted">Nothing matched. Try loosening the season or the category.</p>`
      }`,
-    { admin: true, path: "/admin/suggestions" }
+    { admin: true, gate, path: "/admin/suggestions" }
   );
 }
 
@@ -1272,7 +1870,7 @@ export function adminSuggestionsPage(
  * children's names, so that switching one on is a decision rather than a
  * reflex.
  */
-export function adminModulesPage(state: ModuleState, message?: string): string {
+export function adminModulesPage(gate: AdminGate, state: ModuleState, message?: string): string {
   const row = (m: (typeof MODULES)[number]) => {
     const on = state[m.key];
     return `<tr>
@@ -1318,7 +1916,7 @@ export function adminModulesPage(state: ModuleState, message?: string): string {
        .chip.personal { background: var(--colour-surface-sunk); color: var(--colour-muted);
                         font-weight: 400; }
      </style>`,
-    { admin: true, path: "/admin/modules" }
+    { admin: true, gate, path: "/admin/modules" }
   );
 }
 
@@ -1335,6 +1933,7 @@ export function adminModulesPage(state: ModuleState, message?: string): string {
  * staff only.
  */
 export function adminRolesPage(
+  gate: AdminGate,
   grants: RoleGrant[],
   musicStaffCount: number,
   message?: string,
@@ -1385,7 +1984,7 @@ export function adminRolesPage(
                 <tr><th>Email</th><th>Roles — click one to remove it</th></tr>
                 ${[...byEmail.entries()].map(person).join("")}
               </table></div>`
-           : `<p class="muted">Nobody has a role yet.</p>`
+           : nothingYet("Nobody has been given a role yet — give somebody one below.")
        }
      </div>
 
@@ -1417,7 +2016,7 @@ export function adminRolesPage(
          ).join("")}
        </dl>
      </div>`,
-    { admin: true, path: "/admin/roles" }
+    { admin: true, gate, path: "/admin/roles" }
   );
 }
 
@@ -1428,7 +2027,7 @@ export function adminRolesPage(
  * and the page treats them that way: no stack trace, no "forbidden", just what
  * has happened and who fixes it.
  */
-export function adminNoRolePage(email: string): string {
+export function adminNoRolePage(gate: AdminGate, email: string): string {
   return page(
     `Nothing set up yet — ${CHURCH.appName}`,
     `<h1>Nothing set up for you yet</h1>
@@ -1439,7 +2038,7 @@ export function adminNoRolePage(email: string): string {
           few seconds. Tell them the address above, exactly as it is written.</p>
        <p class="muted small">Nothing has gone wrong, and there is nothing for you to fix at this end.</p>
      </div>`,
-    { admin: true, path: "/admin" }
+    { admin: true, gate, path: "/admin" }
   );
 }
 
@@ -1450,7 +2049,7 @@ export function adminNoRolePage(email: string): string {
  * is what to ask for. A module that is switched off never reaches this page —
  * it answers 404, because a locked door still tells you there is a room.
  */
-export function adminWrongRolePage(required: readonly Role[]): string {
+export function adminWrongRolePage(gate: AdminGate, required: readonly Role[]): string {
   const names = required.map((r) => ROLE_LABELS[r]);
   const list =
     names.length === 1
@@ -1465,7 +2064,7 @@ export function adminWrongRolePage(required: readonly Role[]): string {
        <p>If you think you should, ask a member of the music staff — they can add it from the Roles screen.</p>
        <p><a class="btn secondary" href="/admin">Back to the front page</a></p>
      </div>`,
-    { admin: true, path: "/admin" }
+    { admin: true, gate, path: "/admin" }
   );
 }
 
@@ -1486,6 +2085,7 @@ export function adminWrongRolePage(required: readonly Role[]): string {
  * viewer, the child and the time before the numbers are fetched at all.
  */
 export function adminPersonPage(
+  gate: AdminGate,
   person: PersonRow,
   contactCount: number,
   revealed: ParentContact[] | null,
@@ -1652,7 +2252,7 @@ export function adminPersonPage(
        .check { display: block; margin: 0.4rem 0 0.6rem; font-size: 0.9rem; }
        .check input { margin-right: 0.4rem; }
      </style>`,
-    { admin: true, path: "/admin/people" }
+    { admin: true, gate, path: "/admin/people" }
   );
 }
 
@@ -1776,6 +2376,7 @@ export interface DutyEvent {
  * order the calendar puts them in.
  */
 export function adminSafeguardingPage(
+  gate: AdminGate,
   events: DutyEvent[],
   childrenPerAdult: number | null,
   message?: string
@@ -1844,9 +2445,17 @@ export function adminSafeguardingPage(
 
      <p><a class="btn" href="/admin/safeguarding/today">Today's duty</a></p>
 
-     ${sorted.length ? sorted.map(card).join("") : `<p class="muted">Nothing coming up.</p>`}
+     ${
+       sorted.length
+         ? sorted.map(card).join("")
+         : nothingYet(
+             "Nothing is in the diary yet. Services arrive from the Minster's service app by " +
+               "themselves; the term's practices, weddings and concerts are added here.",
+             { href: "#add-event", label: "Add the term's rota" }
+           )
+     }
 
-     <div class="card">
+     <div class="card" id="add-event">
        <h2>Add an event</h2>
        <p class="muted">Practices, weddings, concerts and tours are not on the service app's music list
           and never will be — it publishes what is being sung, not the department's diary. Put them in
@@ -1907,12 +2516,13 @@ export function adminSafeguardingPage(
        .issues li.red { color: var(--colour-pill-red-ink); }
        .issues li.amber { color: var(--colour-pill-amber-ink); }
      </style>`,
-    { admin: true, path: "/admin/safeguarding" }
+    { admin: true, gate, path: "/admin/safeguarding" }
   );
 }
 
 /** One event: who is on, who could be, and what is still missing. */
 export function adminDutyEventPage(
+  gate: AdminGate,
   event: DutyEvent,
   candidates: PersonRow[],
   message?: string
@@ -2004,7 +2614,7 @@ export function adminDutyEventPage(
        .duty-list li { padding: 0.25rem 0; }
        .small-btn { font-size: 0.8rem; padding: 0.15rem 0.5rem; }
      </style>`,
-    { admin: true, path: "/admin/safeguarding" }
+    { admin: true, gate, path: "/admin/safeguarding" }
   );
 }
 
@@ -2017,6 +2627,7 @@ export function adminDutyEventPage(
  * the only thing it must do well is be readable at arm's length.
  */
 export function adminDutyTodayPage(
+  gate: AdminGate,
   events: DutyEvent[],
   me: string,
   registerable: boolean,
@@ -2088,14 +2699,21 @@ export function adminDutyTodayPage(
          : ""
      }
 
-     ${events.length ? events.map(card).join("") : `<p class="muted">Nothing on today.</p>`}
+     ${
+       events.length
+         ? events.map(card).join("")
+         : nothingYet("Nothing is on today. The whole term's rota is one tap away.", {
+             href: "/admin/safeguarding",
+             label: "The whole rota",
+           })
+     }
 
      <p><a class="btn secondary" href="/admin/safeguarding">The whole rota</a></p>
 
      <style>
        button.big { font-size: 1.05rem; padding: 0.75rem 1.1rem; width: 100%; }
      </style>`,
-    { admin: true, path: "/admin/safeguarding" }
+    { admin: true, gate, path: "/admin/safeguarding" }
   );
 }
 
@@ -2112,6 +2730,7 @@ export function adminDutyTodayPage(
  * turned up" and the truth is "was never asked".
  */
 export function adminAttendancePage(
+  gate: AdminGate,
   quarter: Quarter,
   quarters: Quarter[],
   totals: PersonTotals[],
@@ -2181,14 +2800,17 @@ export function adminAttendancePage(
                </div>`
              )
              .join("")
-         : `<p class="muted">Nothing recorded in this quarter.</p>`
+         : nothingYet(
+             "Nothing was recorded in this quarter. Totals here are worked out from the register, so " +
+               "they fill in as registers are taken."
+           )
      }
 
      <p>
        <a class="btn secondary" href="/admin/people/pay?quarter=${esc(quarter.ref)}">Work out the pay</a>
        <a class="btn secondary" href="/admin/people/attendance.csv?quarter=${esc(quarter.ref)}">Export this</a>
      </p>`,
-    { admin: true, path: "/admin/people" }
+    { admin: true, gate, path: "/admin/people" }
   );
 }
 
@@ -2202,6 +2824,7 @@ export function adminAttendancePage(
  * short-change somebody without anybody noticing.
  */
 export function adminPayPage(
+  gate: AdminGate,
   run: PayRun,
   quarters: Quarter[],
   rates: RateRow[],
@@ -2288,7 +2911,10 @@ export function adminPayPage(
               <p class="muted small">A CSV, which opens in Excel and in Numbers. Downloading it is
                  recorded in the activity log with a fingerprint of the file, so a printed pay run can
                  always be matched back to the moment it was made.</p>`
-           : `<p class="muted">Nobody was marked present in this quarter.</p>`
+           : nothingYet(
+              "Nobody was marked present in this quarter, so there is nothing to pay. The figures come " +
+                "from the register."
+            )
        }
      </div>
 
@@ -2325,7 +2951,7 @@ export function adminPayPage(
      <style>
        .small-btn { font-size: 0.8rem; padding: 0.15rem 0.5rem; }
      </style>`,
-    { admin: true, path: "/admin/people" }
+    { admin: true, gate, path: "/admin/people" }
   );
 }
 
@@ -2354,6 +2980,7 @@ export interface ExportOption {
  * makes this one worth marking out.
  */
 export function adminExportsPage(
+  gate: AdminGate,
   options: ExportOption[],
   contactsExport: ExportOption | null,
   message?: string
@@ -2402,7 +3029,7 @@ export function adminExportsPage(
      <style>
        .card.contacts { border-left: 4px solid var(--colour-pill-red-ink); }
      </style>`,
-    { admin: true, path: "/admin/export" }
+    { admin: true, gate, path: "/admin/export" }
   );
 }
 
@@ -2419,6 +3046,7 @@ export function adminExportsPage(
  * next screen.
  */
 export function adminImportWorkbookPage(
+  gate: AdminGate,
   batches: BatchRow[],
   message?: string,
   error?: string
@@ -2487,7 +3115,7 @@ export function adminImportWorkbookPage(
      }
 
      <p><a class="btn secondary" href="/admin/people">Back to the choir</a></p>`,
-    { admin: true, path: "/admin/people" }
+    { admin: true, gate, path: "/admin/people" }
   );
 }
 
@@ -2499,6 +3127,7 @@ export function adminImportWorkbookPage(
  * page of four hundred clean rows buries them. Everything clean is ticked on.
  */
 export function adminImportReviewPage(
+  gate: AdminGate,
   batch: BatchRow,
   rows: Array<{ id: number; sheet: string | null; rowNumber: number | null; issue: string | null; person: ProposedPerson }>,
   message?: string
@@ -2571,6 +3200,6 @@ export function adminImportReviewPage(
        tr.flagged td { background: var(--colour-pill-amber-bg); }
        td .pill { white-space: normal; }
      </style>`,
-    { admin: true, path: "/admin/people" }
+    { admin: true, gate, path: "/admin/people" }
   );
 }

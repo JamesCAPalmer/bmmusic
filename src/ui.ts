@@ -18,6 +18,9 @@
 import { CHURCH } from "./church.config";
 import { shelfAddress } from "./storage";
 import { icon } from "./icons";
+import { glyphFor } from "./labels";
+import { moduleForPath, type ModuleState } from "./modules";
+import { permits, requiredRolesFor, type Role } from "./roles";
 import {
   FONT_CSS,
   SEASON_COLOURS,
@@ -357,6 +360,14 @@ const STYLES = `
   .results .title { font-family: var(--type-family-display); font-size: 1.08rem; font-weight: 700;
                     text-decoration: none; }
   .results .composer { color: var(--colour-muted); font-size: 0.95rem; }
+  /* The category glyph in a list of pieces: the same shape as the box label,
+     small and quiet, sitting on the title's baseline. Muted rather than
+     accented — it is a hint about the kind of thing, not a control — and
+     fainter still when the piece has no category, where the fallback book
+     would otherwise assert something the catalogue does not know. */
+  .cat-glyph { width: 1em; height: 1em; flex: 0 0 auto; vertical-align: -0.12em;
+               color: var(--colour-subtle); margin-right: 0.4rem; }
+  .cat-glyph.none { opacity: 0.35; }
   .results .meta { font-size: 0.86rem; color: var(--colour-subtle); margin-top: 0.15rem; }
   .filters { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 0.6rem; align-items: end; }
   @media (max-width: 40rem) { .filters { grid-template-columns: 1fr; } }
@@ -371,6 +382,10 @@ const STYLES = `
                  padding: 0.9rem 1.1rem; color: var(--colour-muted); background: var(--colour-canvas); }
   .placeholder .tag { display: inline-block; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em;
                       text-transform: uppercase; color: var(--colour-subtle); margin-bottom: 0.3rem; }
+  /* An empty list, saying what to do next. Same dashed frame as a placeholder,
+     because that is what it is — a space with nothing in it yet — but the text
+     reads at full strength, since it is an instruction and not a caption. */
+  .placeholder.empty { color: var(--colour-ink); margin: 1rem 0; }
   .crumb { font-size: 0.9rem; margin-bottom: 0.35rem; }
   .pager { display: flex; justify-content: space-between; margin-top: 1rem; font-size: 0.95rem; }
   /* The volunteer portal is used one-handed on a phone: bigger targets. */
@@ -433,6 +448,34 @@ const STYLES = `
   @media print { .fb-btn, .fb-panel { display: none !important; } }
 `;
 
+/**
+ * What the admin gate let this reader through with.
+ *
+ * The same two facts the middleware in `src/index.ts` decided access on —
+ * which modules are switched on, and which roles this person holds — carried
+ * into the rendering so that the navigation and the tiles can never offer a
+ * door the gate would shut. Threaded explicitly rather than read from a global:
+ * a Worker isolate serves several requests at once, and a shared "current
+ * reader" is the sort of bug that shows one person another person's screen.
+ */
+export interface AdminGate {
+  modules: ModuleState;
+  roles: readonly Role[];
+}
+
+/**
+ * Would the gate let this reader through to this address?
+ *
+ * Asks `src/modules.ts` and `src/roles.ts` rather than repeating their tables,
+ * so a rule changed there changes every tile and tab that depends on it. This
+ * is the one predicate the whole admin chrome is filtered by.
+ */
+export function gateAllows(gate: AdminGate, href: string): boolean {
+  const module = moduleForPath(href);
+  if (module && !gate.modules[module]) return false;
+  return permits(gate.roles, requiredRolesFor(href));
+}
+
 export interface PageOptions {
   /**
    * Which tab to mark as current.
@@ -455,18 +498,79 @@ export interface PageOptions {
     | "labels"
     | "queues"
     | "reports"
-    | "feedback";
+    | "feedback"
+    | "people"
+    | "rota"
+    | "more";
   /** Admin pages get the admin nav instead of the choir one. */
   admin?: boolean;
+  /**
+   * Who is reading, for an admin page.
+   *
+   * Every admin page passes it. Without it the strip falls back to the two
+   * destinations that need no module and no particular role — which is failing
+   * closed, and is what a page that forgot to pass one deserves.
+   */
+  gate?: AdminGate;
   /** Login page has no nav at all. */
   chrome?: boolean;
   /** Path the feedback widget reports as the page it was opened on. */
   path?: string;
 }
 
-/** The amber "beta" chip (Milestone 2). Used wherever a feature is new. */
+/**
+ * An empty list that says what to do next.
+ *
+ * **No screen in this app may present a bare empty table.** A table with no
+ * rows tells somebody opening the app on the first Thursday of term that either
+ * they have done something wrong or the thing is broken, and both are worse
+ * than the truth, which is usually "nothing has been put in yet and here is how
+ * you put something in". One sentence, and the one right link.
+ *
+ * The link is optional because sometimes there genuinely is nothing to do —
+ * "nobody has sent any feedback" is a good state, not a job.
+ */
+export function nothingYet(sentence: string, action?: { href: string; label: string }): string {
+  return `<div class="placeholder empty">
+    <p style="margin:0">${esc(sentence)}</p>
+    ${
+      action
+        ? `<p style="margin:0.7rem 0 0"><a class="btn" href="${action.href}">${esc(action.label)}</a></p>`
+        : ""
+    }
+  </div>`;
+}
+
+/**
+ * The amber "beta" chip (Milestone 2). Used wherever a feature is new.
+ *
+ * The wording softened for the term-one pilot: "beta" on its own reads as a
+ * warning to people who did not ask to be testing anything. Saying what to do
+ * about it turns the same chip into an invitation.
+ */
 export function betaChip(): string {
-  return `<span class="beta" title="New — it may not be perfect yet">beta</span>`;
+  return `<span class="beta" title="New this term — tell us what is wrong with the feedback button">beta</span>`;
+}
+
+/**
+ * A category's glyph, small, for a list of pieces.
+ *
+ * The same eight shapes that are printed on the box labels — moon, sunrise,
+ * bread, voices, harp, star, quaver, book. A chorister who has spent a term
+ * looking at them along a shelf reads the shape faster than the word, and a
+ * list of forty anthems gains a left-hand rhythm that says at a glance where
+ * the psalms start. Drawn from the same table the printer draws from, so the
+ * screen and the label can never disagree.
+ *
+ * Decoration, so `aria-hidden`: the category is already in the words beneath.
+ */
+export function categoryGlyph(code: string | null): string {
+  const glyph = glyphFor(code ?? "S");
+  const stroke = glyph.strokePath
+    ? `<path d="${glyph.strokePath}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>`
+    : "";
+  return `<svg class="cat-glyph${code ? "" : " none"}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+     ><path d="${glyph.path}" fill="currentColor"/>${stroke}</svg>`;
 }
 
 export function page(title: string, bodyHtml: string, opts: PageOptions = {}): string {
@@ -692,7 +796,7 @@ const FEEDBACK_SCRIPT = String.raw`
  * because it genuinely is more, and the strip scrolls sideways rather than
  * wrapping so the page below never shifts.
  */
-interface Tab {
+export interface Tab {
   href: string;
   glyph: string;
   label: string;
@@ -707,17 +811,37 @@ const CHOIR_TABS: readonly Tab[] = [
   { href: "/portal", glyph: "box", label: "Count a box", key: "portal" },
 ];
 
+/**
+ * The admin strip: six at the outside, and fewer than that for most people.
+ *
+ * It had nine, and nine tabs is a menu rather than a strip — by the time a
+ * director of music has read "What to do", "Reports" and "Feedback" she has
+ * stopped looking for the register. So the strip now carries only what somebody
+ * uses on a Thursday, and everything else is filed one tap away under More.
+ * Nothing is unreachable; it is just not all shouting at once.
+ *
+ * Filtered by the same gate the middleware admits the request with, so a
+ * librarian never sees a tab to the choir and a person on the safeguarding rota
+ * never sees one to the catalogue. A tab that answers 403 is worse than no tab:
+ * it teaches somebody that the app is broken rather than that the door is not
+ * theirs.
+ */
 const ADMIN_TABS: readonly Tab[] = [
-  { href: "/admin", glyph: "home", label: "Overview", key: "admin" },
+  { href: "/admin", glyph: "home", label: "Today", key: "admin" },
   { href: "/admin/review", glyph: "review", label: "Review", key: "review" },
-  { href: "/admin/services", glyph: "calendar", label: "Music lists", key: "services" },
   { href: "/admin/search", glyph: "search", label: "Search", key: "search" },
-  { href: "/admin/scans", glyph: "camera", label: "Scans", key: "scans" },
-  { href: "/admin/labels", glyph: "label", label: "Labels", key: "labels" },
-  { href: "/admin/queues", glyph: "list", label: "What to do", key: "queues" },
-  { href: "/admin/reports", glyph: "report", label: "Reports", key: "reports" },
-  { href: "/admin/feedback", glyph: "chat", label: "Feedback", key: "feedback" },
+  { href: "/admin/people", glyph: "people", label: "The choir", key: "people" },
+  { href: "/admin/safeguarding", glyph: "shield", label: "Duty rota", key: "rota" },
+  { href: "/admin/more", glyph: "modules", label: "More", key: "more" },
 ];
+
+/** The strip this reader actually gets. Never more than {@link ADMIN_TABS}. */
+export function adminTabs(gate: AdminGate | undefined): readonly Tab[] {
+  // No gate is a page that forgot to pass one. Today and More need no module
+  // and no particular role, so they are the safe floor to fall back to.
+  if (!gate) return ADMIN_TABS.filter((t) => t.href === "/admin" || t.href === "/admin/more");
+  return ADMIN_TABS.filter((t) => gateAllows(gate, t.href));
+}
 
 /**
  * Which tab is the current one.
@@ -752,7 +876,10 @@ function currentTab(opts: PageOptions, tabs: readonly Tab[]): string | null {
 }
 
 function tabsFor(opts: PageOptions): string {
-  const tabs = opts.admin ? ADMIN_TABS : CHOIR_TABS;
+  const tabs = opts.admin ? adminTabs(opts.gate) : CHOIR_TABS;
+  // Somebody Access let in who holds no role at all has nowhere to go, and an
+  // empty strip reads as a broken page. Say nothing instead.
+  if (!tabs.length) return "";
   const current = currentTab(opts, tabs);
 
   const links = tabs
@@ -764,7 +891,7 @@ function tabsFor(opts: PageOptions): string {
     )
     .join("");
 
-  return `<nav class="tabs" aria-label="${opts.admin ? "Librarian sections" : "Choir sections"}">
+  return `<nav class="tabs" aria-label="${opts.admin ? "Admin sections" : "Choir sections"}">
     <div class="tabs-in">${links}</div>
   </nav>`;
 }
@@ -840,9 +967,22 @@ function navFor(opts: PageOptions): string {
 // Sign in
 // ---------------------------------------------------------------------------
 
+/**
+ * Sign in.
+ *
+ * The failed state is written the way you would say it out loud. "That password
+ * was not recognised" is a machine describing its own state; a chorister who
+ * has mistyped a word wants to be told it is the wrong term's password and who
+ * to ask, and a chorister on a phone keyboard wants to be able to see what they
+ * typed. Neither of those is a security cost: the password is shared by the
+ * whole choir and rotated each term, and the only person who can see the screen
+ * is the person holding the phone.
+ */
 export function loginPage(failed = false): string {
   const error = failed
-    ? `<div class="notice error">That password was not recognised. Please try again — it changes each term.</div>`
+    ? `<div class="notice error"><p style="margin:0">That is not this term's password — ask
+         ${esc(CHURCH.contact.maintainer.shortName)} or the Director of Music. It changes at the start
+         of every term.</p></div>`
     : "";
   // The sign-in page is the first thing anybody sees, so it carries the crest
   // even though it has no navigation to hang a masthead on. Somebody who has
@@ -863,15 +1003,41 @@ export function loginPage(failed = false): string {
          <div class="field">
            <label for="password">Choir password</label>
            <input type="password" id="password" name="password" autocomplete="current-password" autofocus required>
+           <!-- Hidden until the script runs: a button that does nothing is
+                worse than no button, and the field works perfectly without it. -->
+           <button type="button" class="quiet small-btn hidden" id="show-password"
+                   aria-controls="password" aria-pressed="false">Show password</button>
          </div>
          <button type="submit">Sign in</button>
        </form>
      </div>
      <p class="muted small">The password changes at the start of each term. If you have not been given
-        this term's, ask ${esc(CHURCH.contact.maintainer.shortName)} or the Director of Music.</p>`,
+        this term's, ask ${esc(CHURCH.contact.maintainer.shortName)} or the Director of Music.</p>
+
+     <style>
+       .small-btn { font-size: 0.85rem; padding: 0.35rem 0.7rem; min-height: 0; margin-top: 0.45rem; }
+     </style>
+     <script>${SHOW_PASSWORD_SCRIPT}</script>`,
     { chrome: false }
   );
 }
+
+/** The show/hide toggle. Progressive enhancement: no script, no button. */
+const SHOW_PASSWORD_SCRIPT = String.raw`
+(function () {
+  var field = document.getElementById('password');
+  var btn = document.getElementById('show-password');
+  if (!field || !btn) return;
+  btn.classList.remove('hidden');
+  btn.addEventListener('click', function () {
+    var shown = field.getAttribute('type') === 'text';
+    field.setAttribute('type', shown ? 'password' : 'text');
+    btn.setAttribute('aria-pressed', shown ? 'false' : 'true');
+    btn.textContent = shown ? 'Show password' : 'Hide password';
+    field.focus();
+  });
+})();
+`;
 
 // ---------------------------------------------------------------------------
 // Choir — home (15A)
@@ -946,7 +1112,9 @@ export function homePage(
            ${recent
              .map(
                (p) => `<a href="/piece/${p.id}">
-                 <span class="t">${esc(p.title.length > 44 ? `${p.title.slice(0, 43)}…` : p.title)}</span>
+                 <span class="t">${categoryGlyph(p.category)}${esc(
+                   p.title.length > 44 ? `${p.title.slice(0, 43)}…` : p.title
+                 )}</span>
                  <span class="c">${esc(p.composer)}</span>
                </a>`
              )
@@ -1273,7 +1441,7 @@ function resultRow(p: PieceWithHolding): string {
   const unreviewed = !p.reviewed_at ? `<span class="pill violet">Draft entry</span>` : "";
 
   return `<li>
-      ${accession}<a class="title" href="/piece/${p.id}">${esc(p.title)}</a>
+      ${accession}${categoryGlyph(p.category)}<a class="title" href="/piece/${p.id}">${esc(p.title)}</a>
       <div class="composer">${esc(p.composer)}</div>
       <div class="meta">${esc(bits.join(" · "))} ${condition} ${unreviewed}</div>
     </li>`;
@@ -1697,14 +1865,14 @@ export function portalDonePage(piece: PieceWithHolding, outcome: CountOutcome): 
 // Admin
 // ---------------------------------------------------------------------------
 
-export function adminReviewPage(queue: SearchResult, offset: number): string {
+export function adminReviewPage(gate: AdminGate, queue: SearchResult, offset: number): string {
   if (!queue.pieces.length) {
     return page(
       `Review queue — ${CHURCH.appName}`,
       `<h1>Review queue</h1>
        <div class="notice ok"><p>Nothing left to review. Every piece has been checked by a human.</p></div>
-       <p><a href="/admin">← Back to the librarian's page</a></p>`,
-      { admin: true }
+       <p><a href="/admin">← Back to Today</a></p>`,
+      { admin: true, gate }
     );
   }
 
@@ -1720,7 +1888,7 @@ export function adminReviewPage(queue: SearchResult, offset: number): string {
         re-import cannot undo your work.</p>
      ${rows}
      <div class="pager">${prev}${next}</div>`,
-    { admin: true }
+    { admin: true, gate }
   );
 }
 
@@ -1779,7 +1947,7 @@ function reviewRow(p: PieceWithHolding): string {
     </div>`;
 }
 
-export function adminEditPage(detail: PieceDetail, saved = false): string {
+export function adminEditPage(gate: AdminGate, detail: PieceDetail, saved = false): string {
   const { piece, aliases } = detail;
   const categoryOptions = CHURCH.categories
     .map((c) => `<option value="${esc(c.code)}"${piece.category === c.code ? " selected" : ""}>${esc(c.label)}</option>`)
@@ -1853,11 +2021,15 @@ export function adminEditPage(detail: PieceDetail, saved = false): string {
          ? `Confirmed ${esc(prettyDate(piece.reviewed_at))}${piece.reviewed_by ? ` by ${esc(piece.reviewed_by)}` : ""}`
          : "Not yet confirmed"
      }</p>`,
-    { admin: true }
+    { admin: true, gate }
   );
 }
 
-export function adminImportPage(summary: ImportSummary | null, error?: string): string {
+export function adminImportPage(
+  gate: AdminGate,
+  summary: ImportSummary | null,
+  error?: string,
+): string {
   const result = summary
     ? `<div class="notice ok">
          <p><strong>Imported.</strong></p>
@@ -1899,11 +2071,11 @@ export function adminImportPage(summary: ImportSummary | null, error?: string): 
      </div>
      <p class="muted small">To load a better cut of the index, replace the CSV in the repository, deploy,
         and run this again.</p>`,
-    { admin: true }
+    { admin: true, gate }
   );
 }
 
-export function adminAccessionPage(result: AccessionResult): string {
+export function adminAccessionPage(gate: AdminGate, result: AccessionResult): string {
   return page(
     `Accession numbers — ${CHURCH.appName}`,
     `<h1>Accession numbers</h1>
@@ -1923,14 +2095,14 @@ export function adminAccessionPage(result: AccessionResult): string {
               }
             </div>`
      }
-     <p><a class="btn secondary" href="/admin">← Back to the librarian's page</a></p>`,
-    { admin: true }
+     <p><a class="btn secondary" href="/admin">← Back to Today</a></p>`,
+    { admin: true, gate }
   );
 }
 
 // --- Photo intake -----------------------------------------------------------
 
-export function adminIntakePage(extractionReady: boolean): string {
+export function adminIntakePage(gate: AdminGate, extractionReady: boolean): string {
   const upload = extractionReady
     ? `<div class="card">
          <h2>1. Photograph the label</h2>
@@ -1966,7 +2138,7 @@ export function adminIntakePage(extractionReady: boolean): string {
        ${manualForm()}
      </div>
      ${extractionReady ? `<script>${INTAKE_SCRIPT}</script>` : ""}`,
-    { admin: true }
+    { admin: true, gate }
   );
 }
 
@@ -2112,7 +2284,7 @@ export const INTAKE_SCRIPT = String.raw`
 })();
 `;
 
-export function adminIntakeDonePage(pieceId: number, title: string): string {
+export function adminIntakeDonePage(gate: AdminGate, pieceId: number, title: string): string {
   return page(
     `Added — ${CHURCH.appName}`,
     `<h1>Added<span class="sub">${esc(title)}</span></h1>
@@ -2120,7 +2292,7 @@ export function adminIntakeDonePage(pieceId: number, title: string): string {
      <p><a class="btn" href="/admin/intake">Add another</a></p>
      <p><a href="/piece/${pieceId}">See it in the catalogue</a> ·
         <a href="/admin/piece/${pieceId}">Edit it</a></p>`,
-    { admin: true }
+    { admin: true, gate }
   );
 }
 
@@ -2136,6 +2308,7 @@ export function adminIntakeDonePage(pieceId: number, title: string): string {
  * failure to answer.
  */
 export function adminMatchQueuePage(
+  gate: AdminGate,
   lines: (ServiceMusicWithPiece & { service_date: string; service_title: string })[],
   total: number,
   offset: number
@@ -2146,8 +2319,8 @@ export function adminMatchQueuePage(
       `<h1>Music lists</h1>
        <div class="notice ok"><p>Every line of every service has been matched or accounted for.</p></div>
        ${feedFetchCard()}
-       <p><a href="/admin">← Back to the librarian's page</a></p>`,
-      { admin: true }
+       <p><a href="/admin">← Back to Today</a></p>`,
+      { admin: true, gate }
     );
   }
 
@@ -2163,7 +2336,7 @@ export function adminMatchQueuePage(
      ${feedFetchCard()}
      ${lines.map(matchRow).join("")}
      <div class="pager">${prev}${next}</div>`,
-    { admin: true }
+    { admin: true, gate }
   );
 }
 
@@ -2220,6 +2393,7 @@ function matchRow(
 }
 
 export function adminFeedResultPage(
+  gate: AdminGate,
   results: IngestSummary[],
   errors: { month: string; message: string }[]
 ): string {
@@ -2256,14 +2430,14 @@ export function adminFeedResultPage(
          : ""
      }
      <p><a class="btn" href="/admin/services">Check the music lists</a></p>
-     <p><a href="/admin">← Back to the librarian's page</a></p>`,
-    { admin: true }
+     <p><a href="/admin">← Back to Today</a></p>`,
+    { admin: true, gate }
   );
 }
 
 // --- Feedback and crowd scans ------------------------------------------------
 
-export function adminFeedbackPage(items: FeedbackRow[]): string {
+export function adminFeedbackPage(gate: AdminGate, items: FeedbackRow[]): string {
   const open = items.filter((f) => !f.resolved_at);
   const done = items.filter((f) => f.resolved_at);
 
@@ -2293,8 +2467,8 @@ export function adminFeedbackPage(items: FeedbackRow[]): string {
             ${done.length ? `<h2>Already dealt with</h2>${done.map(row).join("")}` : ""}`
          : `<div class="notice ok"><p>Nothing has been sent in yet.</p></div>`
      }
-     <p><a href="/admin">← Back to the librarian's page</a></p>`,
-    { admin: true, path: "/admin/feedback" }
+     <p><a href="/admin">← Back to Today</a></p>`,
+    { admin: true, gate, path: "/admin/feedback" }
   );
 }
 
@@ -2305,14 +2479,14 @@ export function adminFeedbackPage(items: FeedbackRow[]): string {
  * the moment it becomes readable — so this screen is the gate, and it shows the
  * photograph rather than making somebody approve a filename.
  */
-export function adminScanQueuePage(items: ScanSubmissionRow[]): string {
+export function adminScanQueuePage(gate: AdminGate, items: ScanSubmissionRow[]): string {
   if (!items.length) {
     return page(
       `Scans sent in — ${CHURCH.appName}`,
       `<h1>Scans sent in</h1>
        <div class="notice ok"><p>Nothing waiting. Everything sent in has been looked at.</p></div>
-       <p><a href="/admin">← Back to the librarian's page</a></p>`,
-      { admin: true, path: "/admin/scans" }
+       <p><a href="/admin">← Back to Today</a></p>`,
+      { admin: true, gate, path: "/admin/scans" }
     );
   }
 
@@ -2337,7 +2511,7 @@ export function adminScanQueuePage(items: ScanSubmissionRow[]): string {
          </div>`
        )
        .join("")}`,
-    { admin: true, path: "/admin/scans" }
+    { admin: true, gate, path: "/admin/scans" }
   );
 }
 

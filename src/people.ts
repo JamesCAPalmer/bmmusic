@@ -457,6 +457,51 @@ export async function clearAttendance(db: D1Database, serviceId: number, personI
     .run();
 }
 
+// ---------------------------------------------------------------------------
+// Grouping the register
+// ---------------------------------------------------------------------------
+
+/** One tab's worth of the register: a choir, and everybody in it. */
+export interface RegisterGroup {
+  /** The stored choir value — 'boys', 'girls', … — used as the tab's id. */
+  key: string;
+  label: string;
+  rows: RegisterRow[];
+}
+
+/**
+ * The register, split by choir, in the order the choirs are listed.
+ *
+ * A joint Evensong puts sixty names on a phone screen, and the person at the
+ * door is looking for one of eighteen. Splitting them is the difference
+ * between scrolling and reading. Only choirs with somebody in them get a
+ * group — an empty tab is a tab that teaches you the app has lost people.
+ */
+export function registerGroups(rows: readonly RegisterRow[]): RegisterGroup[] {
+  return CHOIRS.map((choir) => ({
+    key: choir.value,
+    label: choir.label,
+    rows: rows.filter((r) => r.choir === choir.value),
+  })).filter((g) => g.rows.length > 0);
+}
+
+/**
+ * Which group the door should open on.
+ *
+ * The designation is the department's own words for who is singing, so when it
+ * names exactly one choir that is the one to show. When it names two — "Boys
+ * and Girls" — or names none at all, the honest answer is everybody: pre-picking
+ * one of two would hide half a register from somebody who did not ask it to.
+ *
+ * Returns the empty string for "everybody", which is what the tab bar uses as
+ * its own id for the same idea.
+ */
+export function preselectedGroup(designation: string | null, groups: readonly RegisterGroup[]): string {
+  if (groups.length < 2) return "";
+  const named = choirsExpectedFor(designation).filter((choir) => groups.some((g) => g.key === choir));
+  return named.length === 1 ? named[0]! : "";
+}
+
 /** How the register stands, for the heading. */
 export function registerTally(rows: RegisterRow[]): { present: number; absent: number; excused: number; unmarked: number } {
   const tally = { present: 0, absent: 0, excused: 0, unmarked: 0 };

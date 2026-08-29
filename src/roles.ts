@@ -80,6 +80,15 @@ const ROLE_PREFIXES: ReadonlyArray<readonly [string, readonly Role[]]> = [
   // sit under "contact" is too fine a thread to hang this on.
   ["/admin/people/contacts", STAFF],
 
+  // The three screens that are the app explaining itself: the drawer the front
+  // page files everything else into, the guide, and the button that puts the
+  // welcome card away. Open to any role, because each of them shows only what
+  // the reader may already reach — `More` filters its own tiles by this very
+  // table, and the guide describes the jobs rather than the data.
+  ["/admin/more", ROLES],
+  ["/admin/guide", ROLES],
+  ["/admin/welcome", ROLES],
+
   // The app's own administration.
   ["/admin/settings", STAFF],
   ["/admin/modules", STAFF],

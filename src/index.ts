@@ -139,7 +139,9 @@ import {
   markLeft,
   markReturned as markReturnedToChoir,
   nextStatus,
+  preselectedGroup,
   registerFor,
+  registerGroups,
   registerTally,
   revealContacts,
   rollOverSchoolYears,
@@ -197,8 +199,11 @@ import {
 } from "./reports";
 import {
   adminActivityPage,
-  adminHomePage,
+  adminGuidePage,
   adminLabelsPage,
+  adminMorePage,
+  adminTodayPage,
+  type TodayEvent,
   adminModulesPage,
   adminNoRolePage,
   adminAttendancePage,
@@ -243,7 +248,9 @@ import {
   browsePage,
   descantPage,
   errorPage,
+  gateAllows,
   homePage,
+  type AdminGate,
   itemPage,
   loginPage,
   notFoundPage,
@@ -322,16 +329,34 @@ const adminGate: MiddlewareHandler<AppEnv> = async (c, next) => {
   const module = moduleForPath(path);
   if (module && !modules[module]) return c.html(notFoundPage(), 404);
 
-  if (!hasAnyRole(roles)) return c.html(adminNoRolePage(email), 403);
+  if (!hasAnyRole(roles)) return c.html(adminNoRolePage(chrome(c), email), 403);
 
   const required = requiredRolesFor(path);
-  if (!permits(roles, required)) return c.html(adminWrongRolePage(required), 403);
+  if (!permits(roles, required)) return c.html(adminWrongRolePage(chrome(c), required), 403);
 
   return next();
 };
 
 app.use("/admin", adminGate);
 app.use("/admin/*", adminGate);
+
+/**
+ * The gate this request came through, handed to the page it renders.
+ *
+ * Every admin page takes it as its first argument, and it is the *same* pair of
+ * facts `adminGate` above admitted the request on. That is the point: the
+ * navigation and the tiles are filtered by the thing that decides access, not
+ * by a second copy of the rules that could drift from it. A tab to a door that
+ * answers 403 teaches somebody the app is broken; a tab that is not there
+ * teaches them nothing at all, which is correct.
+ *
+ * Passed explicitly rather than read from a module-level "current reader": one
+ * Worker isolate serves several requests at once, and a shared global there is
+ * how one person ends up looking at another person's screen.
+ */
+function chrome(c: Context<AppEnv>): AdminGate {
+  return { modules: c.get("modules"), roles: c.get("roles") };
+}
 
 /** No crawler should be here, and there is nothing for one to find. */
 app.get("/robots.txt", (c) => c.text("User-agent: *\nDisallow: /\n"));
@@ -777,12 +802,132 @@ app.get("/file/:id", async (c) => {
 // Admin
 // ---------------------------------------------------------------------------
 
+/**
+ * Today.
+ *
+ * Three questions in order — what is next, what is waiting on you, what do you
+ * normally do — and everything else one tap away under More.
+ *
+ * The counts behind the queue tiles are two round trips, one of which reads a
+ * few hundred rows to work out what is due a recount. Somebody on the
+ * safeguarding rota will not be shown a single one of those tiles, so the work
+ * is not done for them: the *same* predicate that hides the tiles decides
+ * whether to go and count them.
+ */
 app.get("/admin", async (c) => {
-  const [stats, queues] = await Promise.all([catalogueStats(c.env.DB), adminQueueCounts(c.env.DB)]);
+  const gate = chrome(c);
+  const now = today();
+  const wantsQueues = QUEUE_TILES.some((href) => gateAllows(gate, href));
+
+  const [queues, nextEvent, welcome] = await Promise.all([
+    wantsQueues ? adminQueueCounts(c.env.DB) : Promise.resolve(emptyQueueCounts()),
+    nextEventFor(c.env.DB, gate, now),
+    welcomeIsWaiting(c.env.DB, adminIdentity(c)),
+  ]);
   return c.html(
-    adminHomePage(stats, queues, extractionAvailable(c.env), c.get("modules"), c.get("roles"))
+    adminTodayPage(gate, nextEvent, queues, extractionAvailable(c.env), welcome, now)
   );
 });
+
+/** The six addresses the "Waiting for you" tiles point at. */
+const QUEUE_TILES = [
+  "/admin/review",
+  "/admin/services",
+  "/admin/scans",
+  "/admin/feedback",
+  "/admin/queues",
+  "/admin/stocktake",
+] as const;
+
+/**
+ * The next thing in the diary, with only as much of it as this reader may see.
+ *
+ * The duty cover and the way through to the register are separate permissions
+ * from the event itself — a librarian may know that Choral Evensong is on
+ * Thursday and has no business knowing who is on the door — so each is added
+ * only when the gate allows the screen it belongs to.
+ */
+async function nextEventFor(
+  db: D1Database,
+  gate: AdminGate,
+  from: string
+): Promise<TodayEvent | null> {
+  const [service] = await upcomingServices(db, from, 1);
+  if (!service) return null;
+
+  const registerHref = `/admin/people/register/${service.id}`;
+  const duty: Array<{ label: string; names: string[] }> = [];
+
+  if (gateAllows(gate, `/admin/safeguarding/${service.id}`)) {
+    const rows = await dutiesFor(db, service.id);
+    for (const role of DUTY_ROLES) {
+      duty.push({
+        label: role.label,
+        // Primary cover only. A backup is a second name, not the cover itself,
+        // and a front page that counts one as the other is a front page that
+        // says an empty door is covered.
+        names: rows.filter((d) => d.role === role.value && !d.is_backup).map((d) => d.display_name),
+      });
+    }
+  }
+
+  return {
+    service: {
+      id: service.id,
+      title: service.title,
+      service_date: service.service_date,
+      service_time: service.service_time,
+      designation: service.designation,
+    },
+    duty,
+    registerHref: gateAllows(gate, registerHref) ? registerHref : null,
+  };
+}
+
+/**
+ * The welcome card, per person.
+ *
+ * Keyed on the reader's own email so that Rachel putting it away does not put
+ * it away for Robert. `app_setting` already holds every other one-off fact
+ * about this installation and needs no migration to hold this one — which is
+ * why Build 3 adds no table.
+ */
+function welcomeKeyFor(email: string): string {
+  return `welcome.seen.${email.toLowerCase()}`;
+}
+
+async function welcomeIsWaiting(db: D1Database, email: string): Promise<boolean> {
+  if (!email) return false;
+  const row = await db
+    .prepare(`SELECT value FROM app_setting WHERE key = ?`)
+    .bind(welcomeKeyFor(email))
+    .first<{ value: string | null }>();
+  return row === null;
+}
+
+/** "Got it." Written once and never asked again. */
+app.post("/admin/welcome", async (c) => {
+  const email = adminIdentity(c);
+  if (email) {
+    await c.env.DB
+      .prepare(
+        `INSERT INTO app_setting (key, value, updated_by, updated_at)
+         VALUES (?, 'seen', ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+         ON CONFLICT (key) DO NOTHING`
+      )
+      .bind(welcomeKeyFor(email), email)
+      .run();
+  }
+  return c.redirect("/admin", 302);
+});
+
+/** Everything the front page no longer shouts about. Nothing was removed. */
+app.get("/admin/more", async (c) => {
+  return c.html(adminMorePage(chrome(c), await catalogueStats(c.env.DB)));
+});
+
+/** One page, three jobs, three steps each. */
+app.get("/admin/guide", (c) => c.html(adminGuidePage(chrome(c))));
 
 /** The numbers on the admin home tiles, in one round trip. */
 async function adminQueueCounts(db: D1Database): Promise<AdminQueueCounts> {
@@ -810,7 +955,7 @@ function emptyQueueCounts(): AdminQueueCounts {
 
 // --- New catalogue item (5A as amended) -------------------------------------
 
-app.get("/admin/new", (c) => c.html(adminNewItemPage(extractionAvailable(c.env), manualForm())));
+app.get("/admin/new", (c) => c.html(adminNewItemPage(chrome(c), extractionAvailable(c.env), manualForm())));
 
 // --- Search and bulk edit ---------------------------------------------------
 
@@ -819,7 +964,7 @@ app.get("/admin/search", async (c) => {
   const result = await adminSearchPieces(c.env.DB, filters);
   const changed = new URL(c.req.url).searchParams.get("changed");
   return c.html(
-    adminSearchPage(
+    adminSearchPage(chrome(c), 
       filters,
       result,
       changed ? `${changed} ${changed === "1" ? "piece" : "pieces"} changed.` : undefined
@@ -885,7 +1030,7 @@ app.get("/admin/reports", async (c) => {
     seasonReadiness(c.env.DB, seasonsInPlay(now)),
   ]);
 
-  return c.html(adminReportsPage(cover, most, least, conditions, readiness, since));
+  return c.html(adminReportsPage(chrome(c), cover, most, least, conditions, readiness, since));
 });
 
 app.get("/admin/queues", async (c) => {
@@ -893,18 +1038,18 @@ app.get("/admin/queues", async (c) => {
     scanningPriority(c.env.DB, today(), seasonsInPlay(new Date())),
     repairPriority(c.env.DB),
   ]);
-  return c.html(adminQueuesPage(scanning, repairs));
+  return c.html(adminQueuesPage(chrome(c), scanning, repairs));
 });
 
 app.get("/admin/stocktake", async (c) => {
-  return c.html(adminStocktakePage(await dueRecount(c.env.DB, today())));
+  return c.html(adminStocktakePage(chrome(c), await dueRecount(c.env.DB, today())));
 });
 
 // --- Loans (H5) -------------------------------------------------------------
 
 app.get("/admin/loans", async (c) => {
   const message = new URL(c.req.url).searchParams.get("done") ?? undefined;
-  return c.html(adminLoansPage(await openLoans(c.env.DB), message || undefined));
+  return c.html(adminLoansPage(chrome(c), await openLoans(c.env.DB), message || undefined));
 });
 
 app.post("/admin/loans", async (c) => {
@@ -953,7 +1098,7 @@ app.get("/admin/settings", async (c) => {
     readPasswordState(c.env.DB),
   ]);
   return c.html(
-    adminSettingsPage(
+    adminSettingsPage(chrome(c), 
       profiles,
       state.hash !== null,
       state.generation,
@@ -1021,7 +1166,7 @@ app.post("/admin/settings/choirs", async (c) => {
 });
 
 app.get("/admin/activity", async (c) => {
-  return c.html(adminActivityPage(await recentActivity(c.env.DB, 200)));
+  return c.html(adminActivityPage(chrome(c), await recentActivity(c.env.DB, 200)));
 });
 
 // ---------------------------------------------------------------------------
@@ -1030,7 +1175,7 @@ app.get("/admin/activity", async (c) => {
 
 app.get("/admin/modules", async (c) => {
   const message = new URL(c.req.url).searchParams.get("done") ?? undefined;
-  return c.html(adminModulesPage(c.get("modules"), message || undefined));
+  return c.html(adminModulesPage(chrome(c), c.get("modules"), message || undefined));
 });
 
 app.post("/admin/modules", async (c) => {
@@ -1055,7 +1200,7 @@ app.get("/admin/roles", async (c) => {
   const params = new URL(c.req.url).searchParams;
   const [grants, musicStaff] = await Promise.all([listGrants(c.env.DB), countMusicStaff(c.env.DB)]);
   return c.html(
-    adminRolesPage(grants, musicStaff, params.get("done") ?? undefined, params.get("error") ?? undefined)
+    adminRolesPage(chrome(c), grants, musicStaff, params.get("done") ?? undefined, params.get("error") ?? undefined)
   );
 });
 
@@ -1111,7 +1256,7 @@ app.get("/admin/labels", async (c) => {
     unlabelled,
   });
 
-  return c.html(adminLabelsPage(candidates, { door: door ?? undefined, unlabelled }, params.get("note") ?? undefined));
+  return c.html(adminLabelsPage(chrome(c), candidates, { door: door ?? undefined, unlabelled }, params.get("note") ?? undefined));
 });
 
 /**
@@ -1213,7 +1358,7 @@ app.get("/admin/people", async (c) => {
   const params = new URL(c.req.url).searchParams;
   const leavers = params.get("leavers") === "1";
   return c.html(
-    adminPeoplePage(await listPeople(c.env.DB, leavers), leavers, params.get("done") ?? undefined)
+    adminPeoplePage(chrome(c), await listPeople(c.env.DB, leavers), leavers, params.get("done") ?? undefined)
   );
 });
 
@@ -1270,7 +1415,7 @@ const MAX_WORKBOOK_BYTES = 10 * 1024 * 1024;
 app.get("/admin/people/import", async (c) => {
   const params = new URL(c.req.url).searchParams;
   return c.html(
-    adminImportWorkbookPage(
+    adminImportWorkbookPage(chrome(c), 
       await listBatches(c.env.DB),
       params.get("done") ?? undefined,
       params.get("error") ?? undefined
@@ -1344,7 +1489,7 @@ app.get("/admin/people/import/:id", async (c) => {
   if (!batch || batch.status !== "pending") return c.html(notFoundPage(), 404);
 
   return c.html(
-    adminImportReviewPage(
+    adminImportReviewPage(chrome(c), 
       batch,
       (await batchRows(c.env.DB, id)).map((row) => ({
         id: row.id,
@@ -1457,7 +1602,7 @@ app.get("/admin/export", (c) => {
 
   const contactsHref = "/admin/people/contacts.csv";
   return c.html(
-    adminExportsPage(
+    adminExportsPage(chrome(c), 
       EXPORTS.filter((e) => visible(e.href)),
       visible(contactsHref)
         ? {
@@ -1659,7 +1804,7 @@ app.get("/admin/people/attendance", async (c) => {
   const totals = totalsByPerson(lines, possible, people).filter((t) => t.present || t.possible);
   const months = totals[0]?.months.map((m) => m.month) ?? [];
 
-  return c.html(adminAttendancePage(quarter, recentQuarters(today()), totals, months));
+  return c.html(adminAttendancePage(chrome(c), quarter, recentQuarters(today()), totals, months));
 });
 
 app.get("/admin/people/attendance.csv", async (c) => {
@@ -1700,7 +1845,7 @@ app.get("/admin/people/pay", async (c) => {
   ]);
 
   return c.html(
-    adminPayPage(
+    adminPayPage(chrome(c), 
       payRun(quarter, lines, rates),
       recentQuarters(today()),
       rates,
@@ -1853,7 +1998,7 @@ app.get("/admin/safeguarding", async (c) => {
   const duties = await dutiesForServices(c.env.DB, services.map((s) => s.id));
 
   return c.html(
-    adminSafeguardingPage(
+    adminSafeguardingPage(chrome(c), 
       services.map((s) => toDutyEvent(s, duties.get(s.id) ?? [], childrenPerAdult, now)),
       childrenPerAdult,
       new URL(c.req.url).searchParams.get("done") ?? undefined
@@ -1876,7 +2021,7 @@ app.get("/admin/safeguarding/today", async (c) => {
   const duties = await dutiesForServices(c.env.DB, services.map((s) => s.id));
 
   return c.html(
-    adminDutyTodayPage(
+    adminDutyTodayPage(chrome(c), 
       services.map((s) => toDutyEvent(s, duties.get(s.id) ?? [], childrenPerAdult, now)),
       adminIdentity(c),
       // The register is a module of its own and may well be off while the rota
@@ -1972,6 +2117,14 @@ app.post("/admin/safeguarding/collected", async (c) => {
 
   await markAllCollected(c.env.DB, dutyId, adminIdentity(c));
   await logAdminAction(c, "duty.collected", "duty", dutyId, "every child under 18 collected");
+
+  // Back where you came from. The register now carries this tick too, and
+  // sending somebody who ticked it there to the rota instead is the sort of
+  // small dislocation that makes an app feel like a website. The field names a
+  // screen and an id, never a URL: nothing a form can say is put in a redirect.
+  const back = /^register:(\d+)$/.exec(str(body.back));
+  if (back) return c.redirect(`/admin/people/register/${Number(back[1])}`, 302);
+
   return c.redirect(
     `/admin/safeguarding/today?done=${encodeURIComponent("Recorded, with your name and the time.")}`,
     302
@@ -1993,7 +2146,7 @@ app.get("/admin/safeguarding/:id", async (c) => {
   ]);
 
   return c.html(
-    adminDutyEventPage(
+    adminDutyEventPage(chrome(c), 
       toDutyEvent(service, duties, childrenPerAdult, now),
       dutyCandidates(people),
       new URL(c.req.url).searchParams.get("done") ?? undefined
@@ -2043,7 +2196,7 @@ app.get("/admin/people/:id", async (c) => {
   if (!person) return c.html(notFoundPage(), 404);
 
   return c.html(
-    adminPersonPage(
+    adminPersonPage(chrome(c), 
       person,
       await contactCountFor(c.env.DB, id),
       // Contacts are never rendered on a plain page load — only the POST that
@@ -2170,7 +2323,7 @@ app.post("/admin/people/contact/:id", async (c) => {
   // The reveal. `revealContacts` audits first and reads second.
   const revealed = await revealContacts(c.env.DB, id, adminIdentity(c));
   return c.html(
-    adminPersonPage(person, revealed.length, revealed, true, today())
+    adminPersonPage(chrome(c), person, revealed.length, revealed, true, today())
   );
 });
 
@@ -2191,14 +2344,53 @@ app.get("/admin/people/register/:serviceId", async (c) => {
   if (!service) return c.html(notFoundPage(), 404);
 
   const rows = await registerFor(c.env.DB, serviceId, service.designation);
-  return c.html(adminRegisterPage(service, rows, registerTally(rows)));
+  const groups = registerGroups(rows);
+
+  // The dismissal tick belongs at the bottom of this screen — same door, same
+  // phone, same five minutes — but only when the rota is switched on and this
+  // reader may act on it. When it is not, the block simply is not there.
+  let dismissal: { dutyId: number; collectedAt: string | null; collectedBy: string | null } | null = null;
+  if (gateAllows(chrome(c), `/admin/safeguarding/${serviceId}`)) {
+    const onDoor = (await dutiesFor(c.env.DB, serviceId)).find(
+      (d) => d.role === "dismissal" && !d.is_backup
+    );
+    if (onDoor) {
+      dismissal = {
+        dutyId: onDoor.id,
+        collectedAt: onDoor.all_collected_at,
+        collectedBy: onDoor.all_collected_by,
+      };
+    }
+  }
+
+  return c.html(
+    adminRegisterPage(
+      chrome(c),
+      service,
+      groups,
+      preselectedGroup(service.designation, groups),
+      registerTally(rows),
+      dismissal
+    )
+  );
 });
 
-/** One tap on one name. Cycles, and saves as it goes. */
+/**
+ * One tap on one name. Cycles, and saves as it goes.
+ *
+ * Answers JSON when the page asks for it and a redirect when it does not, and
+ * the two do exactly the same thing to the database. That is what makes the
+ * screen's fallback honest: the script is an accelerator over the plain form,
+ * not a second way of marking a register that could behave differently on a
+ * phone with no signal.
+ */
 app.post("/admin/people/register/:serviceId/:personId", async (c) => {
   const serviceId = numericParam(c.req.param("serviceId"));
   const personId = numericParam(c.req.param("personId"));
   if (serviceId === null || personId === null) return c.html(notFoundPage(), 404);
+
+  const service = await getService(c.env.DB, serviceId);
+  if (!service) return c.html(notFoundPage(), 404);
 
   const current = await c.env.DB
     .prepare(`SELECT status FROM attendance WHERE service_id = ? AND person_id = ?`)
@@ -2212,6 +2404,15 @@ app.post("/admin/people/register/:serviceId/:personId", async (c) => {
   // No audit line. Attendance is personal data about a child and does not
   // belong in a log admins read looking for a mistake; the attendance row
   // carries marked_by, which is where the accountability belongs.
+
+  const body = await c.req.parseBody();
+  if (str(body.js) === "1") {
+    // The tally is recounted rather than adjusted: one query is cheaper than a
+    // running total the two paths could disagree about.
+    const rows = await registerFor(c.env.DB, serviceId, service.designation);
+    return c.json({ status: next, tally: registerTally(rows) });
+  }
+
   return c.redirect(`/admin/people/register/${serviceId}`, 302);
 });
 
@@ -2237,7 +2438,7 @@ app.get("/admin/suggestions", async (c) => {
   ]);
 
   return c.html(
-    adminSuggestionsPage(results, filters, typicalSingers, (copiesUsable) => {
+    adminSuggestionsPage(chrome(c), results, filters, typicalSingers, (copiesUsable) => {
       const verdict = copiesRag({ copiesUsable, typicalSingers, designation: filters.designation ?? null });
       return { state: ragPill(verdict.state), label: ragLabel(verdict.state), reason: verdict.reason };
     })
@@ -2248,7 +2449,7 @@ app.get("/admin/review", async (c) => {
   const offset = Number(new URL(c.req.url).searchParams.get("offset") ?? "0");
   const start = Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
   const queue = await reviewQueue(c.env.DB, 25, start);
-  return c.html(adminReviewPage(queue, start));
+  return c.html(adminReviewPage(chrome(c), queue, start));
 });
 
 app.post("/admin/review/:id", async (c) => {
@@ -2291,7 +2492,7 @@ app.get("/admin/piece/:id", async (c) => {
   if (id === null) return c.html(notFoundPage(), 404);
   const detail = await getPieceDetail(c.env.DB, id);
   if (!detail) return c.html(notFoundPage(), 404);
-  return c.html(adminEditPage(detail, new URL(c.req.url).searchParams.has("saved")));
+  return c.html(adminEditPage(chrome(c), detail, new URL(c.req.url).searchParams.has("saved")));
 });
 
 app.post("/admin/piece/:id", async (c) => {
@@ -2311,10 +2512,10 @@ app.post("/admin/piece/:id", async (c) => {
 
 app.post("/admin/accessions", async (c) => {
   const result = await assignAccessions(c.env.DB);
-  return c.html(adminAccessionPage(result));
+  return c.html(adminAccessionPage(chrome(c), result));
 });
 
-app.get("/admin/import", (c) => c.html(adminImportPage(null)));
+app.get("/admin/import", (c) => c.html(adminImportPage(chrome(c), null)));
 
 app.post("/admin/import", async (c) => {
   let summary: ImportSummary;
@@ -2325,14 +2526,14 @@ app.post("/admin/import", async (c) => {
     await seedChoirProfiles(c.env.DB);
   } catch (e) {
     return c.html(
-      adminImportPage(null, e instanceof Error ? e.message : "The draft index could not be imported."),
+      adminImportPage(chrome(c), null, e instanceof Error ? e.message : "The draft index could not be imported."),
       400
     );
   }
-  return c.html(adminImportPage(summary));
+  return c.html(adminImportPage(chrome(c), summary));
 });
 
-app.get("/admin/intake", (c) => c.html(adminIntakePage(extractionAvailable(c.env))));
+app.get("/admin/intake", (c) => c.html(adminIntakePage(chrome(c), extractionAvailable(c.env))));
 
 /** Read one label photograph. Errors here always leave manual entry working. */
 app.post("/admin/api/read-label", async (c) => {
@@ -2376,7 +2577,7 @@ app.post("/admin/intake", async (c) => {
     for (const part of parts) await addAlias(c.env.DB, id, part);
   }
 
-  return c.html(adminIntakeDonePage(id, edit.title));
+  return c.html(adminIntakeDonePage(chrome(c), id, edit.title));
 });
 
 // ---------------------------------------------------------------------------
@@ -2484,7 +2685,7 @@ app.get("/admin/services", async (c) => {
   const offset = Number(new URL(c.req.url).searchParams.get("offset") ?? "0");
   const start = Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
   const queue = await unmatchedLines(c.env.DB, 25, start);
-  return c.html(adminMatchQueuePage(queue.lines, queue.total, start));
+  return c.html(adminMatchQueuePage(chrome(c), queue.lines, queue.total, start));
 });
 
 app.post("/admin/services/fetch", async (c) => {
@@ -2497,7 +2698,7 @@ app.post("/admin/services/fetch", async (c) => {
     null,
     outcome.results.map((r) => `${r.month}: ${r.unchanged ? "unchanged" : `${r.servicesWritten} services`}`).join("; ")
   );
-  return c.html(adminFeedResultPage(outcome.results, outcome.errors));
+  return c.html(adminFeedResultPage(chrome(c), outcome.results, outcome.errors));
 });
 
 /** Confirm, correct or reject one music-list line. */
@@ -2533,7 +2734,7 @@ app.post("/admin/services/line/:id", async (c) => {
 // ---------------------------------------------------------------------------
 
 app.get("/admin/feedback", async (c) => {
-  return c.html(adminFeedbackPage(await allFeedback(c.env.DB)));
+  return c.html(adminFeedbackPage(chrome(c), await allFeedback(c.env.DB)));
 });
 
 app.post("/admin/feedback/:id", async (c) => {
@@ -2545,7 +2746,7 @@ app.post("/admin/feedback/:id", async (c) => {
 });
 
 app.get("/admin/scans", async (c) => {
-  return c.html(adminScanQueuePage(await pendingScans(c.env.DB)));
+  return c.html(adminScanQueuePage(chrome(c), await pendingScans(c.env.DB)));
 });
 
 /**
